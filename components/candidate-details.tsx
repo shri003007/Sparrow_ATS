@@ -3,7 +3,9 @@ import { Button } from "@/components/ui/button"
 import {
   ChevronDown,
   X,
-  ExternalLink,
+
+  Download,
+
   Clock,
   Bookmark
 } from "lucide-react"
@@ -20,7 +22,8 @@ interface OverallData {
 }
 
 interface IndividualData {
-  professional_overview: string;
+  professional_overview: string; 
+
   key_qualifications: string;
   career_progression: string;
   justification: string;
@@ -95,9 +98,10 @@ export function CandidateDetails({
                     window.open(selectedCandidate.overall_data.resume_url, '_blank');
                   }}
                   className="text-blue-600 hover:text-blue-800"
-                  title="View Resume"
+                  title="Download Resume"
                 >
-                  <ExternalLink className="w-5 h-5" />
+                  <Download className="w-5 h-5" />
+
                 </button>
               )}
             </div>

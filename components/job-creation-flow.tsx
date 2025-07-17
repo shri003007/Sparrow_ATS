@@ -172,8 +172,10 @@ export function JobCreationFlow({
           amount: jobFormData.compensation_value || "0",
           currency: jobFormData.compensation_currency
         },
-        job_description_context: jdContext
+        job_description_context: jdContext || "" // Send empty string if no context provided
       }
+
+      console.log('Sending payload to AI:', payload)
 
       const response = await fetch(`${JD_API_URL}/generate`, {
         method: 'POST',
@@ -184,10 +186,18 @@ export function JobCreationFlow({
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        const errorText = await response.text()
+        console.error('API Error Response:', errorText)
+        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`)
       }
 
       const result = await response.json()
+      console.log('AI Response:', result)
+      
+      if (!result.job_description) {
+        throw new Error('No job description received from AI service')
+      }
+
       
       // Update the job description in the form
       onJobFormDataChange({ job_description: result.job_description })
@@ -195,6 +205,19 @@ export function JobCreationFlow({
       // Close the context box after successful generation
       setShowJDGenerator(false)
       setJdContext("")
+
+      setJdError(null)
+      
+      // Show success message briefly
+      const successDiv = document.createElement('div')
+      successDiv.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50'
+      successDiv.textContent = '✅ Job description generated successfully!'
+      document.body.appendChild(successDiv)
+      
+      setTimeout(() => {
+        document.body.removeChild(successDiv)
+      }, 3000)
+
       
     } catch (err) {
       console.error('Error generating job description:', err)
@@ -382,7 +405,15 @@ export function JobCreationFlow({
 
                 {/* Job Description */}
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-700">Job Description *</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium text-gray-700">Job Description *</label>
+                    {jobFormData.job_description && (
+                      <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full">
+                        ✓ Generated
+                      </span>
+                    )}
+                  </div>
+
                   
 
                   {/* Job Description Textarea with AI Integration */}
@@ -401,7 +432,8 @@ export function JobCreationFlow({
                             {/* Search Input */}
                             <input
                               type="text"
-                              placeholder="Ask AI to generate job description..."
+                              placeholder="Add context (optional) or leave empty to generate from job details..."
+
                               className="flex-1 bg-transparent text-gray-900 placeholder-gray-500 outline-none"
                               value={jdContext}
                               onChange={(e) => setJdContext(e.target.value)}
@@ -415,17 +447,26 @@ export function JobCreationFlow({
                                 type="button"
                                 onClick={generateJobDescription}
                                 disabled={generatingJD}
-                                className="w-6 h-6 bg-blue-600 hover:bg-blue-700 p-0 rounded"
+
+                                className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white text-xs"
                               >
                                 {generatingJD ? (
-                                  <Loader2 className="w-3 h-3 animate-spin text-white" />
+                                  <>
+                                    <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                                    Generating...
+                                  </>
                                 ) : (
-                                  <ChevronUp className="w-3 h-3 text-white" />
+                                  'Generate'
                                 )}
                               </Button>
                             </div>
                           </div>
                           
+                          {/* Help text */}
+                          <div className="mt-2 text-xs text-gray-500">
+                            Context is optional. The AI will use your job details to generate a comprehensive job description.
+                          </div>
+
                           
                         </div>
                         
@@ -466,6 +507,15 @@ export function JobCreationFlow({
                         onChange={(e) => onJobFormDataChange({ job_description: e.target.value })}
                       />
                     )}
+                    {/* Hidden input for form validation when AI interface is active */}
+                    {showJDGenerator && (
+                      <input
+                        type="hidden"
+                        required
+                        value={jobFormData.job_description}
+                      />
+                    )}
+
                   </div>
                 </div>
 

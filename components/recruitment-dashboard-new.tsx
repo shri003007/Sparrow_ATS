@@ -89,6 +89,9 @@ export function RecruitmentDashboard() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [jobRoles, setJobRoles] = useState<string[]>([])
+
+  const [jobRoleToIdMap, setJobRoleToIdMap] = useState<Map<string, string>>(new Map())
+
   const [loadingRoles, setLoadingRoles] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [showMoreApplicants, setShowMoreApplicants] = useState(false)
@@ -132,12 +135,14 @@ export function RecruitmentDashboard() {
   const [showNavigationConfirmation, setShowNavigationConfirmation] = useState(false)
   const [pendingNavigationRole, setPendingNavigationRole] = useState<string | null>(null)
 
-  // API Base URL
-  const API_BASE_URL = 'https://dyf0kkzk0b.execute-api.us-west-2.amazonaws.com/api'
+  // API Base URLs
+  const JOB_API_BASE_URL = 'https://dyf0kkzk0b.execute-api.us-west-2.amazonaws.com/api'
+  const CANDIDATE_API_BASE_URL = 'https://rwxsvk0avf.execute-api.us-west-2.amazonaws.com/api'
 
   // API Functions
   const createJob = async (jobData: JobFormData) => {
-    const response = await fetch(`${API_BASE_URL}/jobs`, {
+    const response = await fetch(`${JOB_API_BASE_URL}/jobs`, {
+
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -162,7 +167,9 @@ export function RecruitmentDashboard() {
     console.log(`Attempting to update job ${jobId}:`, updates);
     
     try {
-      const response = await fetch(`${API_BASE_URL}/jobs/${jobId}`, {
+
+      const response = await fetch(`${JOB_API_BASE_URL}/jobs/${jobId}`, {
+
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -197,7 +204,9 @@ export function RecruitmentDashboard() {
   };
 
   const deleteJob = async (jobId: string) => {
-    const response = await fetch(`${API_BASE_URL}/jobs/${jobId}`, {
+
+    const response = await fetch(`${JOB_API_BASE_URL}/jobs/${jobId}`, {
+
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
@@ -214,7 +223,9 @@ export function RecruitmentDashboard() {
   };
 
   const getAllJobs = async () => {
-    const response = await fetch(`${API_BASE_URL}/jobs`, {
+
+    const response = await fetch(`${JOB_API_BASE_URL}/jobs`, {
+
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -234,7 +245,9 @@ export function RecruitmentDashboard() {
     console.log(`Attempting to save questions for job ${jobId}:`, questions);
     
     try {
-      const response = await fetch(`${API_BASE_URL}/jobs/${jobId}/questions`, {
+
+      const response = await fetch(`${JOB_API_BASE_URL}/jobs/${jobId}/questions`, {
+
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -270,7 +283,9 @@ export function RecruitmentDashboard() {
   };
 
   const getApplicationQuestions = async (jobId: string) => {
-    const response = await fetch(`${API_BASE_URL}/jobs/${jobId}/questions`, {
+
+    const response = await fetch(`${JOB_API_BASE_URL}/jobs/${jobId}/questions`, {
+
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -302,7 +317,9 @@ export function RecruitmentDashboard() {
     console.log(`Attempting to save pipeline stages for job ${jobId}:`, allStages);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/jobs/${jobId}/pipeline`, {
+
+      const response = await fetch(`${JOB_API_BASE_URL}/jobs/${jobId}/pipeline`, {
+
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -337,7 +354,9 @@ export function RecruitmentDashboard() {
   };
 
   const getPipelineStages = async (jobId: string) => {
-    const response = await fetch(`${API_BASE_URL}/jobs/${jobId}/pipeline`, {
+
+    const response = await fetch(`${JOB_API_BASE_URL}/jobs/${jobId}/pipeline`, {
+
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -353,7 +372,71 @@ export function RecruitmentDashboard() {
     return result; // Backend returns { stages: [...] }
   };
 
-  // API Functions (Mock mode for testing)
+
+  // Candidate API Functions
+  const fetchCandidatesByJob = async (jobId: string) => {
+    if (!jobId.trim()) return;
+
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const response = await fetch(`${CANDIDATE_API_BASE_URL}/candidates/by-job?job_id=${encodeURIComponent(jobId)}`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      // Transform the API response to match our existing Candidate interface
+      const transformedCandidates: Candidate[] = (data.candidates || []).map((candidate: any) => ({
+        overall_data: {
+          name: candidate.candidate_info?.name || 'Unknown',
+          email: candidate.candidate_info?.email || '',
+          phone: candidate.candidate_info?.phone || '',
+          resume_url: candidate.candidate_info?.resume_url || '',
+          score: candidate.evaluation?.score || 0,
+          recommendation_category: candidate.evaluation?.recommendation_category || 'Not Available'
+        },
+        individual_data: {
+          professional_overview: candidate.resume_summary?.professional_overview || '',
+          key_qualifications: candidate.resume_summary?.key_qualifications || '',
+          career_progression: candidate.resume_summary?.career_progression || '',
+          justification: candidate.evaluation?.justification || ''
+        }
+      }));
+      
+      setCandidates(transformedCandidates);
+      setFilteredCandidates(transformedCandidates);
+    } catch (err) {
+      console.error('Error fetching candidates:', err);
+      setError(err instanceof Error ? err.message : 'Failed to fetch candidates');
+      setCandidates([]);
+      setFilteredCandidates([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchCandidateById = async (candidateId: string) => {
+    try {
+      const response = await fetch(`${CANDIDATE_API_BASE_URL}/candidates/by-id?candidate_id=${encodeURIComponent(candidateId)}`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      return data;
+    } catch (err) {
+      console.error('Error fetching candidate details:', err);
+      throw err;
+    }
+  };
+
+  // Legacy function for backward compatibility (Mock mode for testing)
+
   const fetchCandidates = async (role: string) => {
     if (!role.trim()) return;
 
@@ -392,7 +475,9 @@ export function RecruitmentDashboard() {
           const response = await fetch(`https://mh64633733prek3sbegir2qily0ghkjl.lambda-url.us-west-2.on.aws/?job_role=${encodeURIComponent(role)}`);
           if (response.ok) {
             const data: ApiResponse = await response.json();
-            if (data.details) {
+
+            if (data.details && Array.isArray(data.details)) {
+
               allCandidatesData.push(...data.details);
             }
           }
@@ -424,7 +509,16 @@ export function RecruitmentDashboard() {
       const jobTitles = openJobs.map((job: any) => job.posting_title);
       console.log('Open job titles:', jobTitles);
       
+
+      // Create a mapping from job title to job ID
+      const jobMap = new Map<string, string>();
+      openJobs.forEach((job: any) => {
+        jobMap.set(job.posting_title, job.id);
+      });
+      
       setJobRoles(jobTitles);
+      setJobRoleToIdMap(jobMap);
+
     } catch (err) {
       console.error('Error fetching job roles:', err);
       setError('Failed to fetch job roles');
@@ -482,7 +576,17 @@ export function RecruitmentDashboard() {
     if (role === "All candidates") {
       fetchAllCandidates();
     } else {
-      fetchCandidates(role);
+
+      // Try to get job ID from the mapping
+      const jobId = jobRoleToIdMap.get(role);
+      if (jobId) {
+        // Use the new candidate API
+        fetchCandidatesByJob(jobId);
+      } else {
+        // Fallback to legacy API
+        fetchCandidates(role);
+      }
+
     }
   }
 
@@ -496,51 +600,93 @@ export function RecruitmentDashboard() {
   }
 
   const getRecommendationDisplay = (candidate: Candidate) => {
-    const category = candidate.overall_data.recommendation_category;
-    const score = candidate.overall_data.score;
 
-    switch (category) {
-      case "Highly Recommended":
-        return {
-          icon: <Star className="w-4 h-4" />,
-          color: "text-green-600",
-          bgColor: "bg-green-50",
-          text: `${category} (${score}/5)`
-        };
-      case "Good Hire":
-        return {
-          icon: <ThumbsUp className="w-4 h-4" />,
-          color: "text-purple-600", 
-          bgColor: "bg-purple-50",
-          text: `${category} (${score}/5)`
-        };
-      case "Needs Discussion":
-        return {
-          icon: <MessageSquare className="w-4 h-4" />,
-          color: "text-orange-600",
-          bgColor: "bg-orange-50", 
-          text: `${category} (${score}/5)`
-        };
-      case "Not recommended":
-        return {
-          icon: <X className="w-4 h-4" />,
-          color: "text-red-600",
-          bgColor: "bg-red-50",
-          text: `${category} (${score}/5)`
-        };
-      default:
-        return {
-          icon: <MessageSquare className="w-4 h-4" />,
-          color: "text-gray-600",
-          bgColor: "bg-gray-50",
-          text: `${category} (${score}/5)`
-        };
+    const score = candidate.overall_data.score;
+    
+    // Determine recommendation category and styling based on score
+    let category, icon, color, bgColor, emoji;
+    
+    if (score >= 4.5) {
+      category = "Highly Recommended";
+      icon = <Star className="w-4 h-4" />;
+      color = "text-green-600";
+      bgColor = "bg-green-50";
+      emoji = "⭐";
+    } else if (score >= 4.0) {
+      category = "Good Fit";
+      icon = <ThumbsUp className="w-4 h-4" />;
+      color = "text-blue-600";
+      bgColor = "bg-blue-50";
+      emoji = "👍";
+    } else if (score >= 3.0) {
+      category = "Good Fit";
+      icon = <ThumbsUp className="w-4 h-4" />;
+      color = "text-blue-600";
+      bgColor = "bg-blue-50";
+      emoji = "👍";
+    } else if (score >= 2.5) {
+      category = "Needs Discussion";
+      icon = <MessageSquare className="w-4 h-4" />;
+      color = "text-orange-600";
+      bgColor = "bg-orange-50";
+      emoji = "🤔";
+    } else if (score >= 2.0) {
+      category = "Needs Discussion";
+      icon = <MessageSquare className="w-4 h-4" />;
+      color = "text-orange-600";
+      bgColor = "bg-orange-50";
+      emoji = "🤔";
+    } else if (score >= 1.0) {
+      category = "Not Recommended";
+      icon = <X className="w-4 h-4" />;
+      color = "text-red-600";
+      bgColor = "bg-red-50";
+      emoji = "❌";
+    } else {
+      category = "Not Recommended";
+      icon = <X className="w-4 h-4" />;
+      color = "text-red-600";
+      bgColor = "bg-red-50";
+      emoji = "❌";
     }
+
+    return {
+      icon,
+      color,
+      bgColor,
+      text: `${category} (${score.toFixed(1)}/5)`
+    };
+
   };
 
   // Updated job creation handlers
   const handleJobFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    
+    // Validate required fields before submission
+    if (!jobFormData.posting_title.trim()) {
+      setError('Job title is required');
+      return;
+    }
+    if (!jobFormData.employment_type.trim()) {
+      setError('Employment type is required');
+      return;
+    }
+    if (!jobFormData.minimum_experience.trim()) {
+      setError('Minimum experience is required');
+      return;
+    }
+    if (!jobFormData.compensation_value.trim()) {
+      setError('Compensation value is required');
+      return;
+    }
+    if (!jobFormData.job_description.trim()) {
+      setError('Job description is required. Please generate or write a job description before proceeding.');
+      return;
+    }
+    
+
     setLoading(true);
     setError(null);
 

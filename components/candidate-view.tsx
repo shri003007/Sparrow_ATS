@@ -12,7 +12,8 @@ import {
   MessageSquare,
   ArrowRight,
   X,
-  ExternalLink,
+  Download,
+
   Loader2
 } from "lucide-react"
 
@@ -84,7 +85,8 @@ export function CandidateView({
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2 text-gray-600">
                 <Users className="w-4 h-4" />
-                <span className="text-sm">{filteredCandidates.length} candidates found</span>
+                <span className="text-sm">{filteredCandidates?.length || 0} candidates found</span>
+
               </div>
               <div className="flex items-center gap-2 text-gray-500">
                 <Clock className="w-4 h-4" />
@@ -141,7 +143,8 @@ export function CandidateView({
                 <p className="text-gray-600">{error}</p>
               </div>
             </div>
-          ) : filteredCandidates.length === 0 ? (
+          ) : !filteredCandidates || filteredCandidates.length === 0 ? (
+
             <div className="flex items-center justify-center py-12">
               <div className="text-center">
                 <Users className="w-8 h-8 text-gray-400 mx-auto mb-2" />
@@ -172,7 +175,8 @@ export function CandidateView({
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {(showMoreApplicants ? filteredCandidates : filteredCandidates.slice(0, 8)).map((candidate, index) => {
+                  {(showMoreApplicants ? filteredCandidates : filteredCandidates?.slice(0, 8) || []).map((candidate, index) => {
+
                     const recommendation = getRecommendationDisplay(candidate);
                     return (
                       <tr key={index} className="hover:bg-gray-50 transition-colors">
@@ -202,8 +206,9 @@ export function CandidateView({
                               onClick={() => window.open(candidate.overall_data.resume_url, '_blank')}
                               className="flex items-center gap-2 text-blue-600 hover:text-blue-800 transition-colors"
                             >
-                              <ExternalLink className="w-4 h-4" />
-                              <span className="text-sm">View Resume</span>
+                              <Download className="w-4 h-4" />
+                              <span className="text-sm">Download Resume</span>
+
                             </button>
                           ) : (
                             <span className="text-sm text-gray-400">No resume</span>
@@ -216,7 +221,8 @@ export function CandidateView({
               </table>
 
               {/* Show More Button */}
-              {filteredCandidates.length > 8 && (
+              {filteredCandidates && filteredCandidates.length > 8 && (
+
                 <div className="p-6 border-t border-gray-200">
                   <Button
                     variant="ghost"
