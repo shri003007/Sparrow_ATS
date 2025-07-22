@@ -45,9 +45,7 @@ interface CandidateViewProps {
   filteredCandidates: Candidate[]
   loading: boolean
   error: string | null
-  searchQuery: string
   showMoreApplicants: boolean
-  onSearchChange: (query: string) => void
   onCandidateClick: (candidate: Candidate) => void
   onShowMoreClick: () => void
   getRecommendationDisplay: (candidate: Candidate) => {
@@ -64,9 +62,7 @@ export function CandidateView({
   filteredCandidates,
   loading,
   error,
-  searchQuery,
   showMoreApplicants,
-  onSearchChange,
   onCandidateClick,
   onShowMoreClick,
   getRecommendationDisplay
@@ -95,16 +91,7 @@ export function CandidateView({
             </div>
           </div>
 
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <Input
-              placeholder="Search candidates by name or email"
-              value={searchQuery}
-              onChange={(e) => onSearchChange(e.target.value)}
-              className="pl-10 rounded-xl border-gray-200"
-            />
-          </div>
+
         </div>
 
         {/* Filters */}

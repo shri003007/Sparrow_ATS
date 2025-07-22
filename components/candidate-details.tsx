@@ -217,7 +217,7 @@ export function CandidateDetails({
                 <div className="flex items-center gap-3 mb-3">
                   <div className={recommendation.color}>{recommendation.icon}</div>
                   <h3 className={`text-lg font-semibold ${recommendation.color}`}>
-                    {selectedCandidate.overall_data.recommendation_category}
+                    {recommendation.text.split(' (')[0]}
                   </h3>
                 </div>
                 <p className="text-gray-700 leading-relaxed">

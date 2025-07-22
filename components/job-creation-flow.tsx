@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import {
   Briefcase,
@@ -14,9 +15,8 @@ import {
   Loader2,
   Plus,
   GripVertical,
-  ChevronUp,
-  ChevronDown,
-  Wand2
+  Wand2,
+  Edit
 } from "lucide-react"
 
 // Types
@@ -37,6 +37,19 @@ interface PipelineStage {
   is_active: boolean;
   is_mandatory?: boolean;
   created_at?: string;
+  evaluation_criteria?: string;
+  round_id?: string;
+}
+
+interface PredefinedRound {
+  id: string;
+  name: string;
+  description?: string;
+  is_active: boolean;
+  type: string;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 interface JobFormData {
@@ -84,6 +97,12 @@ interface JobCreationFlowProps {
   movePipelineStage: (fromIndex: number, toIndex: number) => void
   updateJobBoardConfig: (index: number, enabled: boolean) => void
   onConfirmClose?: () => void
+  predefinedRounds: PredefinedRound[]
+  loadingPredefinedRounds: boolean
+  addSpecificPipelineStage: (roundName: string) => void
+  initializeDefaultRounds: () => void
+  getEvaluationCriteria: (pipelineId: string) => Promise<any>
+  saveEvaluationCriteria: (pipelineId: string, evaluationCriteria: string) => Promise<any>
 }
 
 export function JobCreationFlow({
@@ -110,8 +129,39 @@ export function JobCreationFlow({
   removePipelineStage,
   movePipelineStage,
   updateJobBoardConfig,
-  onConfirmClose
+  onConfirmClose,
+  predefinedRounds,
+  loadingPredefinedRounds,
+  addSpecificPipelineStage,
+  initializeDefaultRounds,
+  getEvaluationCriteria,
+  saveEvaluationCriteria
 }: JobCreationFlowProps) {
+  // State for evaluation criteria editing
+  const [editingEvaluationCriteria, setEditingEvaluationCriteria] = useState<number | null>(null);
+  const [evaluationCriteriaText, setEvaluationCriteriaText] = useState('');
+
+  // Handle evaluation criteria editing - simplified to use local state only
+  const handleEditEvaluationCriteria = (index: number, stage: PipelineStage) => {
+    setEditingEvaluationCriteria(index);
+    // Use existing local data or empty string - no API call needed
+    setEvaluationCriteriaText(stage.evaluation_criteria || '');
+  };
+
+  const handleSaveEvaluationCriteria = (index: number) => {
+    // Update local state immediately - no API call needed during editing
+    updateStageConfig(index, 'evaluation_criteria', evaluationCriteriaText);
+    setEditingEvaluationCriteria(null);
+    setEvaluationCriteriaText('');
+    
+    console.log('Evaluation criteria updated locally');
+  };
+
+  const handleCancelEvaluationCriteria = () => {
+    setEditingEvaluationCriteria(null);
+    setEvaluationCriteriaText('');
+  };
+
   // Job Description Generator states
   const [showJDGenerator, setShowJDGenerator] = useState(false)
   const [jdContext, setJdContext] = useState("")
@@ -121,8 +171,14 @@ export function JobCreationFlow({
   // Confirmation dialog state
   const [showCloseConfirmation, setShowCloseConfirmation] = useState(false)
 
+  // Round selection state
+  const [showRoundSelector, setShowRoundSelector] = useState(false)
+
+  // Discard state
+  const [showDiscardConfirmation, setShowDiscardConfirmation] = useState(false)
+
   // Job Description Generator API URL
-  const JD_API_URL = "https://ozvuo5xvvt2nljug4ldwnslk4i0mvegd.lambda-url.us-west-2.on.aws"
+  const JD_API_URL = process.env.NEXT_PUBLIC_JD_GENERATOR_API_URL!
 
   // Check if there are unsaved changes
   const hasUnsavedChanges = () => {
@@ -258,12 +314,15 @@ export function JobCreationFlow({
           <div className="flex items-center gap-3">
             <h2 className="text-2xl font-semibold text-gray-900">Create Job Opening</h2>
           </div>
-          <button 
-            onClick={handleCloseClick}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            <X className="w-6 h-6" />
-          </button>
+          <div className="flex items-center gap-2">
+            
+            <button 
+              onClick={handleCloseClick}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
         </div>
 
         {/* Step Progress - Removed automated emails */}
@@ -662,59 +721,101 @@ export function JobCreationFlow({
                 )}
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900 mb-2">Job Pipeline</h3>
-                  <p className="text-gray-600 mb-6">Choose and arrange the statuses you want to use for the steps in this job pipeline, and we'll group your candidates by them.</p>
+                  <p className="text-gray-600 mb-6">Add rounds from the dropdown and arrange them in the order you want. Drag to reorder.</p>
                 </div>
 
-                {/* Add Step Button */}
+                {/* Add Round Button */}
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={addPipelineStage}
+                  onClick={() => setShowRoundSelector(!showRoundSelector)}
                   className="rounded-xl mb-4"
+                  disabled={loadingPredefinedRounds}
                 >
                   <Plus className="w-4 h-4 mr-2" />
-                  Add Step
+                  {loadingPredefinedRounds ? 'Loading Rounds...' : 'Add Round'}
                 </Button>
 
+                {/* Round Selection Dropdown */}
+                {showRoundSelector && (
+                  <div className="mb-4 p-4 border border-gray-200 rounded-xl bg-gradient-to-r from-gray-50 to-blue-50 shadow-lg">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-sm font-semibold text-gray-900">Select a round to add:</h4>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowRoundSelector(false)}
+                        className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3">
+                      {predefinedRounds
+                        .filter(round => !round.is_default)
+                        .map((round) => (
+                          <Button
+                            key={`${round.id}-${Date.now()}`}
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                              addSpecificPipelineStage(round.name);
+                              setShowRoundSelector(false);
+                            }}
+                            className="justify-start text-left h-auto p-4 hover:bg-blue-50 hover:border-blue-300 transition-all duration-200"
+                          >
+                            <div className="font-medium text-gray-900 text-base">{round.name}</div>
+                          </Button>
+                        ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Fixed First Stage - Resume Screening */}
-                <div className="bg-gray-50 border-2 border-dashed border-gray-300 p-4 rounded-xl">
+                <div className="bg-gray-50 border-2 border-gray-300 p-4 rounded-xl shadow-sm">
                   <div className="flex items-center gap-4">
-                    <div className="flex items-center justify-center w-8 h-8 bg-gray-400 text-white rounded-full text-sm font-medium">
+                    <div className="flex items-center justify-center w-8 h-8 bg-gray-600 text-white rounded-full text-sm font-medium shadow-sm">
                       1
                     </div>
                     <div className="flex-1">
-                      <span className="text-gray-900 font-medium">Resume Screening</span>
-                      <p className="text-sm text-gray-500">Fixed first stage</p>
+                      <span className="text-gray-900 font-semibold">Resume Screening</span>
+                      <p className="text-sm text-gray-600">Fixed first stage</p>
                     </div>
                   </div>
                 </div>
 
-                {/* Draggable Pipeline Stages */}
+                {/* Draggable Pipeline Stages with Predefined Rounds */}
                 <div className="space-y-3">
                   {pipelineStages
                     .filter(stage => !stage.is_mandatory)
                     .map((stage, index) => (
                     <div 
                       key={index} 
-                      className="bg-white border border-gray-200 p-4 rounded-xl cursor-move hover:shadow-md transition-shadow"
+                      className="bg-white border border-gray-200 p-4 rounded-xl cursor-move hover:shadow-lg transition-all duration-200 hover:border-green-300"
                       draggable
                       onDragStart={(e) => {
                         e.dataTransfer.setData('text/plain', index.toString());
                         e.currentTarget.style.opacity = '0.5';
+                        e.currentTarget.style.transform = 'scale(0.98)';
                       }}
                       onDragEnd={(e) => {
                         e.currentTarget.style.opacity = '1';
+                        e.currentTarget.style.transform = 'scale(1)';
                       }}
                       onDragOver={(e) => {
                         e.preventDefault();
-                        e.currentTarget.style.backgroundColor = '#f3f4f6';
+                        e.currentTarget.style.backgroundColor = '#f0fdf4';
+                        e.currentTarget.style.borderColor = '#22c55e';
                       }}
                       onDragLeave={(e) => {
                         e.currentTarget.style.backgroundColor = 'white';
+                        e.currentTarget.style.borderColor = '#e5e7eb';
                       }}
                       onDrop={(e) => {
                         e.preventDefault();
                         e.currentTarget.style.backgroundColor = 'white';
+                        e.currentTarget.style.borderColor = '#e5e7eb';
                         const draggedIndex = parseInt(e.dataTransfer.getData('text/plain'));
                         if (draggedIndex !== index) {
                           movePipelineStage(draggedIndex, index);
@@ -723,51 +824,76 @@ export function JobCreationFlow({
                     >
                       <div className="flex items-center gap-4">
                         <div className="flex items-center gap-2">
-                          <GripVertical className="w-4 h-4 text-gray-400 cursor-grab" />
-                          <div className="flex items-center justify-center w-8 h-8 bg-green-600 text-white rounded-full text-sm font-medium">
+                          <GripVertical className="w-4 h-4 text-gray-400 cursor-grab hover:text-gray-600 transition-colors" />
+                          <div className="flex items-center justify-center w-8 h-8 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-full text-sm font-medium shadow-sm">
                             {index + 2}
                           </div>
                         </div>
                         <div className="flex-1">
-                          <Input
-                            placeholder="e.g., Phone Screened, Technical Interview"
-                            value={stage.stage_type}
-                            onChange={(e) => updateStageConfig(index, 'stage_type', e.target.value)}
-                            className="border-0 bg-transparent text-gray-900 focus:ring-0 focus:outline-none p-0 font-medium"
-                          />
+                          <div className="text-gray-900 font-medium text-lg">
+                            {stage.stage_type}
+                          </div>
+                          {/* Evaluation Criteria Section */}
+                          {editingEvaluationCriteria === index ? (
+                            <div className="mt-2 space-y-2">
+                              <Textarea
+                                value={evaluationCriteriaText}
+                                onChange={(e) => setEvaluationCriteriaText(e.target.value)}
+                                placeholder="Enter evaluation criteria for this stage..."
+                                className="min-h-[80px] resize-none"
+                              />
+                              <div className="flex gap-2">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  onClick={() => handleSaveEvaluationCriteria(index)}
+                                  className="bg-green-600 hover:bg-green-700"
+                                >
+                                  Save
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={handleCancelEvaluationCriteria}
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="mt-2">
+                              {stage.evaluation_criteria ? (
+                                <div className="text-sm text-gray-600 bg-gray-50 p-2 rounded border">
+                                  {stage.evaluation_criteria}
+                                </div>
+                              ) : (
+                                <div className="text-sm text-gray-400 italic">
+                                  No evaluation criteria added
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                         <div className="flex items-center gap-2">
-                          {/* Move Up */}
-                          {index > 0 && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => movePipelineStage(index, index - 1)}
-                              className="text-gray-400 hover:text-gray-600 p-1"
-                            >
-                              <ChevronUp className="w-4 h-4" />
-                            </Button>
-                          )}
-                          {/* Move Down */}
-                          {index < pipelineStages.filter(s => !s.is_mandatory).length - 1 && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => movePipelineStage(index, index + 1)}
-                              className="text-gray-400 hover:text-gray-600 p-1"
-                            >
-                              <ChevronDown className="w-4 h-4" />
-                            </Button>
-                          )}
+                          {/* Edit Evaluation Criteria */}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEditEvaluationCriteria(index, stage)}
+                            className="text-gray-400 hover:text-blue-600 p-1 hover:bg-blue-50 rounded-full transition-colors"
+                            disabled={editingEvaluationCriteria === index}
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
                           {/* Remove */}
                           <Button
                             type="button"
                             variant="ghost"
                             size="sm"
                             onClick={() => removePipelineStage(index)}
-                            className="text-gray-400 hover:text-red-600 p-1"
+                            className="text-gray-400 hover:text-red-600 p-1 hover:bg-red-50 rounded-full transition-colors"
                           >
                             <X className="w-4 h-4" />
                           </Button>
@@ -777,27 +903,16 @@ export function JobCreationFlow({
                   ))}
                 </div>
 
-                {/* Fixed Last Stages - No longer mandatory, just fixed at end */}
+                {/* Fixed Last Stage */}
                 <div className="space-y-3">
-                  <div className="bg-gray-50 border-2 border-dashed border-gray-300 p-4 rounded-xl">
+                  <div className="bg-gray-50 border-2 border-gray-300 p-4 rounded-xl shadow-sm">
                     <div className="flex items-center gap-4">
-                      <div className="flex items-center justify-center w-8 h-8 bg-gray-400 text-white rounded-full text-sm font-medium">
+                      <div className="flex items-center justify-center w-8 h-8 bg-gray-600 text-white rounded-full text-sm font-medium shadow-sm">
                         {pipelineStages.filter(s => !s.is_mandatory).length + 2}
                       </div>
                       <div className="flex-1">
-                        <span className="text-gray-900 font-medium">Offer</span>
-                        <p className="text-sm text-gray-500">Fixed stage</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="bg-gray-50 border-2 border-dashed border-gray-300 p-4 rounded-xl">
-                    <div className="flex items-center gap-4">
-                      <div className="flex items-center justify-center w-8 h-8 bg-gray-400 text-white rounded-full text-sm font-medium">
-                        {pipelineStages.filter(s => !s.is_mandatory).length + 3}
-                      </div>
-                      <div className="flex-1">
-                        <span className="text-gray-900 font-medium">Hired</span>
-                        <p className="text-sm text-gray-500">Fixed final stage</p>
+                        <span className="text-gray-900 font-semibold">Offer Rollout & Negotiation</span>
+                        <p className="text-sm text-gray-600">Fixed final stage</p>
                       </div>
                     </div>
                   </div>
@@ -948,6 +1063,36 @@ export function JobCreationFlow({
               className="bg-red-600 hover:bg-red-700"
             >
               Discard Changes
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Discard Confirmation Dialog */}
+      <AlertDialog open={showDiscardConfirmation} onOpenChange={setShowDiscardConfirmation}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard Job Creation?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to discard this job creation? This will delete the job and all your progress will be lost.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setShowDiscardConfirmation(false)}>
+              Keep Creating
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={() => {
+                setShowDiscardConfirmation(false);
+                if (onConfirmClose) {
+                  onConfirmClose();
+                } else {
+                  onClose();
+                }
+              }}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Discard Job
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

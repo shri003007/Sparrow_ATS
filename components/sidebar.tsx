@@ -17,16 +17,20 @@ interface SidebarProps {
   jobRoles: string[];
   loadingRoles: boolean;
   activeJobRole: string;
+  searchQuery: string;
   onJobRoleClick: (role: string) => void;
   onAddRoleClick: () => void;
+  onSearchChange: (query: string) => void;
 }
 
 export function Sidebar({
   jobRoles,
   loadingRoles,
   activeJobRole,
+  searchQuery,
   onJobRoleClick,
   onAddRoleClick,
+  onSearchChange,
 }: SidebarProps) {
   return (
     <div className="w-60 bg-gray-50 border border-gray-200 flex flex-col rounded-2xl shadow-sm">
@@ -53,6 +57,8 @@ export function Sidebar({
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
           <Input 
             placeholder="Search candidates by name" 
+            value={searchQuery}
+            onChange={(e) => onSearchChange(e.target.value)}
             className="pl-10 bg-white border-gray-200 text-sm rounded-xl"
           />
           <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-md">⌘K</span>
