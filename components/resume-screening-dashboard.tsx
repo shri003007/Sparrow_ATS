@@ -41,7 +41,7 @@ interface IndividualData {
 interface Candidate {
   overall_data: OverallData;
   individual_data: IndividualData;
-  status?: string; // Add status property
+  status?: string;
 }
 
 interface PipelineStage {
@@ -56,7 +56,7 @@ interface PipelineStage {
   round_id?: string;
 }
 
-interface CandidateViewProps {
+interface ResumeScreeningDashboardProps {
   jobRole: string
   candidates: Candidate[]
   filteredCandidates: Candidate[]
@@ -81,9 +81,12 @@ interface CandidateViewProps {
   onUnlockNextRound?: () => void
   loadingNextRound?: boolean
   nextRoundName?: string | null
+  // Filtering props
+  statusFilter?: string
+  onStatusFilterChange?: (status: string) => void
 }
 
-export function CandidateView({
+export function ResumeScreeningDashboard({
   jobRole,
   candidates,
   filteredCandidates,
@@ -100,8 +103,10 @@ export function CandidateView({
   unlockedRounds = new Set(),
   onUnlockNextRound,
   loadingNextRound = false,
-  nextRoundName
-}: CandidateViewProps) {
+  nextRoundName,
+  statusFilter = 'all',
+  onStatusFilterChange
+}: ResumeScreeningDashboardProps) {
   return (
     <div className="flex-1 bg-gray-50 p-6">
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
@@ -233,29 +238,73 @@ export function CandidateView({
           )}
         </div>
 
-        {/* Filters */}
+        {/* Status Filters and Sorting */}
         <div className="p-6 border-b border-gray-200">
-          <div className="flex items-center gap-6">
-            <button className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors">
-              <Users className="w-4 h-4" />
-              <span className="text-sm font-medium">All applicants</span>
-            </button>
-            <button className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-xl transition-colors">
-              <MessageCircle className="w-4 h-4" />
-              <span className="text-sm">Selected</span>
-            </button>
-            <button className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-xl transition-colors">
-              <Bookmark className="w-4 h-4" />
-              <span className="text-sm">Wait listed</span>
-            </button>
-            <button className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-xl transition-colors">
-              <Clock className="w-4 h-4" />
-              <span className="text-sm">Action pending</span>
-            </button>
-            <button className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-xl transition-colors">
-              <Clock className="w-4 h-4" />
-              <span className="text-sm">Rejected</span>
-            </button>
+          <div className="flex items-center justify-between">
+            {/* Status Filter Tabs */}
+            <div className="flex items-center gap-2">
+              <button 
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-colors ${
+                  statusFilter === 'all' 
+                    ? 'bg-gray-100 text-gray-700' 
+                    : 'bg-white text-gray-500 hover:bg-gray-50'
+                }`}
+                onClick={() => onStatusFilterChange?.('all')}
+              >
+                <Users className="w-4 h-4" />
+                <span className="text-sm font-medium">All applicants</span>
+              </button>
+              
+              <button 
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-colors ${
+                  statusFilter === 'selected' 
+                    ? 'bg-gray-100 text-gray-700' 
+                    : 'bg-white text-gray-500 hover:bg-gray-50'
+                }`}
+                onClick={() => onStatusFilterChange?.('selected')}
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span className="text-sm font-medium">Selected</span>
+              </button>
+              
+              <button 
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-colors ${
+                  statusFilter === 'waitlisted' 
+                    ? 'bg-gray-100 text-gray-700' 
+                    : 'bg-white text-gray-500 hover:bg-gray-50'
+                }`}
+                onClick={() => onStatusFilterChange?.('waitlisted')}
+              >
+                <Bookmark className="w-4 h-4" />
+                <span className="text-sm font-medium">Wait listed</span>
+              </button>
+              
+              <button 
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-colors ${
+                  statusFilter === 'action_pending' 
+                    ? 'bg-gray-100 text-gray-700' 
+                    : 'bg-white text-gray-500 hover:bg-gray-50'
+                }`}
+                onClick={() => onStatusFilterChange?.('action_pending')}
+              >
+                <Clock className="w-4 h-4" />
+                <span className="text-sm font-medium">Action pending</span>
+              </button>
+              
+              <button 
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-colors ${
+                  statusFilter === 'rejected' 
+                    ? 'bg-gray-100 text-gray-700' 
+                    : 'bg-white text-gray-500 hover:bg-gray-50'
+                }`}
+                onClick={() => onStatusFilterChange?.('rejected')}
+              >
+                <X className="w-4 h-4" />
+                <span className="text-sm font-medium">Rejected</span>
+              </button>
+            </div>
+            
+
           </div>
         </div>
 
@@ -274,7 +323,6 @@ export function CandidateView({
               </div>
             </div>
           ) : !filteredCandidates || filteredCandidates.length === 0 ? (
-
             <div className="flex items-center justify-center py-12">
               <div className="text-center">
                 <Users className="w-8 h-8 text-gray-400 mx-auto mb-2" />
@@ -283,18 +331,16 @@ export function CandidateView({
             </div>
           ) : (
             <>
-              {/* Table */}
+              {/* Table - Resume Screening specific with recommendation column */}
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       APPLICANT'S NAME
                     </th>
-                    {selectedRound === "Resume Screening" && (
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        RECOMMENDATION / SCORE
-                      </th>
-                    )}
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      RECOMMENDATION / SCORE
+                    </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       STATUS
                     </th>
@@ -311,7 +357,6 @@ export function CandidateView({
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {(showMoreApplicants ? filteredCandidates : filteredCandidates?.slice(0, 8) || []).map((candidate, index) => {
-
                     const recommendation = getRecommendationDisplay(candidate);
                     return (
                       <tr key={index} className="hover:bg-gray-50 transition-colors">
@@ -323,14 +368,12 @@ export function CandidateView({
                             {formatName(candidate.overall_data.name)}
                           </button>
                         </td>
-                        {selectedRound === "Resume Screening" && (
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center gap-2">
-                              {recommendation.icon}
-                              <span className={`text-sm font-medium ${recommendation.color}`}>{recommendation.text}</span>
-                            </div>
-                          </td>
-                        )}
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            {recommendation.icon}
+                            <span className={`text-sm font-medium ${recommendation.color}`}>{recommendation.text}</span>
+                          </div>
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                             candidate.status === 'selected' ? 'bg-green-100 text-green-800' :
@@ -359,7 +402,6 @@ export function CandidateView({
                             >
                               <Download className="w-4 h-4" />
                               <span className="text-sm">Download Resume</span>
-
                             </button>
                           ) : (
                             <span className="text-sm text-gray-400">No resume</span>
@@ -373,7 +415,6 @@ export function CandidateView({
 
               {/* Show More Button */}
               {filteredCandidates && filteredCandidates.length > 8 && (
-
                 <div className="p-6 border-t border-gray-200">
                   <Button
                     variant="ghost"

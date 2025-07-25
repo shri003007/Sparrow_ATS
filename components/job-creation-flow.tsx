@@ -5,6 +5,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import {
   Briefcase,
   FileText,
@@ -103,6 +104,7 @@ interface JobCreationFlowProps {
   initializeDefaultRounds: () => void
   getEvaluationCriteria: (pipelineId: string) => Promise<any>
   saveEvaluationCriteria: (pipelineId: string, evaluationCriteria: string) => Promise<any>
+  updateRoundName: (index: number, newName: string) => void
 }
 
 export function JobCreationFlow({
@@ -135,11 +137,16 @@ export function JobCreationFlow({
   addSpecificPipelineStage,
   initializeDefaultRounds,
   getEvaluationCriteria,
-  saveEvaluationCriteria
+  saveEvaluationCriteria,
+  updateRoundName
 }: JobCreationFlowProps) {
   // State for evaluation criteria editing
   const [editingEvaluationCriteria, setEditingEvaluationCriteria] = useState<number | null>(null);
   const [evaluationCriteriaText, setEvaluationCriteriaText] = useState('');
+  
+  // State for round name editing
+  const [editingRoundName, setEditingRoundName] = useState<number | null>(null);
+  const [roundNameText, setRoundNameText] = useState('');
 
   // Handle evaluation criteria editing - simplified to use local state only
   const handleEditEvaluationCriteria = (index: number, stage: PipelineStage) => {
@@ -160,6 +167,25 @@ export function JobCreationFlow({
   const handleCancelEvaluationCriteria = () => {
     setEditingEvaluationCriteria(null);
     setEvaluationCriteriaText('');
+  };
+
+  // Handle round name editing
+  const handleEditRoundName = (index: number, stage: PipelineStage) => {
+    setEditingRoundName(index);
+    setRoundNameText(stage.stage_type);
+  };
+
+  const handleSaveRoundName = (index: number) => {
+    if (roundNameText.trim()) {
+      updateRoundName(index, roundNameText.trim());
+    }
+    setEditingRoundName(null);
+    setRoundNameText('');
+  };
+
+  const handleCancelRoundName = () => {
+    setEditingRoundName(null);
+    setRoundNameText('');
   };
 
   // Job Description Generator states
@@ -830,9 +856,60 @@ export function JobCreationFlow({
                           </div>
                         </div>
                         <div className="flex-1">
-                          <div className="text-gray-900 font-medium text-lg">
-                            {stage.stage_type}
-                          </div>
+                          {/* Round Name Section */}
+                          {editingRoundName === index ? (
+                            <div className="space-y-2">
+                              <Input
+                                value={roundNameText}
+                                onChange={(e) => setRoundNameText(e.target.value)}
+                                placeholder="Enter round name..."
+                                className="text-lg font-medium"
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleSaveRoundName(index);
+                                  } else if (e.key === 'Escape') {
+                                    handleCancelRoundName();
+                                  }
+                                }}
+                                autoFocus
+                              />
+                              <div className="flex gap-2">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  onClick={() => handleSaveRoundName(index)}
+                                  className="bg-green-600 hover:bg-green-700"
+                                >
+                                  Save
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={handleCancelRoundName}
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div 
+                                    className="text-gray-900 font-medium text-lg cursor-pointer hover:text-green-600 transition-colors group relative flex items-center gap-2"
+                                    onDoubleClick={() => handleEditRoundName(index, stage)}
+                                  >
+                                    <span>{stage.stage_type}</span>
+                                    <Edit className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity text-green-600" />
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Double-click to edit round name</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
                           {/* Evaluation Criteria Section */}
                           {editingEvaluationCriteria === index ? (
                             <div className="mt-2 space-y-2">
@@ -875,28 +952,46 @@ export function JobCreationFlow({
                             </div>
                           )}
                         </div>
-                        <div className="flex items-center gap-2">
+                                                <div className="flex items-center gap-2">
                           {/* Edit Evaluation Criteria */}
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleEditEvaluationCriteria(index, stage)}
-                            className="text-gray-400 hover:text-blue-600 p-1 hover:bg-blue-50 rounded-full transition-colors"
-                            disabled={editingEvaluationCriteria === index}
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleEditEvaluationCriteria(index, stage)}
+                                  className="text-gray-400 hover:text-blue-600 p-1 hover:bg-blue-50 rounded-full transition-colors"
+                                  disabled={editingEvaluationCriteria === index || editingRoundName === index}
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Edit evaluation criteria</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                           {/* Remove */}
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removePipelineStage(index)}
-                            className="text-gray-400 hover:text-red-600 p-1 hover:bg-red-50 rounded-full transition-colors"
-                          >
-                            <X className="w-4 h-4" />
-                          </Button>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => removePipelineStage(index)}
+                                  className="text-gray-400 hover:text-red-600 p-1 hover:bg-red-50 rounded-full transition-colors"
+                                >
+                                  <X className="w-4 h-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Remove round</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         </div>
                       </div>
                     </div>

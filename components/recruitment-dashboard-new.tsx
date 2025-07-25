@@ -9,9 +9,13 @@ import {
 } from "lucide-react"
 import { Sidebar } from "@/components/sidebar"
 import { CandidateView } from "@/components/candidate-view"
+import { ResumeScreeningDashboard } from "@/components/resume-screening-dashboard"
+import { OtherRoundsDashboard } from "@/components/other-rounds-dashboard"
 import { JobCreationFlow } from "@/components/job-creation-flow"
 import { CandidateDetails } from "@/components/candidate-details"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
+import { useToast } from "@/hooks/use-toast"
+import { formatName } from "@/lib/utils"
 
 // Types for API response
 interface OverallData {
@@ -28,15 +32,20 @@ interface IndividualData {
   key_qualifications: string;
   career_progression: string;
   justification: string;
+  evaluation_summary?: string;
 }
 
 interface Candidate {
   overall_data: OverallData;
   individual_data: IndividualData;
-}
-
-interface ApiResponse {
-  details: Candidate[];
+  candidate_id?: string; // Add candidate ID for API calls
+  status?: string; // Add status field
+  evaluation_data?: {
+    available: boolean;
+    total_evaluations: number;
+    by_pipeline: { [key: string]: any };
+    current_status: any;
+  };
 }
 
 // Types for job creation flow
@@ -93,6 +102,7 @@ interface JobBoard {
 type JobCreationStep = 'job-info' | 'application-details' | 'job-pipeline' | 'job-boards';
 
 export function RecruitmentDashboard() {
+  
   // Main states
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null)
   const [jobRole, setJobRole] = useState("All candidates")
@@ -109,6 +119,85 @@ export function RecruitmentDashboard() {
   const [searchQuery, setSearchQuery] = useState("")
   const [showMoreApplicants, setShowMoreApplicants] = useState(false)
   const [candidateDetailTab, setCandidateDetailTab] = useState("overview")
+  
+  // Filtering state
+  const [statusFilter, setStatusFilter] = useState<string>('all') // Default to show all candidates
+  
+  // Cache management state
+  const [isPreviousRoundSelected, setIsPreviousRoundSelected] = useState(false)
+  
+  // Cache candidate data for a specific round
+  const cacheCandidateDataForRound = (roundName: string, candidateData: Candidate[]) => {
+    if (!currentJobId) return;
+    
+    const cacheKey = `candidate_cache_${currentJobId}_${roundName}`;
+    const cacheData = {
+      candidates: candidateData,
+      timestamp: new Date().toISOString(),
+      round: roundName
+    };
+    
+    localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+  };
+  
+  // Check if we have cached candidate data for a round
+  const hasCachedCandidateData = (roundName: string) => {
+    if (!currentJobId) return false;
+    
+    const cacheKey = `candidate_cache_${currentJobId}_${roundName}`;
+    const cachedData = localStorage.getItem(cacheKey);
+    
+    if (cachedData) {
+      try {
+        const parsed = JSON.parse(cachedData);
+        const cacheAge = new Date().getTime() - new Date(parsed.timestamp).getTime();
+        const maxAge = 30 * 60 * 1000; // 30 minutes
+        
+        // Return true if cache is still valid
+        return cacheAge < maxAge;
+      } catch (error) {
+        console.error('Error parsing cached candidate data:', error);
+        return false;
+      }
+    }
+    
+    return false;
+  };
+  
+  // Load cached candidate data for a round
+  const loadCachedCandidateData = (roundName: string) => {
+    if (!currentJobId) return false;
+    
+    const cacheKey = `candidate_cache_${currentJobId}_${roundName}`;
+    const cachedData = localStorage.getItem(cacheKey);
+    
+    if (cachedData) {
+      try {
+        const parsed = JSON.parse(cachedData);
+        setCandidates(parsed.candidates);
+        setFilteredCandidates(parsed.candidates);
+        return true;
+      } catch (error) {
+        console.error('Error loading cached candidate data:', error);
+        return false;
+      }
+    }
+    
+    return false;
+  };
+  
+
+  
+  // Rounds functionality states
+  const [currentJobPipelineStages, setCurrentJobPipelineStages] = useState<PipelineStage[]>([])
+  const [selectedRound, setSelectedRound] = useState<string>("Resume Screening") // Default to first round
+  const [loadingRounds, setLoadingRounds] = useState(false)
+  const [unlockedRounds, setUnlockedRounds] = useState<Set<string>>(new Set(["Resume Screening"])) // Only first round unlocked by default
+  const [loadingNextRound, setLoadingNextRound] = useState(false)
+  
+  // Store job_id and order_id to reduce API calls
+  const [currentJobId, setCurrentJobId] = useState<string | null>(null)
+  const [currentOrderId, setCurrentOrderId] = useState<string | null>(null)
   
   // Job creation states
   const [showJobCreation, setShowJobCreation] = useState(false)
@@ -154,6 +243,9 @@ export function RecruitmentDashboard() {
   // API Base URLs
   const JOB_API_BASE_URL = process.env.NEXT_PUBLIC_JOB_API_BASE_URL!
   const CANDIDATE_API_BASE_URL = process.env.NEXT_PUBLIC_CANDIDATE_API_BASE_URL!
+  const PIPELINE_API_BASE_URL = process.env.NEXT_PUBLIC_PIPELINE_API_BASE_URL!
+  const CANDIDATE_STATUS_API_BASE_URL = process.env.NEXT_PUBLIC_CANDIDATE_STATUS_API_BASE_URL!
+  const EVALUATION_API_BASE_URL = process.env.NEXT_PUBLIC_EVALUATION_API_BASE_URL!
 
   // Update activity time when user interacts with job creation
   const updateActivityTime = () => {
@@ -190,8 +282,6 @@ export function RecruitmentDashboard() {
 
   // API Functions
   const createJob = async (jobData: JobFormData) => {
-    console.log('Creating job with data:', jobData);
-    
     try {
       const response = await fetch(`${JOB_API_BASE_URL}/jobs`, {
         method: 'POST',
@@ -204,8 +294,6 @@ export function RecruitmentDashboard() {
           expires_at: jobData.expires_at || null
         }),
       });
-
-      console.log('Job creation response status:', response.status);
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -226,7 +314,6 @@ export function RecruitmentDashboard() {
       }
 
       const result = await response.json();
-      console.log('Job creation successful:', result);
       
       // Validate the response structure
       if (!result.job || !result.job.id) {
@@ -242,12 +329,8 @@ export function RecruitmentDashboard() {
   };
 
   const updateJob = async (jobId: string, updates: Partial<JobFormData & { job_status?: string; published_at?: string }>) => {
-    console.log(`Attempting to update job ${jobId}:`, updates);
-    
     try {
-
       const response = await fetch(`${JOB_API_BASE_URL}/jobs/${jobId}`, {
-
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -313,7 +396,6 @@ export function RecruitmentDashboard() {
         
         // Handle "Job not found" as a success case (job is already gone)
         if (response.status === 404 || errorData.message?.includes('not found')) {
-          console.log('✅ Job not found - already deleted or never existed:', jobId);
           return { 
             success: true, 
             message: 'Job not found (already deleted or never existed)',
@@ -341,7 +423,6 @@ export function RecruitmentDashboard() {
       }
 
       const result = await response.json();
-      console.log('Job deleted successfully:', result);
       return { success: true, message: 'Job deleted successfully' }; // Backend returns { message }
     } catch (error) {
       if (error instanceof TypeError && error.message === 'Failed to fetch') {
@@ -376,12 +457,8 @@ export function RecruitmentDashboard() {
   };
 
   const saveApplicationQuestions = async (jobId: string, questions: ApplicationQuestion[]) => {
-    console.log(`Attempting to save questions for job ${jobId}:`, questions);
-    
     try {
-
       const response = await fetch(`${JOB_API_BASE_URL}/jobs/${jobId}/questions`, {
-
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -458,14 +535,8 @@ export function RecruitmentDashboard() {
   };
 
   const savePipelineStages = async (jobId: string, stages: PipelineStage[]) => {
-    console.log('=== SAVING PIPELINE STAGES ===');
-    console.log('Job ID:', jobId);
-    console.log('Stages to save:', stages);
-    console.log('Predefined rounds available:', predefinedRounds);
-
     // Ensure predefined rounds are loaded
     if (predefinedRounds.length === 0) {
-      console.log('No predefined rounds loaded, fetching them now...');
       try {
         const apiUrl = process.env.NEXT_PUBLIC_RECRUITMENT_ROUNDS_API_URL!;
         const response = await fetch(apiUrl);
@@ -473,17 +544,17 @@ export function RecruitmentDashboard() {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         const data: { recruitment_rounds: PredefinedRound[] } = await response.json();
-        console.log('Predefined rounds loaded for pipeline creation:', data.recruitment_rounds);
         
         // Use the fetched data directly instead of relying on state
         const fetchedRounds = data.recruitment_rounds;
         
         // Create stages with proper round_id mapping using the mapping function
+        // Only Resume Screening should be active initially, all others should be inactive
         const allStages = [
           { 
             stage_type: 'Resume Screening', 
             order_index: 1, 
-            is_active: true,
+            is_active: true, // Only Resume Screening is active
             round_id: getRoundIdByName('Resume Screening'), // Use mapping function
             evaluation_criteria: ''
           },
@@ -491,7 +562,7 @@ export function RecruitmentDashboard() {
             return {
               stage_type: stage.stage_type || '',
               order_index: index + 2,
-              is_active: stage.is_active !== undefined ? stage.is_active : true,
+              is_active: false, // All other stages are inactive initially
               round_id: getRoundIdByName(stage.stage_type), // Use mapping function
               evaluation_criteria: stage.evaluation_criteria || ''
             };
@@ -499,7 +570,7 @@ export function RecruitmentDashboard() {
           { 
             stage_type: 'Offer Rollout & Negotiation', 
             order_index: stages.length + 2, 
-            is_active: true,
+            is_active: false, // Offer Rollout is also inactive initially
             round_id: getRoundIdByName('Offer Rollout & Negotiation'), // Use mapping function
             evaluation_criteria: ''
           }
@@ -511,17 +582,12 @@ export function RecruitmentDashboard() {
           const cleanedStage = {
             stage_type: String(stage.stage_type || ''),
             order_index: Number(stage.order_index || 1),
-            is_active: Boolean(stage.is_active !== undefined ? stage.is_active : true),
+            is_active: Boolean(stage.is_active), // Use the explicitly set value
             round_id: String(stage.round_id || ''),
             evaluation_criteria: String(stage.evaluation_criteria || '')
           };
           
-          // Log each stage for debugging
-          console.log('Stage validation:', {
-            original: stage,
-            cleaned: cleanedStage,
-            hasAllFields: Object.keys(cleanedStage).length === 5
-          });
+
           
           return cleanedStage;
         });
@@ -535,20 +601,13 @@ export function RecruitmentDashboard() {
           throw new Error(`Invalid round_ids found: ${invalidStages.map(s => `${s.stage_type} (${s.round_id})`).join(', ')}`);
         }
 
-        console.log('Creating', cleanedStages.length, 'pipeline stages...');
-        console.log('Cleaned stages data:', JSON.stringify(cleanedStages, null, 2));
-
         // Retry mechanism for network issues
         let retryCount = 0;
         const maxRetries = 2;
         
         while (retryCount <= maxRetries) {
           try {
-            console.log(`Attempt ${retryCount + 1} of ${maxRetries + 1}...`);
-            
             const apiUrl = `${JOB_API_BASE_URL}/jobs/${jobId}/pipeline`;
-            console.log('Making API call to:', apiUrl);
-            console.log('Request body:', JSON.stringify(cleanedStages, null, 2));
             
             const response = await fetch(apiUrl, {
               method: 'POST',
@@ -556,16 +615,8 @@ export function RecruitmentDashboard() {
               body: JSON.stringify(cleanedStages),
             });
 
-            console.log('🔍 Response received:', {
-              status: response.status,
-              statusText: response.statusText,
-              ok: response.ok,
-              url: response.url
-            });
-
             if (response.ok) {
               const result = await response.json();
-              console.log('✅ Pipeline stages created successfully:', result);
               return result;
             } else {
               const errorText = await response.text();
@@ -582,8 +633,6 @@ export function RecruitmentDashboard() {
                 errorData = { message: errorText };
               }
               
-              // Simplified error handling - just throw the error
-              console.log('🔍 About to throw error:', errorData.message || `HTTP error! status: ${response.status}`);
               throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
             }
             
@@ -594,17 +643,15 @@ export function RecruitmentDashboard() {
             if (error instanceof TypeError && error.message === 'Failed to fetch') {
               retryCount++;
               
-              if (retryCount <= maxRetries) {
-                console.log(`🔄 Network error detected. Retrying in 1 second... (${retryCount}/${maxRetries})`);
-                await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
-                continue;
-              } else {
-                console.log('🔄 Max retries reached. Continuing with local state...');
-                return {
-                  message: 'Pipeline configuration saved locally (network issue detected)',
-                  stages: cleanedStages
-                };
-              }
+                          if (retryCount <= maxRetries) {
+              await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
+              continue;
+            } else {
+              return {
+                message: 'Pipeline configuration saved locally (network issue detected)',
+                stages: cleanedStages
+              };
+            }
             }
             
             // For other errors, don't retry
@@ -623,7 +670,7 @@ export function RecruitmentDashboard() {
       { 
         stage_type: 'Resume Screening', 
         order_index: 1, 
-        is_active: true,
+        is_active: true, // Only Resume Screening is active initially
         round_id: getRoundIdByName('Resume Screening'),
         evaluation_criteria: ''
       },
@@ -631,15 +678,15 @@ export function RecruitmentDashboard() {
         return {
           stage_type: stage.stage_type || '',
           order_index: index + 2,
-          is_active: stage.is_active !== undefined ? stage.is_active : true,
-          round_id: getRoundIdByName(stage.stage_type),
+          is_active: false, // All other stages are inactive initially
+          round_id: stage.round_id || getRoundIdByName(stage.stage_type), // Use existing round_id, fallback to mapping
           evaluation_criteria: stage.evaluation_criteria || ''
         };
       }),
       { 
         stage_type: 'Offer Rollout & Negotiation', 
         order_index: stages.length + 2, 
-        is_active: true,
+        is_active: false, // Offer Rollout is also inactive initially
         round_id: getRoundIdByName('Offer Rollout & Negotiation'),
         evaluation_criteria: ''
       }
@@ -651,7 +698,7 @@ export function RecruitmentDashboard() {
       const cleanedStage = {
         stage_type: String(stage.stage_type || ''),
         order_index: Number(stage.order_index || 1),
-        is_active: Boolean(stage.is_active !== undefined ? stage.is_active : true),
+        is_active: Boolean(stage.is_active), // Use the explicitly set value
         round_id: String(stage.round_id || ''),
         evaluation_criteria: String(stage.evaluation_criteria || '')
       };
@@ -776,6 +823,28 @@ export function RecruitmentDashboard() {
     }
   };
 
+  // Function to fetch pipeline stages for the current job (for rounds dropdown)
+  const fetchPipelineStagesForJob = async (jobId: string) => {
+    try {
+      const result = await getPipelineStages(jobId);
+      if (result.stages && result.stages.length > 0) {
+        console.log('Pipeline stages loaded:', result.stages);
+        setCurrentJobPipelineStages(result.stages);
+        
+        // Set the initial round (Resume Screening) when pipeline stages are loaded
+        await setInitialRound(result.stages);
+      } else {
+        console.log('No pipeline stages found for job:', jobId);
+        setCurrentJobPipelineStages([]);
+        setCurrentOrderId(null);
+      }
+    } catch (err) {
+      console.error('Error fetching pipeline stages:', err);
+      setCurrentJobPipelineStages([]);
+      setCurrentOrderId(null);
+    }
+  };
+
   // Simplified evaluation criteria functions - handled locally in frontend
   const getEvaluationCriteria = async (pipelineId: string) => {
     return { evaluation_criteria: '' };
@@ -789,14 +858,12 @@ export function RecruitmentDashboard() {
     setLoadingPredefinedRounds(true);
     try {
       const apiUrl = process.env.NEXT_PUBLIC_RECRUITMENT_ROUNDS_API_URL!;
-      console.log('Fetching predefined rounds from:', apiUrl);
       
       const response = await fetch(apiUrl);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       const data: { recruitment_rounds: PredefinedRound[] } = await response.json();
-      console.log('Predefined rounds loaded:', data.recruitment_rounds);
       setPredefinedRounds(data.recruitment_rounds);
     } catch (err) {
       console.error('Error fetching predefined rounds:', err);
@@ -809,50 +876,15 @@ export function RecruitmentDashboard() {
 
 
   // Candidate API Functions
-  const fetchCandidatesByJob = async (jobId: string) => {
-    if (!jobId.trim()) return;
 
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const response = await fetch(`${CANDIDATE_API_BASE_URL}/candidates/by-job?job_id=${encodeURIComponent(jobId)}`);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      
-      // Transform the API response to match our existing Candidate interface
-      const transformedCandidates: Candidate[] = (data.candidates || []).map((candidate: any) => ({
-        overall_data: {
-          name: candidate.candidate_info?.name || 'Unknown',
-          email: candidate.candidate_info?.email || '',
-          phone: candidate.candidate_info?.phone || '',
-          resume_url: candidate.candidate_info?.resume_url || '',
-          score: candidate.evaluation?.score || 0,
-          recommendation_category: candidate.evaluation?.recommendation_category || 'Not Available'
-        },
-        individual_data: {
-          professional_overview: candidate.resume_summary?.professional_overview || '',
-          key_qualifications: candidate.resume_summary?.key_qualifications || '',
-          career_progression: candidate.resume_summary?.career_progression || '',
-          justification: candidate.evaluation?.justification || ''
-        }
-      }));
-      
-      setCandidates(transformedCandidates);
-      setFilteredCandidates(transformedCandidates);
-    } catch (err) {
-      console.error('Error fetching candidates:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch candidates');
-      setCandidates([]);
-      setFilteredCandidates([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+
+
+
+  // Note: Removed getCandidateStatus function to optimize performance
+  // Instead of making individual API calls for each candidate's status,
+  // we now use the status information that should already be included
+  // in the pipeline/API response (candidate_status or status field)
+  // This reduces API calls from N (number of candidates) to 1 per fetch operation.
 
   const fetchCandidateById = async (candidateId: string) => {
     try {
@@ -870,80 +902,18 @@ export function RecruitmentDashboard() {
     }
   };
 
-  // Legacy function for backward compatibility (Mock mode for testing)
-
-  const fetchCandidates = async (role: string) => {
-    if (!role.trim()) return;
-
-    setLoading(true);
-    setError(null);
-    
-    try {
-              const response = await fetch(`${process.env.NEXT_PUBLIC_LEGACY_CANDIDATE_API_URL!}/?job_role=${encodeURIComponent(role)}`);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const data: ApiResponse = await response.json();
-      setCandidates(data.details || []);
-      setFilteredCandidates(data.details || []);
-    } catch (err) {
-      console.error('Error fetching candidates:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch candidates');
-      setCandidates([]);
-      setFilteredCandidates([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchAllCandidates = async () => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const allCandidatesData: Candidate[] = [];
-      
-      for (const role of jobRoles) {
-        try {
-          const response = await fetch(`${process.env.NEXT_PUBLIC_LEGACY_CANDIDATE_API_URL!}/?job_role=${encodeURIComponent(role)}`);
-          if (response.ok) {
-            const data: ApiResponse = await response.json();
-
-            if (data.details && Array.isArray(data.details)) {
-
-              allCandidatesData.push(...data.details);
-            }
-          }
-        } catch (err) {
-          console.log(`Error fetching candidates for role: ${role}`);
-        }
-      }
-      
-      setAllCandidates(allCandidatesData);
-      setCandidates(allCandidatesData);
-      setFilteredCandidates(allCandidatesData);
-    } catch (err) {
-      console.error('Error fetching all candidates:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch all candidates');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // REMOVED: fetchAllCandidates function
+  // This function was making unnecessary API calls to fetch candidates for all jobs
+  // The "All candidates" view should not make any API calls and just show empty state
 
   const fetchJobRoles = async () => {
     setLoadingRoles(true);
     try {
-      console.log('Fetching job roles from API');
       const result = await getAllJobs();
-      console.log('Jobs API result:', result);
       
       // Backend returns { jobs: [...] }
       const openJobs = result.jobs.filter((job: any) => job.job_status === 'Open');
       const jobTitles = openJobs.map((job: any) => job.posting_title);
-      console.log('Open job titles:', jobTitles);
-      
 
       // Create a mapping from job title to job ID
       const jobMap = new Map<string, string>();
@@ -955,7 +925,7 @@ export function RecruitmentDashboard() {
       setJobRoleToIdMap(jobMap);
 
     } catch (err) {
-      console.error('Error fetching job roles:', err);
+      console.error('❌ Error fetching job roles:', err);
       setError('Failed to fetch job roles');
       // Fallback to empty array on error
       setJobRoles([]);
@@ -971,7 +941,6 @@ export function RecruitmentDashboard() {
     // Check if there's an existing job creation session
     const existingJobId = localStorage.getItem('incompleteJobId');
     if (existingJobId) {
-      console.log('Found existing job creation session:', existingJobId);
       setCreatedJobId(existingJobId);
       setJobCreationInProgress(true);
       setShowJobCreation(true);
@@ -982,10 +951,29 @@ export function RecruitmentDashboard() {
     }
   }, []);
 
-  // Debug useEffect to monitor createdJobId changes
+
+
+  // Effect to ensure candidates are loaded for non-Resume Screening rounds - Disabled to prevent multiple API calls
+  // useEffect(() => {
+  //   if (selectedRound && selectedRound !== "Resume Screening" && candidates.length === 0 && currentJobId && !loading) {
+  //     console.log(`🔄 No candidates found for ${selectedRound}, fetching fresh data...`);
+  //     fetchCandidatesByJob(currentJobId);
+  //   }
+  // }, [selectedRound, candidates.length, currentJobId, loading]);
+
+  // Effect to validate job ID consistency - Only log warnings, don't auto-refetch
   useEffect(() => {
-    console.log('createdJobId changed to:', createdJobId);
-  }, [createdJobId]);
+    if (jobRole && jobRole !== "All candidates" && currentJobId) {
+      const expectedJobId = jobRoleToIdMap.get(jobRole);
+      if (expectedJobId && expectedJobId !== currentJobId) {
+        console.warn('⚠️ Job ID mismatch detected!');
+        console.warn('Expected job ID for role:', jobRole, '->', expectedJobId);
+        console.warn('Current job ID:', currentJobId);
+        console.warn('This might cause data confusion. Please check the job mapping.');
+        // Don't auto-refetch to avoid multiple API calls
+      }
+    }
+  }, [jobRole, currentJobId, jobRoleToIdMap]);
 
   // Handle page unload and visibility change for cleanup
   useEffect(() => {
@@ -1043,16 +1031,232 @@ export function RecruitmentDashboard() {
 
   const handleCandidateSearch = (query: string) => {
     setSearchQuery(query);
-    if (!query.trim()) {
-      setFilteredCandidates(candidates);
+    applyFilters(candidates, query, statusFilter);
+  };
+
+  // Function to handle status filtering
+  const handleStatusFilter = (status: string) => {
+    setStatusFilter(status);
+    applyFilters(candidates, searchQuery, status);
+  };
+
+  // Combined function to apply filters and sort by score (descending)
+  const applyFilters = (candidateList: Candidate[], query: string, status: string) => {
+    let filtered = candidateList;
+
+    // Apply search filter
+    if (query.trim()) {
+      filtered = filtered.filter(candidate =>
+        formatName(candidate.overall_data.name).toLowerCase().includes(query.toLowerCase()) ||
+        candidate.overall_data.email.toLowerCase().includes(query.toLowerCase())
+      );
+    }
+
+    // Apply status filter
+    if (status !== 'all') {
+      filtered = filtered.filter(candidate => candidate.status === status);
+    }
+
+    // Sort by score in descending order (highest scores first)
+    filtered.sort((a, b) => {
+      const scoreA = a.overall_data.score || 0;
+      const scoreB = b.overall_data.score || 0;
+      return scoreB - scoreA; // Descending order
+    });
+
+    setFilteredCandidates(filtered);
+  };
+
+  // Handler for round selection changes
+  const handleRoundChange = async (round: string) => {
+    // Check if the round is unlocked
+    if (!unlockedRounds.has(round)) {
+      console.warn(`Round "${round}" is locked. Please complete the previous round first.`);
       return;
     }
 
-    const filtered = candidates.filter(candidate =>
-      candidate.overall_data.name.toLowerCase().includes(query.toLowerCase()) ||
-      candidate.overall_data.email.toLowerCase().includes(query.toLowerCase())
+    setSelectedRound(round);
+    setLoadingRounds(true);
+    setError(null); // Clear any previous errors
+    
+    try {
+      // Find the pipeline stage for the selected round
+      const selectedStage = currentJobPipelineStages.find(stage => stage.stage_type === round);
+      if (selectedStage && selectedStage.id) {
+        // Store the pipeline ID for the current round
+        setCurrentOrderId(selectedStage.id);
+        console.log(`Set currentOrderId to: ${selectedStage.id} for round: ${round}`);
+        
+        // Check if this is a previous round (not the current active round)
+        const currentActiveStage = currentJobPipelineStages.find(stage => stage.is_active && stage.order_index === Math.max(...currentJobPipelineStages.filter(s => s.is_active).map(s => s.order_index)));
+        const isPreviousRound = currentActiveStage && selectedStage.order_index < currentActiveStage.order_index;
+        
+        // Set the flag for cache management
+        setIsPreviousRoundSelected(!!isPreviousRound);
+        
+        if (isPreviousRound) {
+          console.log(`🔄 Previous round selected: ${round} - will cache evaluation data for faster access`);
+        }
+        
+        // Check if we have cached candidate data for this round
+        const hasCachedData = hasCachedCandidateData(round);
+        
+        if (hasCachedData && isPreviousRound) {
+          // Load cached data instead of hitting API
+          loadCachedCandidateData(round);
+        } else {
+          // Fetch fresh data (current round or no cache)
+          await fetchCandidatesFromPipeline(selectedStage.id);
+        }
+        
+        // Cache the data for future use if this is a previous round
+        if (isPreviousRound) {
+          // Use setTimeout to ensure candidates state is updated
+          setTimeout(() => {
+            cacheCandidateDataForRound(round, candidates);
+          }, 100);
+        }
+        
+        // If this is a previous round, trigger caching of evaluation data
+        if (isPreviousRound) {
+          // The caching will be handled in the candidate details component when candidates are loaded
+        }
+        
+      } else {
+        console.error('Pipeline stage not found for round:', round);
+        setError(`Round "${round}" not found in pipeline stages`);
+        setCurrentOrderId(null); // Clear the order ID if stage not found
+      }
+    } catch (error) {
+      console.error('Error changing round:', error);
+      setError('Failed to load candidates for selected round');
+      setCurrentOrderId(null); // Clear the order ID on error
+    } finally {
+      setLoadingRounds(false);
+    }
+  };
+
+  // Function to unlock the next round
+  const unlockNextRound = async () => {
+    if (!currentJobId) {
+      console.error('No current job ID available');
+      return;
+    }
+
+    setLoadingNextRound(true);
+    try {
+      // Find the current round index
+      const currentRoundIndex = currentJobPipelineStages.findIndex(stage => stage.stage_type === selectedRound);
+      if (currentRoundIndex === -1) {
+        console.error('Current round not found in pipeline stages');
+        return;
+      }
+
+      // Find the next round
+      const nextRound = currentJobPipelineStages[currentRoundIndex + 1];
+      if (!nextRound) {
+        return;
+      }
+
+      // Update the is_active status for the next round pipeline
+      // Keep current round active and activate the next round
+      if (currentOrderId) {
+        try {
+          const activateResponse = await fetch(`${JOB_API_BASE_URL}/pipeline/${currentOrderId}/confirm`, {
+            method: 'POST'
+          });
+
+          if (!activateResponse.ok) {
+            const errorData = await activateResponse.json().catch(() => ({}));
+            console.error('❌ Failed to activate next pipeline:', errorData);
+            throw new Error(errorData.message || `HTTP error! status: ${activateResponse.status}`);
+          }
+
+          const activateData = await activateResponse.json();
+          
+        } catch (activateError) {
+          console.error('❌ Error activating next pipeline:', activateError);
+          // Don't throw here - we can still proceed with unlocking locally
+        }
+      }
+
+      // Update the local pipeline stages state to reflect the change
+      // Keep current round active and activate the next round
+      const updatedPipelineStages = currentJobPipelineStages.map(stage => {
+        if (stage.id === nextRound.id) {
+          return { ...stage, is_active: true };
+        }
+        return stage; // Keep other stages as they are (including current round)
+      });
+      setCurrentJobPipelineStages(updatedPipelineStages);
+
+      // Unlock the next round locally
+      const newUnlockedRounds = new Set(unlockedRounds);
+      newUnlockedRounds.add(nextRound.stage_type);
+      setUnlockedRounds(newUnlockedRounds);
+
+      // Set the current order ID to the next round ID
+      setCurrentOrderId(nextRound.id || '');
+      
+      // 🚀 ALWAYS SWITCH TO THE NEXT ROUND DASHBOARD
+      setSelectedRound(nextRound.stage_type);
+      
+      // 📥 FETCH CANDIDATES FOR THE NEWLY ACTIVATED ROUND
+      if (nextRound.id) {
+        try {
+          await fetchCandidatesFromPipeline(nextRound.id);
+        } catch (error) {
+          console.error(`❌ Failed to fetch candidates for ${nextRound.stage_type}:`, error);
+          setError(`Failed to load candidates for ${nextRound.stage_type}`);
+        }
+      }
+      
+    } catch (error) {
+      console.error('Error unlocking next round:', error);
+      setError('Failed to unlock next round');
+    } finally {
+      setLoadingNextRound(false);
+    }
+  };
+
+  // Function to check if a round is unlocked
+  const isRoundUnlocked = (roundName: string): boolean => {
+    return unlockedRounds.has(roundName);
+  };
+
+  // Function to get the next round name
+  const getNextRoundName = (): string | null => {
+    const currentRoundIndex = currentJobPipelineStages.findIndex(stage => stage.stage_type === selectedRound);
+    if (currentRoundIndex === -1 || currentRoundIndex === currentJobPipelineStages.length - 1) {
+      return null; // No next round available
+    }
+    return currentJobPipelineStages[currentRoundIndex + 1].stage_type;
+  };
+
+  // Handler for candidate status updates
+  // FIXED: Previously this was updating all rounds' candidates, now it only updates the current round
+  const handleCandidateStatusUpdate = async (candidateId: string, status: string, pipelineData?: any) => {
+    // Update the candidate status in the local state for current round only
+    setCandidates(prevCandidates => 
+      prevCandidates.map(candidate => 
+        candidate.candidate_id === candidateId 
+          ? { ...candidate, status: status }
+          : candidate
+      )
     );
-    setFilteredCandidates(filtered);
+    
+    setFilteredCandidates(prevCandidates => 
+      prevCandidates.map(candidate => 
+        candidate.candidate_id === candidateId 
+          ? { ...candidate, status: status }
+          : candidate
+      )
+    );
+    
+    // If pipeline data is provided (next round created), store the pipeline ID
+    if (pipelineData && pipelineData.pipeline_id) {
+      setNextRoundPipelineId(pipelineData.pipeline_id);
+    }
   };
 
   // Check if there are unsaved job creation changes
@@ -1078,25 +1282,92 @@ export function RecruitmentDashboard() {
 
   // Actually perform the navigation
   const proceedWithNavigation = (role: string) => {
+    console.log('🔄 Navigating to role:', role);
+    
+    // Clear all existing data first
+    setCandidates([]);
+    setFilteredCandidates([]);
+    setCurrentJobPipelineStages([]);
+    setCurrentJobId(null);
+    setCurrentOrderId(null);
+    setError(null);
+    setLoading(true);
+    
     setJobRole(role);
     setSearchQuery("");
     setShowJobCreation(false); // Close job creation if open
+    setSelectedRound("Resume Screening"); // Reset to first round
+    setUnlockedRounds(new Set(["Resume Screening"])); // Reset to only first round unlocked
+    setNextRoundPipelineId(null); // Clear any stored pipeline ID
+    
     if (role === "All candidates") {
-      fetchAllCandidates();
+      setCurrentJobPipelineStages([]); // Clear pipeline stages for "All candidates"
+      setCurrentJobId(null); // Clear current job ID
+      setCurrentOrderId(null); // Clear current order ID
+      setCandidates([]); // Clear candidates
+      setFilteredCandidates([]); // Clear filtered candidates
     } else {
-
       // Try to get job ID from the mapping
       const jobId = jobRoleToIdMap.get(role);
       if (jobId) {
-        // Use the new candidate API
-        fetchCandidatesByJob(jobId);
+        // Store the job ID for future API calls
+        setCurrentJobId(jobId);
+        setCurrentOrderId(null); // Clear order ID when switching jobs
+        // Fetch fresh pipeline stages for this job (this will auto-unlock rounds and load data)
+        fetchPipelineStagesForJob(jobId);
       } else {
-        // Fallback to legacy API
-        fetchCandidates(role);
+        // If no job ID mapping exists, show an error
+        console.error('No job ID mapping found for role:', role);
+        setError(`No active job found for "${role}". Please create a new job posting.`);
+        setCandidates([]);
+        setFilteredCandidates([]);
+        setCurrentJobPipelineStages([]); // Clear pipeline stages
+        setCurrentJobId(null); // Clear current job ID
+        setCurrentOrderId(null); // Clear current order ID
+        setLoading(false);
       }
-
     }
-  }
+  };
+
+  // Function to set the initial round when pipeline stages are loaded
+  // Function to auto-unlock rounds based on is_active status
+  const autoUnlockRoundsBasedOnStatus = (pipelineStages: PipelineStage[]) => {
+    const newUnlockedRounds = new Set<string>();
+    // Add all rounds that have is_active: true
+    pipelineStages.forEach(stage => {
+      if (stage.is_active) {
+        newUnlockedRounds.add(stage.stage_type);
+      }
+    });
+    // Always ensure Resume Screening is unlocked (fallback)
+    if (pipelineStages.length > 0) {
+      newUnlockedRounds.add("Resume Screening");
+    }
+    setUnlockedRounds(newUnlockedRounds);
+    return newUnlockedRounds;
+  };
+
+  const setInitialRound = async (pipelineStages: PipelineStage[]) => {
+    if (pipelineStages.length > 0) {
+      // Auto-unlock rounds based on is_active status
+      const unlockedRounds = autoUnlockRoundsBasedOnStatus(pipelineStages);
+      // Find the last unlocked round (highest order_index among active stages)
+      const activeStages = pipelineStages.filter(stage => stage.is_active);
+      const lastUnlockedStage = activeStages.length > 0 
+        ? activeStages.reduce((latest, current) => 
+            current.order_index > latest.order_index ? current : latest
+          )
+        : pipelineStages.find(stage => stage.stage_type === "Resume Screening");
+      if (lastUnlockedStage && lastUnlockedStage.id) {
+        setSelectedRound(lastUnlockedStage.stage_type);
+        setCurrentOrderId(lastUnlockedStage.id);
+        // Load candidates for the initial round using pipeline API
+        if (lastUnlockedStage.id) {
+          await fetchCandidatesFromPipeline(lastUnlockedStage.id);
+        }
+      }
+    }
+  };
 
   // Handle confirmed navigation
   const handleConfirmNavigation = () => {
@@ -1449,6 +1720,34 @@ export function RecruitmentDashboard() {
     setPipelineStages(updated);
   };
 
+  const updateRoundName = (index: number, newName: string) => {
+    // Handle duplicate names by adding suffix
+    let finalRoundName = newName;
+    let suffix = 1;
+    
+    while (pipelineStages.some((stage, i) => i !== index && stage.stage_type === finalRoundName)) {
+      finalRoundName = `${newName}-${suffix}`;
+      suffix++;
+    }
+
+    const updated = [...pipelineStages];
+    // Preserve the original round_id when updating the stage_type
+    const originalStage = updated[index];
+    updated[index] = { 
+      ...originalStage, 
+      stage_type: finalRoundName 
+      // round_id is preserved from the original stage
+    };
+    setPipelineStages(updated);
+    
+    console.log('Updated round name:', { 
+      index, 
+      oldName: pipelineStages[index].stage_type, 
+      newName: finalRoundName,
+      preservedRoundId: originalStage.round_id 
+    });
+  };
+
   const addPipelineStage = () => {
     // This function will now be handled in the UI component to show a dropdown
     // The actual addition will happen when user selects from dropdown
@@ -1467,7 +1766,7 @@ export function RecruitmentDashboard() {
     const newStage: PipelineStage = {
       stage_type: finalRoundName,
       order_index: pipelineStages.length + 2, // +2 because Resume Screening is always order_index 1
-      is_active: true,
+      is_active: false, // New stages are inactive initially
       evaluation_criteria: '',
       round_id: getRoundIdByName(roundName), // Use the mapping function
       job_id: createdJobId || undefined
@@ -1484,7 +1783,7 @@ export function RecruitmentDashboard() {
     const defaultStages: PipelineStage[] = defaultRounds.map((round, index) => ({
       stage_type: round.name,
       order_index: index + 2, // +2 because Resume Screening is always order_index 1
-      is_active: true,
+      is_active: false, // Default stages are inactive initially
       round_id: getRoundIdByName(round.name), // Use the mapping function
       job_id: createdJobId || undefined,
       evaluation_criteria: ''
@@ -1658,6 +1957,145 @@ export function RecruitmentDashboard() {
     // }
   };
 
+  // Function to fetch candidates from pipeline API
+  const fetchCandidatesFromPipeline = async (pipelineId: string) => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      console.log(`🔍 Fetching candidates from pipeline: ${pipelineId}`);
+      
+      const response = await fetch(`${CANDIDATE_STATUS_API_BASE_URL}/candidates/pipeline/${pipelineId}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      console.log('📡 Pipeline API response:', {
+        status: response.status,
+        ok: response.ok,
+        statusText: response.statusText
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Pipeline API Error Response:', errorText);
+        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+      }
+
+      const data = await response.json();
+      console.log('✅ Pipeline API Response data:', data);
+      
+      if (data.candidates && Array.isArray(data.candidates)) {
+        // Transform the pipeline API response to match our Candidate interface
+        const transformedCandidates: Candidate[] = data.candidates.map((candidate: any) => {
+          // Extract status from current_status
+          const candidateStatus = candidate.current_status?.status || candidate.candidate_status || candidate.status || 'action_pending';
+          
+          // Extract evaluation result - prioritize Resume Screening evaluation for score display
+          let evaluationResult = null;
+          
+          if (candidate.evaluation_results?.by_pipeline) {
+            // First, try to find Resume Screening evaluation (most relevant for overall score)
+            const resumeScreeningPipeline = Object.values(candidate.evaluation_results.by_pipeline).find(
+              (pipeline: any) => pipeline.stage_type === "Resume Screening"
+            ) as any;
+            
+            if (resumeScreeningPipeline?.evaluation_result) {
+              evaluationResult = resumeScreeningPipeline.evaluation_result;
+            } else {
+              // If no Resume Screening evaluation, try current pipeline
+              evaluationResult = candidate.evaluation_results.by_pipeline[pipelineId]?.evaluation_result;
+              
+              // If still no evaluation, get the first available one
+              if (!evaluationResult) {
+                const firstPipelineKey = Object.keys(candidate.evaluation_results.by_pipeline)[0];
+                if (firstPipelineKey) {
+                  evaluationResult = candidate.evaluation_results.by_pipeline[firstPipelineKey]?.evaluation_result;
+                }
+              }
+            }
+          }
+          
+          // Extract resume summary
+          const resumeSummary = candidate.resume_info?.data?.summary;
+
+          return {
+            overall_data: {
+              name: (() => {
+                // Try to construct name from first_name and last_name
+                if (candidate.candidate_info?.first_name) {
+                  const firstName = candidate.candidate_info.first_name.trim();
+                  const lastName = candidate.candidate_info.last_name?.trim() || '';
+                  const middleName = candidate.candidate_info.middle_name?.trim() || '';
+                  
+                  // Build name parts
+                  const nameParts = [firstName];
+                  if (middleName) nameParts.push(middleName);
+                  if (lastName) nameParts.push(lastName);
+                  
+                  return formatName(nameParts.join(' '));
+                }
+                
+                // Fallback to name field if available
+                if (candidate.candidate_info?.name) {
+                  return formatName(candidate.candidate_info.name.trim());
+                }
+                
+                // Last resort fallback
+                return 'Unknown';
+              })(),
+              email: candidate.candidate_info?.email || '',
+              phone: candidate.candidate_info?.mobile_phone || candidate.candidate_info?.phone || '',
+              resume_url: candidate.candidate_info?.resume_url || '',
+              score: evaluationResult?.score || 0,
+              recommendation_category: evaluationResult?.recommendation_category || 'Not Available'
+            },
+            individual_data: {
+              professional_overview: resumeSummary?.professional_overview || '',
+              key_qualifications: resumeSummary?.key_qualifications || '',
+              career_progression: resumeSummary?.career_progression || '',
+              justification: evaluationResult?.justification || '',
+              // Add evaluation summary for display in candidate details
+              evaluation_summary: evaluationResult?.evaluation_summary || ''
+            },
+            candidate_id: candidate.candidate_id,
+            status: candidateStatus,
+            // Add additional evaluation data for the candidate details page
+            evaluation_data: {
+              available: candidate.evaluation_results?.available || false,
+              total_evaluations: candidate.evaluation_results?.total_evaluations || 0,
+              by_pipeline: candidate.evaluation_results?.by_pipeline || {},
+              current_status: candidate.current_status || {}
+            }
+          };
+        });
+        
+        console.log(`📋 Loaded ${transformedCandidates.length} candidates from pipeline`);
+        setCandidates(transformedCandidates);
+        // Apply current filters to the new candidates
+        applyFilters(transformedCandidates, searchQuery, statusFilter);
+      } else {
+        console.log('📭 No candidates found in pipeline');
+        setCandidates([]);
+        setFilteredCandidates([]);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching candidates from pipeline:', error);
+      setError('Failed to fetch candidates from pipeline');
+      setCandidates([]);
+      setFilteredCandidates([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // State to store the next round pipeline ID
+  const [nextRoundPipelineId, setNextRoundPipelineId] = useState<string | null>(null);
+  
+
+
   return (
     <div className="flex min-h-screen bg-gray-50">
       {/* Sidebar Component */}
@@ -1706,20 +2144,55 @@ export function RecruitmentDashboard() {
             initializeDefaultRounds={initializeDefaultRounds}
             getEvaluationCriteria={getEvaluationCriteria}
             saveEvaluationCriteria={saveEvaluationCriteria}
+            updateRoundName={updateRoundName}
           />
         ) : (
-          /* Candidate View Component - Shows when job creation is not active */
-          <CandidateView
-            jobRole={jobRole}
-            candidates={candidates}
-            filteredCandidates={filteredCandidates}
-            loading={loading}
-            error={error}
-            showMoreApplicants={showMoreApplicants}
-            onCandidateClick={setSelectedCandidate}
-            onShowMoreClick={() => setShowMoreApplicants(!showMoreApplicants)}
-            getRecommendationDisplay={getRecommendationDisplay}
-          />
+          /* Conditional Dashboard Rendering based on selected round */
+          selectedRound === "Resume Screening" ? (
+            <ResumeScreeningDashboard
+              jobRole={jobRole}
+              candidates={candidates}
+              filteredCandidates={filteredCandidates}
+              loading={loading}
+              error={error}
+              showMoreApplicants={showMoreApplicants}
+              onCandidateClick={setSelectedCandidate}
+              onShowMoreClick={() => setShowMoreApplicants(!showMoreApplicants)}
+              getRecommendationDisplay={getRecommendationDisplay}
+              pipelineStages={currentJobPipelineStages}
+              selectedRound={selectedRound}
+              onRoundChange={handleRoundChange}
+              loadingRounds={loadingRounds}
+              unlockedRounds={unlockedRounds}
+              onUnlockNextRound={unlockNextRound}
+              loadingNextRound={loadingNextRound}
+              nextRoundName={getNextRoundName()}
+              statusFilter={statusFilter}
+              onStatusFilterChange={handleStatusFilter}
+            />
+          ) : (
+            <OtherRoundsDashboard
+              jobRole={jobRole}
+              candidates={candidates}
+              filteredCandidates={filteredCandidates}
+              loading={loading}
+              error={error}
+              showMoreApplicants={showMoreApplicants}
+              onCandidateClick={setSelectedCandidate}
+              onShowMoreClick={() => setShowMoreApplicants(!showMoreApplicants)}
+              getRecommendationDisplay={getRecommendationDisplay}
+              pipelineStages={currentJobPipelineStages}
+              selectedRound={selectedRound}
+              onRoundChange={handleRoundChange}
+              loadingRounds={loadingRounds}
+              unlockedRounds={unlockedRounds}
+              onUnlockNextRound={unlockNextRound}
+              loadingNextRound={loadingNextRound}
+              nextRoundName={getNextRoundName()}
+              statusFilter={statusFilter}
+              onStatusFilterChange={handleStatusFilter}
+            />
+          )
         )}
       </div>
 
@@ -1731,6 +2204,10 @@ export function RecruitmentDashboard() {
         onClose={() => setSelectedCandidate(null)}
         onTabChange={setCandidateDetailTab}
         getRecommendationDisplay={getRecommendationDisplay}
+        jobPipelineId={currentOrderId || undefined}
+        onStatusUpdate={handleCandidateStatusUpdate}
+        pipelineStages={currentJobPipelineStages}
+        currentRound={selectedRound}
       />
 
       {/* Navigation Confirmation Dialog */}
