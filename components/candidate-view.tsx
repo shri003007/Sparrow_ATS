@@ -1,4 +1,4 @@
-import React from "react"
+import React, { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -16,10 +16,12 @@ import {
   ChevronDown,
   Loader2,
   Lock,
-  CheckCircle
+  CheckCircle,
+  Settings
 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { formatName } from "@/lib/utils"
+import { EvaluationCriteriaEditor } from "@/components/evaluation-criteria-editor"
 
 // Types
 interface OverallData {
@@ -81,6 +83,10 @@ interface CandidateViewProps {
   onUnlockNextRound?: () => void
   loadingNextRound?: boolean
   nextRoundName?: string | null
+  // Evaluation criteria props
+  currentPipelineId?: string
+  onSaveEvaluationCriteria?: (pipelineId: string, criteria: string) => Promise<any>
+  onFetchEvaluationCriteria?: (pipelineId: string) => Promise<any>
 }
 
 export function CandidateView({
@@ -100,8 +106,23 @@ export function CandidateView({
   unlockedRounds = new Set(),
   onUnlockNextRound,
   loadingNextRound = false,
-  nextRoundName
+  nextRoundName,
+  currentPipelineId,
+  onSaveEvaluationCriteria,
+  onFetchEvaluationCriteria
 }: CandidateViewProps) {
+  // State for evaluation criteria editor
+  const [showEvaluationCriteriaEditor, setShowEvaluationCriteriaEditor] = useState(false)
+
+  // Check if evaluation criteria editing should be available
+  const shouldShowEvaluationCriteriaButton = selectedRound && 
+    selectedRound !== "Resume Screening" && 
+    selectedRound !== "Offer Rollout & Negotiation" &&
+    currentPipelineId
+
+  const handleEditEvaluationCriteria = () => {
+    setShowEvaluationCriteriaEditor(true)
+  }
   return (
     <div className="flex-1 bg-gray-50 p-6">
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
@@ -192,27 +213,42 @@ export function CandidateView({
                   </DropdownMenu>
                 </div>
                 
-                {/* Unlock Next Round Button */}
-                {nextRoundName && (
-                  <Button
-                    onClick={onUnlockNextRound}
-                    disabled={loadingNextRound}
-                    className="bg-green-600 hover:bg-green-700 text-white rounded-xl"
-                    size="sm"
-                  >
-                    {loadingNextRound ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Unlocking...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle className="w-4 h-4 mr-2" />
-                        Confirm for next round
-                      </>
-                    )}
-                  </Button>
-                )}
+                <div className="flex items-center gap-2">
+                  {/* Evaluation Criteria Edit Button */}
+                  {shouldShowEvaluationCriteriaButton && (
+                    <Button
+                      onClick={handleEditEvaluationCriteria}
+                      variant="outline"
+                      size="sm"
+                      className="rounded-xl"
+                    >
+                      <Settings className="w-4 h-4 mr-2" />
+                      Edit Criteria
+                    </Button>
+                  )}
+                  
+                  {/* Unlock Next Round Button */}
+                  {nextRoundName && (
+                    <Button
+                      onClick={onUnlockNextRound}
+                      disabled={loadingNextRound}
+                      className="bg-green-600 hover:bg-green-700 text-white rounded-xl"
+                      size="sm"
+                    >
+                      {loadingNextRound ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Unlocking...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          Confirm for next round
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
               </div>
               
               {/* Round Progress Indicator */}
@@ -273,7 +309,8 @@ export function CandidateView({
                 <p className="text-gray-600">{error}</p>
               </div>
             </div>
-          ) : !filteredCandidates || filteredCandidates.length === 0 ? (
+          ) : !filteredCandidates || filteredCandidates.length === 0 || 
+               filteredCandidates.filter(c => c && c.overall_data && c.overall_data.name !== 'Unknown').length === 0 ? (
 
             <div className="flex items-center justify-center py-12">
               <div className="text-center">
@@ -310,7 +347,9 @@ export function CandidateView({
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {(showMoreApplicants ? filteredCandidates : filteredCandidates?.slice(0, 8) || []).map((candidate, index) => {
+                  {(showMoreApplicants ? filteredCandidates : filteredCandidates?.slice(0, 8) || [])
+                    .filter(candidate => candidate && candidate.overall_data && candidate.overall_data.name !== 'Unknown')
+                    .map((candidate, index) => {
 
                     const recommendation = getRecommendationDisplay(candidate);
                     return (
@@ -398,6 +437,18 @@ export function CandidateView({
           )}
         </div>
       </div>
+      
+      {/* Evaluation Criteria Editor Dialog */}
+      {shouldShowEvaluationCriteriaButton && onSaveEvaluationCriteria && onFetchEvaluationCriteria && (
+        <EvaluationCriteriaEditor
+          isOpen={showEvaluationCriteriaEditor}
+          onClose={() => setShowEvaluationCriteriaEditor(false)}
+          pipelineId={currentPipelineId}
+          roundName={selectedRound || ""}
+          onSave={onSaveEvaluationCriteria}
+          onFetch={onFetchEvaluationCriteria}
+        />
+      )}
     </div>
   )
 } 

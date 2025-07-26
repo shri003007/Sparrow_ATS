@@ -199,12 +199,18 @@ export function JobCreationFlow({
 
   // Round selection state
   const [showRoundSelector, setShowRoundSelector] = useState(false)
+  const [selectedRounds, setSelectedRounds] = useState<Map<string, number>>(new Map())
 
   // Discard state
   const [showDiscardConfirmation, setShowDiscardConfirmation] = useState(false)
 
   // Job Description Generator API URL
   const JD_API_URL = process.env.NEXT_PUBLIC_JD_GENERATOR_API_URL!
+
+  // Helper function to calculate total selected rounds
+  const getTotalSelectedCount = () => {
+    return Array.from(selectedRounds.values()).reduce((sum, count) => sum + count, 0);
+  };
 
   // Check if there are unsaved changes
   const hasUnsavedChanges = () => {
@@ -759,41 +765,143 @@ export function JobCreationFlow({
                   disabled={loadingPredefinedRounds}
                 >
                   <Plus className="w-4 h-4 mr-2" />
-                  {loadingPredefinedRounds ? 'Loading Rounds...' : 'Add Round'}
+                  {loadingPredefinedRounds ? 'Loading Rounds...' : 'Add Rounds'}
                 </Button>
 
-                {/* Round Selection Dropdown */}
+                {/* Round Selection Dropdown with Multiselect */}
                 {showRoundSelector && (
                   <div className="mb-4 p-4 border border-gray-200 rounded-xl bg-gradient-to-r from-gray-50 to-blue-50 shadow-lg">
                     <div className="flex items-center justify-between mb-4">
-                      <h4 className="text-sm font-semibold text-gray-900">Select a round to add:</h4>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setShowRoundSelector(false)}
-                        className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full"
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
+                      <h4 className="text-sm font-semibold text-gray-900">Select rounds to add:</h4>
+                      <div className="flex items-center gap-2">
+                        {selectedRounds.size > 0 && (
+                          <Button
+                            type="button"
+                            variant="default"
+                            size="sm"
+                            onClick={() => {
+                              console.log('Adding rounds:', Array.from(selectedRounds.entries()));
+                              
+                              // Add rounds using the existing function
+                              selectedRounds.forEach((count, roundName) => {
+                                console.log(`Adding ${count} instances of ${roundName}`);
+                                for (let i = 0; i < count; i++) {
+                                  console.log(`Adding instance ${i + 1} of ${roundName}`);
+                                  addSpecificPipelineStage(roundName);
+                                }
+                              });
+                              
+                              setSelectedRounds(new Map());
+                              setShowRoundSelector(false);
+                            }}
+                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                          >
+                            Add {getTotalSelectedCount()} Round{getTotalSelectedCount() > 1 ? 's' : ''}
+                          </Button>
+                        )}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setShowRoundSelector(false);
+                            setSelectedRounds(new Map());
+                          }}
+                          className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
+                    
+                    
                     <div className="grid grid-cols-1 gap-3">
                       {predefinedRounds
                         .filter(round => !round.is_default)
-                        .map((round) => (
-                          <Button
-                            key={`${round.id}-${Date.now()}`}
-                            type="button"
-                            variant="outline"
+                        .map((round) => {
+                          const count = selectedRounds.get(round.name) || 0;
+                          return (
+                            <div key={`${round.id}-${Date.now()}`} className={`flex items-center justify-between p-4 border rounded-lg transition-all duration-200 cursor-pointer ${
+                              count > 0 
+                                ? 'border-blue-300 bg-blue-50 shadow-sm' 
+                                : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'
+                            }`}
                             onClick={() => {
-                              addSpecificPipelineStage(round.name);
-                              setShowRoundSelector(false);
-                            }}
-                            className="justify-start text-left h-auto p-4 hover:bg-blue-50 hover:border-blue-300 transition-all duration-200"
-                          >
-                            <div className="font-medium text-gray-900 text-base">{round.name}</div>
-                          </Button>
-                        ))}
+                              // Add one more instance when clicking on the round item
+                              setSelectedRounds(prev => {
+                                const newMap = new Map(prev);
+                                newMap.set(round.name, (newMap.get(round.name) || 0) + 1);
+                                return newMap;
+                              });
+                            }}>
+                              <div className="flex items-center gap-3">
+                                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                                  count > 0 
+                                    ? 'bg-blue-600 border-blue-600' 
+                                    : 'border-gray-300'
+                                }`}>
+                                  {count > 0 && (
+                                    <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                    </svg>
+                                  )}
+                                </div>
+                                <div>
+                                  <div className="font-medium text-gray-900">{round.name}</div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-2 bg-white rounded-lg border border-gray-200 px-2 py-1" onClick={(e) => e.stopPropagation()}>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      setSelectedRounds(prev => {
+                                        const newMap = new Map(prev);
+                                        const newCount = Math.max(0, (newMap.get(round.name) || 0) - 1);
+                                        if (newCount === 0) {
+                                          newMap.delete(round.name);
+                                        } else {
+                                          newMap.set(round.name, newCount);
+                                        }
+                                        return newMap;
+                                      });
+                                    }}
+                                    disabled={count === 0}
+                                    className="w-6 h-6 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                                    </svg>
+                                  </Button>
+                                  <span className={`text-sm font-medium min-w-[20px] text-center ${
+                                    count > 0 ? 'text-blue-600' : 'text-gray-400'
+                                  }`}>
+                                    {count}
+                                  </span>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      setSelectedRounds(prev => {
+                                        const newMap = new Map(prev);
+                                        newMap.set(round.name, (newMap.get(round.name) || 0) + 1);
+                                        return newMap;
+                                      });
+                                    }}
+                                    className="w-6 h-6 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                    </svg>
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
                     </div>
                   </div>
                 )}

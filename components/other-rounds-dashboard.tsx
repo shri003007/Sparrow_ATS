@@ -16,10 +16,12 @@ import {
   Loader2,
   Lock,
   CheckCircle,
-  Calendar
+  Calendar,
+  Settings
 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { formatName } from "@/lib/utils"
+import { EvaluationCriteriaEditor } from "@/components/evaluation-criteria-editor"
 
 // Types
 interface OverallData {
@@ -86,6 +88,10 @@ interface OtherRoundsDashboardProps {
   // Filtering props
   statusFilter?: string
   onStatusFilterChange?: (status: string) => void
+  // Evaluation criteria props
+  currentPipelineId?: string
+  onSaveEvaluationCriteria?: (pipelineId: string, criteria: string) => Promise<any>
+  onFetchEvaluationCriteria?: (pipelineId: string) => Promise<any>
 }
 
 export function OtherRoundsDashboard({
@@ -107,10 +113,20 @@ export function OtherRoundsDashboard({
   loadingNextRound = false,
   nextRoundName,
   statusFilter = 'all',
-  onStatusFilterChange
+  onStatusFilterChange,
+  currentPipelineId,
+  onSaveEvaluationCriteria,
+  onFetchEvaluationCriteria
 }: OtherRoundsDashboardProps) {
+  // State for evaluation criteria editor
+  const [showEvaluationCriteriaEditor, setShowEvaluationCriteriaEditor] = useState(false)
+
   // Simple logging for component data
   console.log(`📋 OtherRoundsDashboard: ${filteredCandidates?.length || 0} candidates for ${selectedRound}`);
+
+  const handleEditEvaluationCriteria = () => {
+    setShowEvaluationCriteriaEditor(true)
+  }
 
 
 
@@ -208,27 +224,45 @@ export function OtherRoundsDashboard({
                   </DropdownMenu>
                 </div>
                 
-                {/* Unlock Next Round Button */}
-                {nextRoundName && (
-                  <Button
-                    onClick={onUnlockNextRound}
-                    disabled={loadingNextRound}
-                    className="bg-green-600 hover:bg-green-700 text-white rounded-xl"
-                    size="sm"
-                  >
-                    {loadingNextRound ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Unlocking...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle className="w-4 h-4 mr-2" />
-                        Confirm for next round
-                      </>
-                    )}
-                  </Button>
-                )}
+                <div className="flex items-center gap-2">
+                  {/* Evaluation Criteria Edit Button */}
+                  {selectedRound && 
+                   selectedRound !== "Resume Screening" && 
+                   selectedRound !== "Offer Rollout & Negotiation" &&
+                   currentPipelineId && (
+                                         <Button
+                       onClick={handleEditEvaluationCriteria}
+                       variant="outline"
+                       size="sm"
+                       className="rounded-xl"
+                     >
+                      <Settings className="w-4 h-4 mr-2" />
+                      Edit Criteria
+                    </Button>
+                  )}
+                  
+                  {/* Unlock Next Round Button */}
+                  {nextRoundName && (
+                    <Button
+                      onClick={onUnlockNextRound}
+                      disabled={loadingNextRound}
+                      className="bg-green-600 hover:bg-green-700 text-white rounded-xl"
+                      size="sm"
+                    >
+                      {loadingNextRound ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Unlocking...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          Confirm for next round
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
               </div>
               
               {/* Round Progress Indicator */}
@@ -450,6 +484,23 @@ export function OtherRoundsDashboard({
           )}
         </div>
       </div>
+      
+      {/* Evaluation Criteria Editor Dialog */}
+      {selectedRound && 
+       selectedRound !== "Resume Screening" && 
+       selectedRound !== "Offer Rollout & Negotiation" &&
+       currentPipelineId && 
+       onSaveEvaluationCriteria && 
+       onFetchEvaluationCriteria && (
+        <EvaluationCriteriaEditor
+          isOpen={showEvaluationCriteriaEditor}
+          onClose={() => setShowEvaluationCriteriaEditor(false)}
+          pipelineId={currentPipelineId}
+          roundName={selectedRound}
+          onSave={onSaveEvaluationCriteria}
+          onFetch={onFetchEvaluationCriteria}
+        />
+      )}
 
 
     </div>

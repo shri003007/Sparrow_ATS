@@ -20,6 +20,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { formatName } from "@/lib/utils"
+import { EvaluationRenderer } from "./evaluation-parser"
 
 // Types
 interface OverallData {
@@ -44,6 +45,16 @@ interface Candidate {
   individual_data: IndividualData;
   candidate_id?: string; // Add candidate ID for API calls
   status?: string; // Add status field
+  current_status?: {
+    id: string;
+    status: string;
+    created_at: string;
+    updated_at: string;
+    order_index: number;
+    candidate_id: string;
+    is_evaluation: boolean;
+    job_pipeline_id: string;
+  };
   evaluation_data?: {
     available: boolean;
     total_evaluations: number;
@@ -299,6 +310,11 @@ export function CandidateDetails({
     return tabLabel !== currentRound;
   };
 
+  // Simple check: if is_evaluation is true, hide upload interface
+  const isRoundLocked = () => {
+    return selectedCandidate?.current_status?.is_evaluation === true;
+  };
+
   // Handle edit mode toggle for previous rounds
   const handleEditToggle = (roundName: string) => {
     if (isPreviousRound(roundName)) {
@@ -491,6 +507,8 @@ export function CandidateDetails({
       setIsUpdatingStatus(false);
     }
   };
+
+
 
   return (
     <>
@@ -692,41 +710,9 @@ export function CandidateDetails({
               {isCurrentRound(tab.label) && (
                 <div className="space-y-6">
                   <div className="bg-white rounded-xl border border-gray-200 p-6">
-                    <div className="flex items-center justify-between mb-6">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                          <File className="w-5 h-5 text-blue-600" />
-                        </div>
-                        <div>
-                          <h3 className="text-lg font-semibold text-gray-900">
-                            {tab.label} Evaluation
-                          </h3>
-                          <p className="text-sm text-gray-500">
-                            {isPreviousRound(tab.label) ? 'View and edit evaluation' : 'Enter text or upload files for evaluation'}
-                          </p>
-                        </div>
-                      </div>
-                      
-                      {/* Edit Toggle Button for Previous Rounds */}
-                      {isPreviousRound(tab.label) && (
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant={editMode[tab.label] ? "outline" : "default"}
-                            size="sm"
-                            onClick={() => handleEditToggle(tab.label)}
-                            className="flex items-center gap-2"
-                          >
-                            <Edit3 className="w-4 h-4" />
-                            {editMode[tab.label] ? 'View Mode' : 'Edit Mode'}
-                          </Button>
-                          
-
-                        </div>
-                      )}
-                    </div>
                     
-                    {/* Input Options - Show only in edit mode for previous rounds */}
-                    {(!isPreviousRound(tab.label) || editMode[tab.label]) && (
+                    {/* Input Options - Show only if not locked and no evaluation results */}
+                    {!isRoundLocked() && !hasEvaluationResults(tab.label) && (
                       <div className="space-y-6">
                         {/* Enter Text Option */}
                         <div>
@@ -768,28 +754,7 @@ export function CandidateDetails({
                       </div>
                     )}
                     
-                    {/* Show read-only message for previous rounds in view mode */}
-                    {isPreviousRound(tab.label) && !editMode[tab.label] && (
-                      <div className="text-center py-8">
-                        <div className="text-gray-400 mb-4">
-                          <File className="w-12 h-12 mx-auto" />
-                        </div>
-                        <h3 className="text-lg font-medium text-gray-900 mb-2">
-                          {tab.label} Evaluation
-                        </h3>
-                        <p className="text-gray-500 mb-4">
-                          This round has been completed. Click "Edit Mode" to make changes.
-                        </p>
-                        <Button
-                          variant="outline"
-                          onClick={() => handleEditToggle(tab.label)}
-                          className="flex items-center gap-2 mx-auto"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                          Enable Edit Mode
-                        </Button>
-                      </div>
-                    )}
+
 
                     {/* Content Preview */}
                     {(uploadedFiles[tab.label]?.length > 0 || (textInputs[tab.label] && textInputs[tab.label].trim())) && (
@@ -843,8 +808,9 @@ export function CandidateDetails({
                       </div>
                     )}
 
-                    {/* Action Buttons */}
-                    <div className="flex justify-end gap-3 mt-6 pt-6 border-t border-gray-200">
+                    {/* Action Buttons - Hide for locked rounds or rounds with evaluation results */}
+                    {!isRoundLocked() && !hasEvaluationResults(tab.label) && (
+                      <div className="flex justify-end gap-3 mt-6 pt-6 border-t border-gray-200">
                       <Button
                         onClick={() => {
                           const hasFiles = uploadedFiles[tab.label] && uploadedFiles[tab.label].length > 0;
@@ -874,6 +840,7 @@ export function CandidateDetails({
                         )}
                       </Button>
                     </div>
+                    )}
 
                     {/* Evaluation Results */}
                     {evaluationResults[tab.label] && (
@@ -911,254 +878,10 @@ export function CandidateDetails({
                             </div>
                           </div>
                           <div className="p-6">
-                            {(() => {
-                              const content = evaluationResults[tab.label].evaluation_summary;
-                              
-                              // Clean the content by replacing <br> tags with newlines and remove HTML entities
-                              const cleanContent = content
-                                .replace(/<br\s*\/?>/gi, '\n')
-                                .replace(/&lt;/g, '<')
-                                .replace(/&gt;/g, '>')
-                                .replace(/&amp;/g, '&');
-                              
-                              // Extract overall score if present (looking for patterns like "3.8/5" or similar)
-                              const scoreMatch = cleanContent.match(/(\d+\.?\d*)\s*\/\s*5/);
-                              const overallScore = scoreMatch ? scoreMatch[1] : null;
-                              
-                              // Extract hiring recommendation or overall assessment
-                              const hiringMatch = cleanContent.match(/## Hiring Recommendation\s*\n\n([\s\S]*?)(?=\n##|$)/);
-                              const overallMatch = cleanContent.match(/## Overall Interview Performance\s*\n\n([\s\S]*?)(?=\n##|$)/);
-                              const assessmentText = hiringMatch ? hiringMatch[1] : (overallMatch ? overallMatch[1] : '');
-                              
-                              // Extract key strengths
-                              const strengthsMatch = cleanContent.match(/## Key Strengths\s*\n\n([\s\S]*?)(?=\n##|$)/);
-                              const strengths = strengthsMatch ? strengthsMatch[1] : '';
-                              
-                              // Extract areas of concern
-                              const concernsMatch = cleanContent.match(/## Areas of Concern\s*\n\n([\s\S]*?)(?=\n##|$)/);
-                              const concerns = concernsMatch ? concernsMatch[1] : '';
-                              
-                              // Extract technical assessment
-                              const technicalMatch = cleanContent.match(/## Technical Assessment\s*\n\n([\s\S]*?)(?=\n##|$)/);
-                              const technicalAssessment = technicalMatch ? technicalMatch[1] : '';
-                              
-                              // Extract communication skills
-                              const communicationMatch = cleanContent.match(/## Communication & Soft Skills\s*\n\n([\s\S]*?)(?=\n##|$)/);
-                              const communicationSkills = communicationMatch ? communicationMatch[1] : '';
-                              
-                              // Extract cultural fit
-                              const culturalMatch = cleanContent.match(/## Cultural Fit & Team Dynamics\s*\n\n([\s\S]*?)(?=\n##|$)/);
-                              const culturalFit = culturalMatch ? culturalMatch[1] : '';
-                              
-                              // Extract experience background
-                              const experienceMatch = cleanContent.match(/## Experience & Background Relevance\s*\n\n([\s\S]*?)(?=\n##|$)/);
-                              const experienceBackground = experienceMatch ? experienceMatch[1] : '';
-                              
-                                                              return (
-                                  <div className="space-y-6">
-                                    {/* Overall Score Section */}
-                                    {overallScore && (
-                                      <div className="bg-gray-100 rounded-lg p-6 text-center">
-                                        <div className="text-4xl font-bold text-gray-900 mb-2">
-                                          {overallScore}
-                                          <span className="text-lg font-normal text-gray-500">/5</span>
-                                        </div>
-                                        <div className="text-sm text-gray-700">Overall Score</div>
-                                      </div>
-                                    )}
-                                    
-                                    {/* Overall Interview Performance Section */}
-                                    {assessmentText && (
-                                      <div className="bg-white rounded-lg border border-gray-200 p-6">
-                                        <div className="flex items-center gap-2 mb-4">
-                                          <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
-                                            <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                            </svg>
-                                          </div>
-                                          <h3 className="text-lg font-semibold text-blue-600">Overall Interview Performance</h3>
-                                        </div>
-                                        <div 
-                                          className="text-sm text-gray-700 leading-relaxed"
-                                          dangerouslySetInnerHTML={{
-                                            __html: assessmentText
-                                              .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-gray-900">$1</strong>')
-                                              .replace(/\n/g, '<br>')
-                                          }}
-                                        />
-                                      </div>
-                                    )}
-                                    
-                                    {/* Technical Assessment Section */}
-                                    {technicalAssessment && (
-                                      <div className="bg-white rounded-lg border border-gray-200 p-6">
-                                        <div className="flex items-center gap-2 mb-4">
-                                          <div className="w-6 h-6 bg-purple-100 rounded-full flex items-center justify-center">
-                                            <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-                                            </svg>
-                                          </div>
-                                          <h3 className="text-lg font-semibold text-purple-600">Technical Assessment</h3>
-                                        </div>
-                                        <div 
-                                          className="text-sm text-gray-700 leading-relaxed"
-                                          dangerouslySetInnerHTML={{
-                                            __html: technicalAssessment
-                                              .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-gray-900">$1</strong>')
-                                              .replace(/\n/g, '<br>')
-                                          }}
-                                        />
-                                      </div>
-                                    )}
-                                    
-                                    {/* Communication & Soft Skills Section */}
-                                    {communicationSkills && (
-                                      <div className="bg-white rounded-lg border border-gray-200 p-6">
-                                        <div className="flex items-center gap-2 mb-4">
-                                          <div className="w-6 h-6 bg-indigo-100 rounded-full flex items-center justify-center">
-                                            <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                                            </svg>
-                                          </div>
-                                          <h3 className="text-lg font-semibold text-indigo-600">Communication & Soft Skills</h3>
-                                        </div>
-                                        <div 
-                                          className="text-sm text-gray-700 leading-relaxed"
-                                          dangerouslySetInnerHTML={{
-                                            __html: communicationSkills
-                                              .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-gray-900">$1</strong>')
-                                              .replace(/\n/g, '<br>')
-                                          }}
-                                        />
-                                      </div>
-                                    )}
-                                    
-                                    {/* Cultural Fit & Team Dynamics Section */}
-                                    {culturalFit && (
-                                      <div className="bg-white rounded-lg border border-gray-200 p-6">
-                                        <div className="flex items-center gap-2 mb-4">
-                                          <div className="w-6 h-6 bg-teal-100 rounded-full flex items-center justify-center">
-                                            <svg className="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                                            </svg>
-                                          </div>
-                                          <h3 className="text-lg font-semibold text-teal-600">Cultural Fit & Team Dynamics</h3>
-                                        </div>
-                                        <div 
-                                          className="text-sm text-gray-700 leading-relaxed"
-                                          dangerouslySetInnerHTML={{
-                                            __html: culturalFit
-                                              .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-gray-900">$1</strong>')
-                                              .replace(/\n/g, '<br>')
-                                          }}
-                                        />
-                                      </div>
-                                    )}
-                                    
-                                    {/* Experience & Background Relevance Section */}
-                                    {experienceBackground && (
-                                      <div className="bg-white rounded-lg border border-gray-200 p-6">
-                                        <div className="flex items-center gap-2 mb-4">
-                                          <div className="w-6 h-6 bg-orange-100 rounded-full flex items-center justify-center">
-                                            <svg className="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2-2v2m8 0V6a2 2 0 012 2v6a2 2 0 01-2 2H8a2 2 0 01-2-2V8a2 2 0 012-2V6" />
-                                            </svg>
-                                          </div>
-                                          <h3 className="text-lg font-semibold text-orange-600">Experience & Background Relevance</h3>
-                                        </div>
-                                        <div 
-                                          className="text-sm text-gray-700 leading-relaxed"
-                                          dangerouslySetInnerHTML={{
-                                            __html: experienceBackground
-                                              .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-gray-900">$1</strong>')
-                                              .replace(/\n/g, '<br>')
-                                          }}
-                                        />
-                                      </div>
-                                    )}
-                                    
-                                    {/* Key Strengths Section */}
-                                    {strengths && (
-                                      <div className="bg-white rounded-lg border border-gray-200 p-6">
-                                        <div className="flex items-center gap-2 mb-4">
-                                          <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center">
-                                            <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                            </svg>
-                                          </div>
-                                          <h3 className="text-lg font-semibold text-green-600">Key Strengths</h3>
-                                        </div>
-                                        <div 
-                                          className="text-sm text-gray-700 leading-relaxed"
-                                          dangerouslySetInnerHTML={{
-                                            __html: strengths
-                                              .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-gray-900">$1</strong>')
-                                              .replace(/^- (.*$)/gm, '<div class="flex items-start mb-2"><span class="w-2 h-2 bg-green-400 rounded-full mt-2 mr-3 flex-shrink-0"></span><span>$1</span></div>')
-                                              .replace(/\n/g, '<br>')
-                                          }}
-                                        />
-                                      </div>
-                                    )}
-                                    
-                                    {/* Areas of Concern Section */}
-                                    {concerns && (
-                                      <div className="bg-white rounded-lg border border-gray-200 p-6">
-                                        <div className="flex items-center gap-2 mb-4">
-                                          <div className="w-6 h-6 bg-yellow-100 rounded-full flex items-center justify-center">
-                                            <svg className="w-4 h-4 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                                            </svg>
-                                          </div>
-                                          <h3 className="text-lg font-semibold text-yellow-600">Areas of Concern</h3>
-                                        </div>
-                                        <div 
-                                          className="text-sm text-gray-700 leading-relaxed"
-                                          dangerouslySetInnerHTML={{
-                                            __html: concerns
-                                              .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-gray-900">$1</strong>')
-                                              .replace(/^- (.*$)/gm, '<div class="flex items-start mb-2"><span class="w-2 h-2 bg-yellow-400 rounded-full mt-2 mr-3 flex-shrink-0"></span><span>$1</span></div>')
-                                              .replace(/\n/g, '<br>')
-                                          }}
-                                        />
-                                      </div>
-                                    )}
-                                    
-                                    {/* Hiring Recommendation Section */}
-                                    {hiringMatch && (
-                                      <div className="bg-white rounded-lg border border-gray-200 p-6">
-                                        <div className="flex items-center gap-2 mb-4">
-                                          <div className="w-6 h-6 bg-emerald-100 rounded-full flex items-center justify-center">
-                                            <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                            </svg>
-                                          </div>
-                                          <h3 className="text-lg font-semibold text-emerald-600">Hiring Recommendation</h3>
-                                        </div>
-                                        <div 
-                                          className="text-sm text-gray-700 leading-relaxed"
-                                          dangerouslySetInnerHTML={{
-                                            __html: hiringMatch[1]
-                                              .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-gray-900">$1</strong>')
-                                              .replace(/\n/g, '<br>')
-                                          }}
-                                        />
-                                      </div>
-                                    )}
-                                    
-                                    {/* Full Content (if no structured sections found) */}
-                                    {!assessmentText && !strengths && !concerns && !technicalAssessment && !communicationSkills && !culturalFit && !experienceBackground && !hiringMatch && (
-                                      <div 
-                                        className="text-sm text-gray-700 leading-relaxed"
-                                        dangerouslySetInnerHTML={{
-                                          __html: cleanContent
-                                            .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-gray-900">$1</strong>')
-                                            .replace(/\n/g, '<br>')
-                                        }}
-                                      />
-                                    )}
-                                  </div>
-                                );
-                            })()}
+                            <EvaluationRenderer 
+                              content={evaluationResults[tab.label].evaluation_summary}
+                              showMetrics={true}
+                            />
                           </div>
                         </div>
 
@@ -1223,17 +946,10 @@ export function CandidateDetails({
                           </div>
                           
                           {/* Evaluation Summary */}
-                          <div className="bg-gray-50 rounded-lg p-6 border">
-                            <div 
-                              className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap"
-                              dangerouslySetInnerHTML={{
-                                __html: summary
-                                  .replace(/\n/g, '<br>') // Simple line breaks
-                                  .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') // Simple bold
-                                  .replace(/\*(.+?)\*/g, '<em>$1</em>') // Simple italic
-                              }}
-                            />
-                          </div>
+                          <EvaluationRenderer 
+                            content={summary}
+                            showMetrics={true}
+                          />
                         </div>
                       </div>
                     );
