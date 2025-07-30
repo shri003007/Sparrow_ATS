@@ -21,7 +21,8 @@ import {
 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { formatName } from "@/lib/utils"
-import { EvaluationCriteriaEditor } from "@/components/evaluation-criteria-editor"
+import { PipelineCriteriaModal } from "@/components/pipeline-criteria-modal"
+import type { Competency } from "@/components/competency-editor"
 
 // Types
 interface OverallData {
@@ -56,6 +57,7 @@ interface PipelineStage {
   created_at?: string;
   evaluation_criteria?: string;
   round_id?: string;
+  competencies?: Competency[]; // Add competencies support
 }
 
 
@@ -118,17 +120,36 @@ export function OtherRoundsDashboard({
   onSaveEvaluationCriteria,
   onFetchEvaluationCriteria
 }: OtherRoundsDashboardProps) {
-  // State for evaluation criteria editor
-  const [showEvaluationCriteriaEditor, setShowEvaluationCriteriaEditor] = useState(false)
+  const [showEvaluationCriteriaEditor, setShowEvaluationCriteriaEditor] = useState(false);
 
-  // Simple logging for component data
   console.log(`📋 OtherRoundsDashboard: ${filteredCandidates?.length || 0} candidates for ${selectedRound}`);
 
   const handleEditEvaluationCriteria = () => {
-    setShowEvaluationCriteriaEditor(true)
-  }
+    setShowEvaluationCriteriaEditor(true);
+  };
 
+  const handleSaveCriteriaAndCompetencies = async (criteria: string, competencies: Competency[]) => {
+    if (currentPipelineId && onSaveEvaluationCriteria) {
+      try {
+        // For now, just save the criteria. In a full implementation, you'd extend the API to handle competencies too
+        await onSaveEvaluationCriteria(currentPipelineId, criteria);
+        
+        // TODO: Add API call to save competencies
+        console.log('Competencies to be saved:', competencies);
+        
+        // Close the modal
+        setShowEvaluationCriteriaEditor(false);
+      } catch (error) {
+        console.error('Failed to save criteria and competencies:', error);
+        // Handle error (show toast, etc.)
+      }
+    }
+  };
 
+  // Get current stage data for the modal
+  const currentStage = pipelineStages.find(stage => stage.stage_type === selectedRound);
+  const currentCriteria = currentStage?.evaluation_criteria || '';
+  const currentCompetencies = currentStage?.competencies || [];
 
 
   return (
@@ -237,7 +258,7 @@ export function OtherRoundsDashboard({
                        className="rounded-xl"
                      >
                       <Settings className="w-4 h-4 mr-2" />
-                      Edit Criteria
+                      Edit Pipeline
                     </Button>
                   )}
                   
@@ -492,13 +513,13 @@ export function OtherRoundsDashboard({
        currentPipelineId && 
        onSaveEvaluationCriteria && 
        onFetchEvaluationCriteria && (
-        <EvaluationCriteriaEditor
+        <PipelineCriteriaModal
           isOpen={showEvaluationCriteriaEditor}
           onClose={() => setShowEvaluationCriteriaEditor(false)}
-          pipelineId={currentPipelineId}
-          roundName={selectedRound}
-          onSave={onSaveEvaluationCriteria}
-          onFetch={onFetchEvaluationCriteria}
+          onSave={handleSaveCriteriaAndCompetencies}
+          stageName={selectedRound}
+          initialCriteria={currentCriteria}
+          initialCompetencies={currentCompetencies}
         />
       )}
 

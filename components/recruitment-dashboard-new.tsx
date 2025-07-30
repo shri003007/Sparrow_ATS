@@ -16,6 +16,7 @@ import { CandidateDetails } from "@/components/candidate-details"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
 import { formatName } from "@/lib/utils"
+import type { Competency } from "@/components/competency-editor"
 
 // Types for API response
 interface OverallData {
@@ -68,6 +69,7 @@ interface PipelineStage {
   created_at?: string;
   evaluation_criteria?: string;
   round_id?: string;
+  competencies?: Competency[]; // Add competencies support
 }
 
 interface PredefinedRound {
@@ -143,7 +145,7 @@ export function RecruitmentDashboard() {
     minimum_experience: '',
     compensation_type: 'Fixed',
     compensation_value: '',
-    compensation_currency: 'USD',
+    compensation_currency: 'INR',
     job_description: '',
     created_by: '1',
     expires_at: ''
@@ -491,7 +493,8 @@ export function RecruitmentDashboard() {
             order_index: 1, 
             is_active: true, // Only Resume Screening is active
             round_id: getRoundIdByName('Resume Screening'), // Use mapping function
-            evaluation_criteria: ''
+            evaluation_criteria: '',
+            competencies: [] as Competency[] // Add empty competencies array
           },
           ...stages.map((stage, index) => {
             return {
@@ -499,7 +502,8 @@ export function RecruitmentDashboard() {
               order_index: index + 2,
               is_active: false, // All other stages are inactive initially
               round_id: getRoundIdByName(stage.stage_type), // Use mapping function
-              evaluation_criteria: stage.evaluation_criteria || ''
+              evaluation_criteria: stage.evaluation_criteria || '',
+              competencies: stage.competencies || [] as Competency[] // Include competencies
             };
           }),
           { 
@@ -507,14 +511,15 @@ export function RecruitmentDashboard() {
             order_index: stages.length + 2, 
             is_active: false, // Offer Rollout is also inactive initially
             round_id: getRoundIdByName('Offer Rollout & Negotiation'), // Use mapping function
-            evaluation_criteria: ''
+            evaluation_criteria: '',
+            competencies: [] as Competency[] // Add empty competencies array
           }
         ];
 
         // Validate and clean the data before sending - ensure it matches backend PipelineStageRequest
         const cleanedStages = allStages.map(stage => {
           // Ensure all required fields are present and have proper types
-          const cleanedStage = {
+          const cleanedStage: any = {
             stage_type: String(stage.stage_type || ''),
             order_index: Number(stage.order_index || 1),
             is_active: Boolean(stage.is_active), // Use the explicitly set value
@@ -522,7 +527,16 @@ export function RecruitmentDashboard() {
             evaluation_criteria: String(stage.evaluation_criteria || '')
           };
           
-
+          // Add competencies if they exist
+          if (stage.competencies && stage.competencies.length > 0) {
+            cleanedStage.competencies = stage.competencies.map((comp: Competency) => ({
+              name: String(comp.name || ''),
+              description: String(comp.description || ''),
+              rubric_scorecard: comp.rubric_scorecard.filter((q: [string, string]) => 
+                q[0].trim() && q[1].trim() // Only include questions with both ID and text
+              )
+            }));
+          }
           
           return cleanedStage;
         });
@@ -615,7 +629,8 @@ export function RecruitmentDashboard() {
           order_index: index + 2,
           is_active: false, // All other stages are inactive initially
           round_id: stage.round_id || getRoundIdByName(stage.stage_type), // Use existing round_id, fallback to mapping
-          evaluation_criteria: stage.evaluation_criteria || ''
+          evaluation_criteria: stage.evaluation_criteria || '',
+          competencies: stage.competencies || [] // Include competencies
         };
       }),
       { 
@@ -1577,7 +1592,7 @@ export function RecruitmentDashboard() {
       minimum_experience: '',
       compensation_type: 'Fixed',
       compensation_value: '',
-      compensation_currency: 'USD',
+      compensation_currency: 'INR',
       job_description: '',
       created_by: '1',
       expires_at: ''
@@ -1677,7 +1692,7 @@ export function RecruitmentDashboard() {
     setApplicationQuestions(updated);
   };
 
-  const updateStageConfig = (index: number, field: keyof PipelineStage, value: boolean | string | number) => {
+  const updateStageConfig = (index: number, field: keyof PipelineStage, value: boolean | string | number | Competency[]) => {
     const updated = [...pipelineStages];
     updated[index] = { ...updated[index], [field]: value };
     setPipelineStages(updated);
@@ -1971,6 +1986,8 @@ export function RecruitmentDashboard() {
           
           // Extract evaluation result - prioritize Resume Screening evaluation for score display
           let evaluationResult = null;
+          let displayScore = 0;
+          let isPercentageScore = false;
           
           if (candidate.evaluation_results?.by_pipeline) {
             // First, try to find Resume Screening evaluation (most relevant for overall score)
@@ -1980,6 +1997,9 @@ export function RecruitmentDashboard() {
             
             if (resumeScreeningPipeline?.evaluation_result) {
               evaluationResult = resumeScreeningPipeline.evaluation_result;
+              // Resume Screening uses traditional 1-5 scale
+              displayScore = evaluationResult.score || 0;
+              isPercentageScore = false;
             } else {
               // If no Resume Screening evaluation, try current pipeline
               evaluationResult = candidate.evaluation_results.by_pipeline[pipelineId]?.evaluation_result;
@@ -1989,6 +2009,19 @@ export function RecruitmentDashboard() {
                 const firstPipelineKey = Object.keys(candidate.evaluation_results.by_pipeline)[0];
                 if (firstPipelineKey) {
                   evaluationResult = candidate.evaluation_results.by_pipeline[firstPipelineKey]?.evaluation_result;
+                }
+              }
+              
+              // For non-Resume Screening rounds, use percentage score if available
+              if (evaluationResult) {
+                if (evaluationResult.overall_percentage_score !== undefined) {
+                  // Convert percentage to 5-point scale for display consistency
+                  displayScore = (evaluationResult.overall_percentage_score / 100) * 5;
+                  isPercentageScore = true;
+                } else if (evaluationResult.score) {
+                  // Fallback to traditional score if available
+                  displayScore = evaluationResult.score;
+                  isPercentageScore = false;
                 }
               }
             }
@@ -2027,7 +2060,7 @@ export function RecruitmentDashboard() {
               email: candidate.candidate_info?.email || '',
               phone: candidate.candidate_info?.mobile_phone || candidate.candidate_info?.phone || '',
               resume_url: candidate.candidate_info?.resume_url || '',
-              score: evaluationResult?.score || 0,
+              score: displayScore,
               recommendation_category: evaluationResult?.recommendation_category || 'Not Available'
             },
             individual_data: {

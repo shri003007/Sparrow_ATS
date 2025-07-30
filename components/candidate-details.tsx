@@ -1,26 +1,19 @@
 import React, { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import {
-  ChevronDown,
-  X,
-  Download,
-  Clock,
-  Bookmark,
-  CheckCircle,
-  XCircle,
-  AlertCircle,
-  Loader2,
-  Upload,
-  File,
-  Edit3
-} from "lucide-react"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Badge } from "@/components/ui/badge"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
+import { 
+  Upload, Download, FileText, Clock, User, Mail, Phone, MapPin, X, CheckCircle, AlertCircle, 
+  Loader2, Edit3, Save, RotateCcw, ChevronDown, XCircle, File, Bookmark 
+} from "lucide-react"
+import { toast } from "sonner"
+import { EvaluationRenderer, EnhancedEvaluationRenderer, EvaluationSummaryRenderer } from "./evaluation-parser"
 import { formatName } from "@/lib/utils"
-import { EvaluationRenderer } from "./evaluation-parser"
 
 // Types
 interface OverallData {
@@ -169,18 +162,30 @@ export function CandidateDetails({
       
       // Extract evaluation results from candidate data
       Object.entries(selectedCandidate.evaluation_data.by_pipeline).forEach(([pipelineId, pipelineData]: [string, any]) => {
-        if (pipelineData?.evaluation_result?.evaluation_summary) {
+        if (pipelineData?.evaluation_result) {
           // Find the stage type for this pipeline
           const stage = pipelineStages.find(s => s.id === pipelineId);
           if (stage) {
+            const result = pipelineData.evaluation_result;
+            
             const evaluationData = {
-              evaluation_summary: pipelineData.evaluation_result.evaluation_summary,
-              score: pipelineData.evaluation_result.score,
-              recommendation_category: pipelineData.evaluation_result.recommendation_category,
+              // New API format fields
+              evaluation_summary: result.evaluation_summary,
+              competency_evaluation: result.competency_evaluation,
+              interviewer_evaluation_summary: result.interviewer_evaluation_summary,
+              overall_percentage_score: result.overall_percentage_score,
+              round_type: result.round_type,
+              
+              // Legacy fields for backward compatibility
+              score: result.score,
+              recommendation_category: result.recommendation_category,
+              summary: result.summary, // fallback for old format
+              
+              // Metadata
               created_at: pipelineData.created_at,
               round_name: stage.stage_type,
-              round_type: stage.stage_type,
-              pipeline_id: pipelineId
+              pipeline_id: pipelineId,
+              success: true
             };
             
             existingResults[stage.stage_type] = evaluationData;
@@ -411,12 +416,46 @@ export function CandidateDetails({
       const result = await response.json();
       
       if (result.success) {
+        // Structure the evaluation result to match our expected format
+        const evaluationData = {
+          // New API format fields
+          evaluation_summary: result.evaluation_summary,
+          competency_evaluation: result.competency_evaluation,
+          interviewer_evaluation_summary: result.interviewer_evaluation_summary,
+          overall_percentage_score: result.overall_percentage_score,
+          round_type: result.round_type,
+          
+          // Legacy fields for backward compatibility
+          score: result.score, // for Resume Screening rounds
+          recommendation_category: result.recommendation_category,
+          
+          // Metadata from API response
+          candidate_id: result.candidate_id,
+          job_id: result.job_id,
+          round_id: result.round_id,
+          job_pipeline_id: result.job_pipeline_id,
+          round_name: result.round_name,
+          file_stored: result.file_stored,
+          file_s3_path: result.file_s3_path,
+          created_at: new Date().toISOString(),
+          success: true
+        };
+        
         setEvaluationResults(prev => ({
           ...prev,
-          [roundName]: result
+          [roundName]: evaluationData
         }));
         
-        console.log(`✅ Evaluation submitted for ${roundName}`);
+        console.log(`✅ Evaluation submitted for ${roundName}:`, evaluationData);
+        
+        // Show success toast with appropriate message
+        if (result.round_type === 'INTERVIEW' && result.overall_percentage_score !== undefined) {
+          toast.success(`Interview evaluation completed with ${result.overall_percentage_score.toFixed(1)}% competency score`);
+        } else if (result.score) {
+          toast.success(`Assessment evaluation completed with score ${result.score}/5`);
+        } else {
+          toast.success(`Evaluation completed for ${roundName}`);
+        }
       } else {
         throw new Error(result.error_message || 'Evaluation failed');
       }
@@ -854,10 +893,12 @@ export function CandidateDetails({
                               AI Evaluation Results
                             </h4>
                             <p className="text-sm text-gray-500">
-                              Round: {evaluationResults[tab.label].round_name} • {evaluationResults[tab.label].round_type}
+                              Round: {evaluationResults[tab.label].round_name} • {evaluationResults[tab.label].round_type || 'Assessment'}
                             </p>
                           </div>
                         </div>
+                        
+                        
                         
                         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
                           <div className="bg-gradient-to-r from-blue-500 to-indigo-600 px-6 py-5 border-b border-gray-200">
@@ -878,10 +919,26 @@ export function CandidateDetails({
                             </div>
                           </div>
                           <div className="p-6">
+                            {/* Use enhanced renderer if we have the new format */}
+                            {evaluationResults[tab.label].evaluation_summary ? (
+                              <EnhancedEvaluationRenderer 
+                                evaluationResult={{
+                                  evaluation_summary: evaluationResults[tab.label].evaluation_summary,
+                                  competency_evaluation: evaluationResults[tab.label].competency_evaluation,
+                                  interviewer_evaluation_summary: evaluationResults[tab.label].interviewer_evaluation_summary,
+                                  overall_percentage_score: evaluationResults[tab.label].overall_percentage_score,
+                                  round_type: evaluationResults[tab.label].round_type || (tab.label.toLowerCase().includes('interview') ? 'INTERVIEW' : 'ASSESSMENT'),
+                                  success: true
+                                }}
+                                showMetrics={false}
+                              />
+                            ) : (
+                              /* Fallback to old renderer for legacy format */
                             <EvaluationRenderer 
-                              content={evaluationResults[tab.label].evaluation_summary}
+                                content={evaluationResults[tab.label].summary || 'No evaluation content available.'}
                               showMetrics={true}
                             />
+                            )}
                           </div>
                         </div>
 
@@ -902,10 +959,11 @@ export function CandidateDetails({
                   const pipelineId = pipelineStage.id;
                   const evaluationResult = selectedCandidate.evaluation_data.by_pipeline[pipelineId];
                   
-                  if (evaluationResult?.evaluation_result?.evaluation_summary) {
-                    const summary = evaluationResult.evaluation_result.evaluation_summary;
-                    const score = evaluationResult.evaluation_result.score;
-                    const recommendationCategory = evaluationResult.evaluation_result.recommendation_category;
+                  if (evaluationResult?.evaluation_result) {
+                    const result = evaluationResult.evaluation_result;
+                    
+                    // Check if this is a Resume Screening round (uses old scoring format)
+                    const isResumeScreening = tab.label === "Resume Screening";
                     
                     return (
                       <div className="space-y-6">
@@ -925,32 +983,63 @@ export function CandidateDetails({
                             </div>
                           </div>
                           
-                          {/* Score and Recommendation */}
+                          {/* Resume Screening: Show traditional score display */}
+                          {isResumeScreening && (result.score || result.recommendation_category) && (
                           <div className="grid grid-cols-2 gap-4 mb-6">
-                            {score && (
+                              {result.score && (
                               <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 text-center">
                                 <div className="text-2xl font-bold text-gray-900 mb-1">
-                                  {score}<span className="text-lg text-gray-500">/5</span>
+                                    {result.score}<span className="text-lg text-gray-500">/5</span>
                                 </div>
                                 <div className="text-sm text-gray-600">Overall Score</div>
                               </div>
                             )}
-                            {recommendationCategory && (
+                              {result.recommendation_category && (
                               <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-4 text-center">
                                 <div className="text-lg font-semibold text-gray-900 mb-1 capitalize">
-                                  {recommendationCategory.replace(/_/g, ' ')}
+                                    {result.recommendation_category.replace(/_/g, ' ')}
                                 </div>
                                 <div className="text-sm text-gray-600">Recommendation</div>
                               </div>
                             )}
                           </div>
+                          )}
                           
-                          {/* Evaluation Summary */}
+                          {/* Other Rounds: Show percentage score if available */}
+                          {!isResumeScreening && result.overall_percentage_score !== undefined && result.overall_percentage_score !== null && (
+                            <div className="mb-6">
+                              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 text-center">
+                                <div className="text-2xl font-bold text-gray-900 mb-1">
+                                  {result.overall_percentage_score.toFixed(1)}%
+                                </div>
+                                <div className="text-sm text-gray-600">Overall Competency Score</div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        
+                        {/* Enhanced Evaluation Display */}
+                        {result.evaluation_summary && (
+                          <EnhancedEvaluationRenderer 
+                            evaluationResult={{
+                              evaluation_summary: result.evaluation_summary,
+                              competency_evaluation: result.competency_evaluation,
+                              interviewer_evaluation_summary: result.interviewer_evaluation_summary,
+                              overall_percentage_score: result.overall_percentage_score,
+                              round_type: result.round_type || (tab.label.toLowerCase().includes('interview') ? 'INTERVIEW' : 'ASSESSMENT'),
+                              success: true
+                            }}
+                            showMetrics={false}
+                          />
+                        )}
+                        
+                        {/* Fallback to old renderer for legacy format */}
+                        {!result.evaluation_summary && result.summary && (
                           <EvaluationRenderer 
-                            content={summary}
+                            content={result.summary}
                             showMetrics={true}
                           />
-                        </div>
+                        )}
                       </div>
                     );
                   }

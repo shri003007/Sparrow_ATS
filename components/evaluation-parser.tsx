@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { MarkdownRenderer } from './markdown-renderer';
+import { CheckCircle, Target, MessageSquare, TrendingUp, Award, Users } from 'lucide-react';
 
 interface EvaluationSection {
   title: string;
@@ -16,6 +17,35 @@ interface ParsedEvaluation {
     score?: string;
     recommendation?: string;
   };
+}
+
+// New interfaces for the updated API response
+interface CompetencyQuestion {
+  question_id: string;
+  question: string;
+  score: number; // 0 or 1
+  explanation: string;
+}
+
+interface CompetencyScore {
+  competency_name: string;
+  questions: CompetencyQuestion[];
+  percentage_score: number;
+}
+
+interface CompetencyEvaluation {
+  competency_scores: CompetencyScore[];
+  overall_percentage_score: number;
+}
+
+interface EvaluationResult {
+  evaluation_summary: string;
+  competency_evaluation?: CompetencyEvaluation;
+  interviewer_evaluation_summary?: string;
+  overall_percentage_score?: number;
+  round_type?: string;
+  success: boolean;
+  error_message?: string;
 }
 
 export function parseEvaluationContent(content: string): ParsedEvaluation {
@@ -203,6 +233,305 @@ interface EvaluationRendererProps {
   showMetrics?: boolean;
 }
 
+// New interface for enhanced evaluation renderer
+interface EnhancedEvaluationRendererProps {
+  evaluationResult: EvaluationResult;
+  showMetrics?: boolean;
+}
+
+// Component to display competency evaluation with rubric scores
+export function CompetencyEvaluationRenderer({ competencyEvaluation }: { competencyEvaluation: CompetencyEvaluation }) {
+  const [expandedCompetencies, setExpandedCompetencies] = useState<{ [key: string]: boolean }>({});
+
+  const toggleCompetency = (competencyName: string) => {
+    setExpandedCompetencies(prev => ({
+      ...prev,
+      [competencyName]: !prev[competencyName]
+    }));
+  };
+
+  // Safe access to overall percentage score
+  const overallScore = competencyEvaluation?.overall_percentage_score ?? 0;
+
+  return (
+    <div className="space-y-4">
+      {/* Section Scores - Improved UI */}
+      <div className="space-y-3">
+        <h4 className="text-lg font-semibold text-gray-900 mb-4">Section Scores</h4>
+        
+        {competencyEvaluation?.competency_scores?.map((competency, index) => {
+          // Safe access to competency percentage score
+          const competencyScore = competency?.percentage_score ?? 0;
+          
+          return (
+            <div key={index} className="bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+              {/* Competency Header - Clickable */}
+              <button
+                onClick={() => toggleCompetency(competency.competency_name)}
+                className="w-full p-4 flex items-center justify-between hover:bg-gray-50 transition-colors rounded-lg"
+              >
+                {/* Left side - Competency name */}
+                <div className="flex items-center gap-3 flex-1">
+                  <h5 className="text-sm font-medium text-gray-900 text-left">
+                    {competency.competency_name || 'Unknown Competency'}
+                  </h5>
+                </div>
+                
+                {/* Right side - Score, progress bar, and chevron */}
+                <div className="flex items-center gap-4">
+                  {/* Score */}
+                  <div className="text-right min-w-[80px]">
+                    <div className="text-sm font-semibold text-gray-900">
+                      {competencyScore.toFixed(2)}/100
+                    </div>
+                  </div>
+                  
+                  {/* Progress Bar - Wider and more prominent */}
+                  <div className="w-32 bg-gray-200 rounded-full h-2.5">
+                    <div 
+                      className={`h-2.5 rounded-full transition-all duration-500 ${
+                        competencyScore >= 80 
+                          ? 'bg-green-500' 
+                          : competencyScore >= 60 
+                          ? 'bg-orange-400' 
+                          : 'bg-red-400'
+                      }`}
+                      style={{ width: `${Math.min(competencyScore, 100)}%` }}
+                    ></div>
+                  </div>
+
+                  {/* Expand/Collapse Icon */}
+                  <svg 
+                    className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${
+                      expandedCompetencies[competency.competency_name] ? 'rotate-180' : ''
+                    }`} 
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </button>
+
+              {/* Expandable Questions Details */}
+              {expandedCompetencies[competency.competency_name] && competency.questions && (
+                <div className="border-t border-gray-200 p-4 bg-gray-50">
+                  <div className="space-y-3">
+                    {competency.questions.map((question, qIndex) => (
+                      <div key={qIndex} className="flex items-start gap-3 p-3 bg-white rounded-lg border border-gray-100 shadow-sm">
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                          question.score === 1 
+                            ? 'bg-green-100 text-green-600' 
+                            : 'bg-red-100 text-red-600'
+                        }`}>
+                          {question.score === 1 ? (
+                            <CheckCircle className="w-4 h-4" />
+                          ) : (
+                            <span className="text-xs font-bold">×</span>
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-gray-900 mb-1">
+                            {question.question || 'No question text available'}
+                          </p>
+                          <p className="text-xs text-gray-600">
+                            {question.explanation || 'No explanation available'}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        }) || []}
+      </div>
+    </div>
+  );
+}
+
+// Component to display interviewer evaluation
+export function InterviewerEvaluationRenderer({ interviewerEvaluation }: { interviewerEvaluation: string }) {
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+      <div className="flex items-center gap-2 mb-4">
+        <div className="w-6 h-6 bg-purple-100 rounded-full flex items-center justify-center">
+          <Users className="w-4 h-4 text-purple-600" />
+        </div>
+        <h4 className="text-lg font-semibold text-purple-600">
+          Interview Report
+        </h4>
+      </div>
+      
+      {/* Full Interview Report - Always Visible */}
+      <div className="text-sm text-gray-700">
+        <MarkdownRenderer content={interviewerEvaluation} />
+      </div>
+    </div>
+  );
+}
+
+// Enhanced evaluation renderer that handles both old and new API response formats
+export function EnhancedEvaluationRenderer({ evaluationResult, showMetrics = true }: EnhancedEvaluationRendererProps) {
+  const isInterviewRound = evaluationResult.round_type === 'INTERVIEW' || evaluationResult.competency_evaluation;
+
+  return (
+    <div className="space-y-6">
+      {/* 1. Competency Evaluation FIRST (for INTERVIEW rounds) */}
+      {isInterviewRound && evaluationResult.competency_evaluation && 
+       evaluationResult.competency_evaluation.overall_percentage_score !== undefined && (
+        <CompetencyEvaluationRenderer competencyEvaluation={evaluationResult.competency_evaluation} />
+      )}
+
+      {/* 2. Main Evaluation Summary SECOND */}
+      {evaluationResult.evaluation_summary && (
+        <EvaluationSummaryRenderer content={evaluationResult.evaluation_summary} overallScore={evaluationResult.overall_percentage_score} />
+      )}
+
+      {/* 3. Interviewer Evaluation LAST (for INTERVIEW rounds) */}
+      {isInterviewRound && evaluationResult.interviewer_evaluation_summary && (
+        <InterviewerEvaluationRenderer interviewerEvaluation={evaluationResult.interviewer_evaluation_summary} />
+      )}
+    </div>
+  );
+}
+
+// Component to display evaluation summary with expandable detailed results
+export function EvaluationSummaryRenderer({ content, overallScore }: { content: string, overallScore?: number }) {
+  const [showDetailedReport, setShowDetailedReport] = useState(false);
+  
+  // Extract the "Overall Evaluation" section specifically
+  const getOverallEvaluation = (content: string) => {
+    // Look for "## Overall Evaluation" section
+    const overallEvalMatch = content.match(/## Overall Evaluation\s*\n\n([\s\S]*?)(?=\n##|$)/);
+    if (overallEvalMatch) {
+      return overallEvalMatch[1].trim();
+    }
+    
+    // Fallback: Look for the last section that might be the overall evaluation
+    const sections = content.split(/^##\s/m);
+    if (sections.length > 1) {
+      // The last section is usually the overall evaluation
+      const lastSection = sections[sections.length - 1];
+      // Check if it contains typical overall evaluation keywords
+      if (lastSection.includes('Performance Summary') || 
+          lastSection.includes('Key Strengths') || 
+          lastSection.includes('Hiring Recommendation') ||
+          lastSection.includes('Overall')) {
+        return lastSection.replace(/^[^\n]*\n/, '').trim(); // Remove the heading line
+      }
+    }
+    
+    // Final fallback: return content before first ## heading
+    return content.split(/^##\s/m)[0].trim();
+  };
+
+  // Extract detailed sections (all ## sections except the Overall Evaluation)
+  const getDetailedSections = (content: string) => {
+    const sections = [];
+    const parts = content.split(/^##\s/m);
+    
+    for (let i = 1; i < parts.length; i++) {
+      const sectionContent = parts[i];
+      const lines = sectionContent.split('\n');
+      const title = lines[0].trim();
+      const body = lines.slice(1).join('\n').trim();
+      
+      // Skip the "Overall Evaluation" section from detailed sections
+      if (title && body && !title.toLowerCase().includes('overall evaluation')) {
+        sections.push({ title, body });
+      }
+    }
+    return sections;
+  };
+
+  const overallEvaluation = getOverallEvaluation(content);
+  const detailedSections = getDetailedSections(content);
+
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 p-6">
+      {/* Overall Evaluation Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
+            <MessageSquare className="w-4 h-4 text-blue-600" />
+          </div>
+          <h4 className="text-lg font-semibold text-blue-600">
+            Overall Evaluation
+          </h4>
+        </div>
+        
+        {/* Overall Score Badge */}
+        {overallScore !== undefined && overallScore !== null && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-500">Score:</span>
+            <div className={`px-3 py-1 rounded-full text-sm font-medium ${
+              overallScore >= 80 
+                ? 'bg-green-100 text-green-800' 
+                : overallScore >= 60 
+                ? 'bg-orange-100 text-orange-800' 
+                : 'bg-red-100 text-red-800'
+            }`}>
+              {overallScore.toFixed(1)}%
+            </div>
+          </div>
+        )}
+      </div>
+      
+      {/* Overall Evaluation Content - Always Visible */}
+      <div className="text-sm text-gray-700 mb-4">
+        <MarkdownRenderer content={overallEvaluation} />
+      </div>
+
+      {/* Detailed Report Dropdown */}
+      {detailedSections.length > 0 && (
+        <div className="border-t border-gray-200 pt-4">
+          <button
+            onClick={() => setShowDetailedReport(!showDetailedReport)}
+            className="flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors mb-4"
+          >
+            <span>{showDetailedReport ? 'Hide' : 'Show'} Detailed Report ({detailedSections.length} sections)</span>
+            <svg 
+              className={`w-4 h-4 transition-transform duration-200 ${
+                showDetailedReport ? 'rotate-180' : ''
+              }`} 
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          
+          {/* Expandable Detailed Report Sections */}
+          {showDetailedReport && (
+            <div className="space-y-4">
+              {detailedSections.map((section, index) => (
+                <div key={index} className="bg-gray-50 rounded-lg border border-gray-200 p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-5 h-5 bg-blue-100 rounded-full flex items-center justify-center">
+                      <span className="text-xs font-bold text-blue-600">{index + 1}</span>
+                    </div>
+                    <h5 className="text-sm font-semibold text-gray-900">
+                      {section.title}
+                    </h5>
+                  </div>
+                  
+                  <div className="text-sm text-gray-700 ml-7">
+                    <MarkdownRenderer content={section.body} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function EvaluationRenderer({ content, showMetrics = true }: EvaluationRendererProps) {
   const { sections, metrics } = parseEvaluationContent(content);
 
@@ -268,3 +597,12 @@ export function EvaluationRenderer({ content, showMetrics = true }: EvaluationRe
     </div>
   );
 } 
+
+// Export types for use in other components
+export type { 
+  CompetencyQuestion, 
+  CompetencyScore, 
+  CompetencyEvaluation, 
+  EvaluationResult,
+  EnhancedEvaluationRendererProps
+}; 

@@ -223,7 +223,7 @@ export function CandidateView({
                       className="rounded-xl"
                     >
                       <Settings className="w-4 h-4 mr-2" />
-                      Edit Criteria
+                      Edit Pipeline
                     </Button>
                   )}
                   

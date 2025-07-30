@@ -6,6 +6,7 @@ import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { CompetencyEditor, type Competency } from "./competency-editor"
 import {
   Briefcase,
   FileText,
@@ -17,7 +18,8 @@ import {
   Plus,
   GripVertical,
   Wand2,
-  Edit
+  Edit,
+  Target
 } from "lucide-react"
 
 // Types
@@ -40,6 +42,7 @@ interface PipelineStage {
   created_at?: string;
   evaluation_criteria?: string;
   round_id?: string;
+  competencies?: Competency[]; // Add competencies support
 }
 
 interface PredefinedRound {
@@ -85,6 +88,7 @@ interface JobCreationFlowProps {
   error: string | null
   successMessage: string | null
   onClose: () => void
+  onConfirmClose: () => void
   onStepChange: (step: JobCreationStep) => void
   onJobFormDataChange: (data: Partial<JobFormData>) => void
   onJobFormSubmit: (e: React.FormEvent) => void
@@ -92,17 +96,16 @@ interface JobCreationFlowProps {
   onPipelineStagesSubmit: () => void
   onCompleteJobCreation: () => void
   updateQuestionConfig: (index: number, field: keyof ApplicationQuestion, value: boolean) => void
-  updateStageConfig: (index: number, field: keyof PipelineStage, value: boolean | string | number) => void
+  updateStageConfig: (index: number, field: keyof PipelineStage, value: boolean | string | number | Competency[]) => void
   addPipelineStage: () => void
   removePipelineStage: (index: number) => void
   movePipelineStage: (fromIndex: number, toIndex: number) => void
   updateJobBoardConfig: (index: number, enabled: boolean) => void
-  onConfirmClose?: () => void
   predefinedRounds: PredefinedRound[]
   loadingPredefinedRounds: boolean
   addSpecificPipelineStage: (roundName: string) => void
   initializeDefaultRounds: () => void
-  getEvaluationCriteria: (pipelineId: string) => Promise<any>
+  getEvaluationCriteria: (pipelineId: string) => Promise<{ evaluation_criteria: string }>
   saveEvaluationCriteria: (pipelineId: string, evaluationCriteria: string) => Promise<any>
   updateRoundName: (index: number, newName: string) => void
 }
@@ -119,6 +122,7 @@ export function JobCreationFlow({
   error,
   successMessage,
   onClose,
+  onConfirmClose,
   onStepChange,
   onJobFormDataChange,
   onJobFormSubmit,
@@ -131,7 +135,6 @@ export function JobCreationFlow({
   removePipelineStage,
   movePipelineStage,
   updateJobBoardConfig,
-  onConfirmClose,
   predefinedRounds,
   loadingPredefinedRounds,
   addSpecificPipelineStage,
@@ -140,33 +143,55 @@ export function JobCreationFlow({
   saveEvaluationCriteria,
   updateRoundName
 }: JobCreationFlowProps) {
-  // State for evaluation criteria editing
+  // Editing states
   const [editingEvaluationCriteria, setEditingEvaluationCriteria] = useState<number | null>(null);
   const [evaluationCriteriaText, setEvaluationCriteriaText] = useState('');
-  
-  // State for round name editing
   const [editingRoundName, setEditingRoundName] = useState<number | null>(null);
   const [roundNameText, setRoundNameText] = useState('');
+  
+  // Competency management states
+  const [editingCompetencies, setEditingCompetencies] = useState<number | null>(null);
+  const [competenciesData, setCompetenciesData] = useState<Competency[]>([]);
 
   // Handle evaluation criteria editing - simplified to use local state only
   const handleEditEvaluationCriteria = (index: number, stage: PipelineStage) => {
     setEditingEvaluationCriteria(index);
+    setEditingCompetencies(index); // Also open competency editor
     // Use existing local data or empty string - no API call needed
     setEvaluationCriteriaText(stage.evaluation_criteria || '');
+    // Initialize competencies data
+    setCompetenciesData(stage.competencies || [
+      {
+        id: `comp_${Date.now()}_1`,
+        name: '',
+        description: '',
+        rubric_scorecard: [
+          ['01', ''],
+          ['02', ''],
+          ['03', '']
+        ]
+      }
+    ]);
   };
 
   const handleSaveEvaluationCriteria = (index: number) => {
     // Update local state immediately - no API call needed during editing
     updateStageConfig(index, 'evaluation_criteria', evaluationCriteriaText);
+    // Also update competencies
+    updateStageConfig(index, 'competencies', competenciesData);
     setEditingEvaluationCriteria(null);
+    setEditingCompetencies(null);
     setEvaluationCriteriaText('');
+    setCompetenciesData([]);
     
-    console.log('Evaluation criteria updated locally');
+    console.log('Evaluation criteria and competencies updated locally');
   };
 
   const handleCancelEvaluationCriteria = () => {
     setEditingEvaluationCriteria(null);
+    setEditingCompetencies(null);
     setEvaluationCriteriaText('');
+    setCompetenciesData([]);
   };
 
   // Handle round name editing
@@ -485,10 +510,11 @@ export function JobCreationFlow({
                         value={jobFormData.compensation_currency}
                         onChange={(e) => onJobFormDataChange({ compensation_currency: e.target.value })}
                       >
+                        <option value="INR">INR</option>
                         <option value="USD">USD</option>
                         <option value="EUR">EUR</option>
                         <option value="GBP">GBP</option>
-                        <option value="INR">INR</option>
+                        
                       </select>
                     </div>
                   </div>
@@ -1020,41 +1046,125 @@ export function JobCreationFlow({
                           )}
                           {/* Evaluation Criteria Section */}
                           {editingEvaluationCriteria === index ? (
-                            <div className="mt-2 space-y-2">
-                              <Textarea
-                                value={evaluationCriteriaText}
-                                onChange={(e) => setEvaluationCriteriaText(e.target.value)}
-                                placeholder="Enter evaluation criteria for this stage..."
-                                className="min-h-[80px] resize-none"
-                              />
-                              <div className="flex gap-2">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  onClick={() => handleSaveEvaluationCriteria(index)}
-                                  className="bg-green-600 hover:bg-green-700"
-                                >
-                                  Save
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={handleCancelEvaluationCriteria}
-                                >
-                                  Cancel
-                                </Button>
+                            <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                              <div className="space-y-6">
+                                {/* Header */}
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                                    <Settings className="w-4 h-4 text-blue-600" />
+                                  </div>
+                                  <div>
+                                    <h4 className="font-medium text-gray-900">Configure {stage.stage_type}</h4>
+                                    <p className="text-sm text-gray-600">Set up evaluation criteria and competencies</p>
+                                  </div>
+                                </div>
+                                
+                                {/* Basic Evaluation Criteria */}
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Basic Evaluation Instructions
+                                  </label>
+                                  <Textarea
+                                    value={evaluationCriteriaText}
+                                    onChange={(e) => setEvaluationCriteriaText(e.target.value)}
+                                    placeholder="Enter basic evaluation criteria for this stage..."
+                                    className="min-h-[100px] resize-none"
+                                    rows={4}
+                                  />
+                                </div>
+                                
+                                {/* Competency Management */}
+                                <div>
+                                  <CompetencyEditor
+                                    competencies={competenciesData}
+                                    onChange={setCompetenciesData}
+                                    maxCompetencies={6}
+                                    minQuestions={3}
+                                    maxQuestions={10}
+                                  />
+                                </div>
+                                
+                                <div className="flex gap-3 pt-4 border-t border-gray-200">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    onClick={() => handleSaveEvaluationCriteria(index)}
+                                    className="bg-blue-600 hover:bg-blue-700"
+                                    disabled={!competenciesData.every(comp => 
+                                      comp.name.trim() && 
+                                      comp.description.trim() && 
+                                      comp.rubric_scorecard.length >= 3 &&
+                                      comp.rubric_scorecard.every(q => q[0].trim() && q[1].trim())
+                                    )}
+                                  >
+                                    <Save className="w-4 h-4 mr-2" />
+                                    Save Configuration
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={handleCancelEvaluationCriteria}
+                                  >
+                                    <X className="w-4 h-4 mr-2" />
+                                    Cancel
+                                  </Button>
+                                </div>
                               </div>
                             </div>
                           ) : (
-                            <div className="mt-2">
+                            <div className="mt-3 space-y-3">
+                              {/* Basic Criteria Display */}
                               {stage.evaluation_criteria ? (
-                                <div className="text-sm text-gray-600 bg-gray-50 p-2 rounded border">
-                                  {stage.evaluation_criteria}
+                                <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg border border-gray-200">
+                                  <div className="font-medium text-gray-700 mb-1 flex items-center gap-2">
+                                    <FileText className="w-4 h-4" />
+                                    Evaluation Instructions:
+                                  </div>
+                                  <div className="text-gray-600">{stage.evaluation_criteria}</div>
                                 </div>
                               ) : (
-                                <div className="text-sm text-gray-400 italic">
-                                  No evaluation criteria added
+                                <div className="text-sm text-gray-400 italic bg-gray-50 p-3 rounded-lg border border-gray-200">
+                                  No evaluation criteria configured
+                                </div>
+                              )}
+                              
+                              {/* Competencies Summary */}
+                              {stage.competencies && stage.competencies.length > 0 ? (
+                                <div className="space-y-2">
+                                  <div className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                                    <Target className="w-4 h-4" />
+                                    Competencies ({stage.competencies.length}):
+                                  </div>
+                                  <div className="flex flex-wrap gap-2">
+                                    {stage.competencies.map((comp, compIndex) => (
+                                      <TooltipProvider key={compIndex}>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <div className="px-3 py-1.5 bg-blue-100 text-blue-800 rounded-full text-xs font-medium border border-blue-200 hover:bg-blue-200 transition-colors">
+                                              {comp.name || `Competency ${compIndex + 1}`}
+                                              <span className="ml-1 text-blue-600">
+                                                ({comp.rubric_scorecard?.length || 0}q)
+                                              </span>
+                                            </div>
+                                          </TooltipTrigger>
+                                          <TooltipContent>
+                                            <div className="max-w-xs">
+                                              <div className="font-medium">{comp.name}</div>
+                                              <div className="text-xs text-gray-300 mt-1">{comp.description}</div>
+                                              <div className="text-xs mt-1">
+                                                {comp.rubric_scorecard?.length || 0} evaluation questions
+                                              </div>
+                                            </div>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </TooltipProvider>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="text-sm text-gray-400 italic bg-gray-50 p-3 rounded-lg border border-gray-200">
+                                  No competencies configured
                                 </div>
                               )}
                             </div>
