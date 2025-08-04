@@ -1,8 +1,11 @@
 "use client"
 
-import { useState } from "react"
-import { X, Search } from "lucide-react"
+import { useState, useEffect } from "react"
+import { X, Search, Loader2, AlertCircle } from "lucide-react"
 import type { JobTemplate } from "@/lib/job-types"
+import { JobTemplatesApi } from "@/lib/api/job-templates"
+import { JobTemplateTransformer } from "@/lib/transformers/job-template-transformer"
+import { MarkdownRenderer } from "@/components/ui/markdown-renderer"
 
 interface TemplateSelectionModalProps {
   isOpen: boolean
@@ -10,59 +13,49 @@ interface TemplateSelectionModalProps {
   onSelect: (template: JobTemplate) => void
 }
 
-const mockTemplates: JobTemplate[] = [
-  {
-    id: "1",
-    title: "Staff Design Engg.",
-    employmentType: "Full-time",
-    minExperience: "8+ years",
-    compensation: "Confidential",
-    summary:
-      "The Staff Design Engineer is a key technical leader responsible for the most complex projects and provides architectural guidance across multiple teams.",
-    description:
-      "The Staff Design Engineer is a key technical leader responsible for the most complex projects and provides architectural guidance across multiple teams.",
-    responsibilities: [
-      "Lead the design and architecture of large-scale systems",
-      "Mentor senior and junior engineers across the organization",
-      "Collaborate with product leadership to define technical strategy",
-      "Drive technical innovation and advocate for best practices",
-    ],
-  },
-  {
-    id: "2",
-    title: "Sr. Frontend Engg.",
-    employmentType: "Full-time",
-    minExperience: "5+ years",
-    compensation: "₹15-25 LPA",
-    summary: "Senior Frontend Engineer responsible for building scalable web applications.",
-    description: "Senior Frontend Engineer responsible for building scalable web applications.",
-    responsibilities: [
-      "Build responsive web applications",
-      "Collaborate with design team",
-      "Optimize application performance",
-    ],
-  },
-  {
-    id: "3",
-    title: "Sr. Product Manager",
-    employmentType: "Full-time",
-    minExperience: "6+ years",
-    compensation: "₹20-30 LPA",
-    summary: "Senior Product Manager to drive product strategy and execution.",
-    description: "Senior Product Manager to drive product strategy and execution.",
-    responsibilities: ["Define product roadmap", "Work with engineering teams", "Analyze market trends"],
-  },
-]
+// Removed mock templates - now fetching from API
 
 export function TemplateSelectionModal({ isOpen, onClose, onSelect }: TemplateSelectionModalProps) {
-  const [selectedTemplate, setSelectedTemplate] = useState<JobTemplate | null>(mockTemplates[0])
+  const [templates, setTemplates] = useState<JobTemplate[]>([])
+  const [selectedTemplate, setSelectedTemplate] = useState<JobTemplate | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Fetch templates when modal opens
+  useEffect(() => {
+    if (isOpen && templates.length === 0) {
+      fetchTemplates()
+    }
+  }, [isOpen, templates.length])
+
+  // Set first template as selected when templates are loaded
+  useEffect(() => {
+    if (templates.length > 0 && !selectedTemplate) {
+      setSelectedTemplate(templates[0])
+    }
+  }, [templates, selectedTemplate])
+
+  const fetchTemplates = async () => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const apiResponse = await JobTemplatesApi.getJobTemplates()
+      const transformedTemplates = JobTemplateTransformer.transformApiListToUi(apiResponse.job_templates)
+      setTemplates(transformedTemplates)
+    } catch (err) {
+      setError('Failed to load job templates. Please try again.')
+      console.error('Error fetching templates:', err)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   if (!isOpen) return null
 
   const fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
 
-  const filteredTemplates = mockTemplates.filter((template) =>
+  const filteredTemplates = templates.filter((template) =>
     template.title.toLowerCase().includes(searchQuery.toLowerCase()),
   )
 
@@ -122,30 +115,56 @@ export function TemplateSelectionModal({ isOpen, onClose, onSelect }: TemplateSe
 
             {/* Template List */}
             <div className="space-y-2">
-              {filteredTemplates.map((template) => (
-                <button
-                  key={template.id}
-                  onClick={() => setSelectedTemplate(template)}
-                  className={`w-full text-left p-3 rounded-lg transition-colors ${
-                    selectedTemplate?.id === template.id ? "bg-blue-50 border-blue-200" : "hover:bg-gray-50"
-                  }`}
-                  style={{
-                    borderWidth: selectedTemplate?.id === template.id ? "1px" : "0",
-                    borderColor: selectedTemplate?.id === template.id ? "#DBEAFE" : "transparent",
-                  }}
-                >
-                  <div
-                    className="font-medium"
+              {isLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin" style={{ color: "#6366F1" }} />
+                  <span className="ml-2" style={{ color: "#6B7280", fontSize: "14px" }}>
+                    Loading templates...
+                  </span>
+                </div>
+              ) : error ? (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <AlertCircle className="w-6 h-6 mb-2" style={{ color: "#EF4444" }} />
+                  <p style={{ color: "#EF4444", fontSize: "14px" }}>{error}</p>
+                  <button
+                    onClick={fetchTemplates}
+                    className="mt-2 px-3 py-1 text-sm bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors"
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : filteredTemplates.length === 0 ? (
+                <div className="text-center py-8">
+                  <p style={{ color: "#6B7280", fontSize: "14px" }}>
+                    {searchQuery ? "No templates match your search." : "No templates available."}
+                  </p>
+                </div>
+              ) : (
+                filteredTemplates.map((template) => (
+                  <button
+                    key={template.id}
+                    onClick={() => setSelectedTemplate(template)}
+                    className={`w-full text-left p-3 rounded-lg transition-colors ${
+                      selectedTemplate?.id === template.id ? "bg-blue-50 border-blue-200" : "hover:bg-gray-50"
+                    }`}
                     style={{
-                      color: selectedTemplate?.id === template.id ? "#1D4ED8" : "#111827",
-                      fontSize: "14px",
-                      fontWeight: 500,
+                      borderWidth: selectedTemplate?.id === template.id ? "1px" : "0",
+                      borderColor: selectedTemplate?.id === template.id ? "#DBEAFE" : "transparent",
                     }}
                   >
-                    {template.title}
-                  </div>
-                </button>
-              ))}
+                    <div
+                      className="font-medium"
+                      style={{
+                        color: selectedTemplate?.id === template.id ? "#1D4ED8" : "#111827",
+                        fontSize: "14px",
+                        fontWeight: 500,
+                      }}
+                    >
+                      {template.title}
+                    </div>
+                  </button>
+                ))
+              )}
             </div>
           </div>
 
@@ -261,58 +280,13 @@ export function TemplateSelectionModal({ isOpen, onClose, onSelect }: TemplateSe
                       Job Description
                     </label>
 
-                    <div className="space-y-4">
-                      <div>
-                        <h4
-                          className="font-medium mb-2"
-                          style={{
-                            color: "#111827",
-                            fontSize: "14px",
-                            fontWeight: 500,
-                          }}
-                        >
-                          Summary:
-                        </h4>
-                        <p
-                          style={{
-                            color: "#374151",
-                            fontSize: "14px",
-                            lineHeight: "1.5",
-                          }}
-                        >
-                          {selectedTemplate.summary}
-                        </p>
-                      </div>
-
-                      <div>
-                        <h4
-                          className="font-medium mb-2"
-                          style={{
-                            color: "#111827",
-                            fontSize: "14px",
-                            fontWeight: 500,
-                          }}
-                        >
-                          Responsibilities:
-                        </h4>
-                        <ul className="space-y-1">
-                          {selectedTemplate.responsibilities.map((responsibility, index) => (
-                            <li
-                              key={index}
-                              className="flex items-start"
-                              style={{
-                                color: "#374151",
-                                fontSize: "14px",
-                                lineHeight: "1.5",
-                              }}
-                            >
-                              <span className="mr-2">•</span>
-                              {responsibility}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
+                    <MarkdownRenderer 
+                      content={selectedTemplate.description}
+                      style={{
+                        maxHeight: "400px",
+                        overflowY: "auto"
+                      }}
+                    />
                   </div>
                 </div>
               </>

@@ -1,3 +1,23 @@
+// API Response types
+export interface JobTemplateApiResponse {
+  id: string
+  title: string
+  job_description: string
+  created_by: string
+  created_at: string
+  updated_at: string
+  employment_type: string
+  minimum_experience: string
+  compensation_type: string
+  compensation_value: number
+  compensation_currency: string
+}
+
+export interface JobTemplatesApiResponse {
+  job_templates: JobTemplateApiResponse[]
+}
+
+// UI types (transformed from API)
 export interface JobTemplate {
   id: string
   title: string
