@@ -251,8 +251,16 @@ export default function ATSInterface() {
           selectedRounds, 
           selectedOriginalTemplates
         )
-        const response = await JobRoundTemplatesApi.createJobRoundTemplates(currentJobId, roundTemplatesRequest)
-        console.log('Job round templates created successfully:', response)
+        const roundTemplatesResponse = await JobRoundTemplatesApi.createJobRoundTemplates(currentJobId, roundTemplatesRequest)
+        console.log('Job round templates created successfully:', roundTemplatesResponse)
+        
+        // After successfully creating round templates, confirm the job opening
+        const confirmationResponse = await JobOpeningsApi.confirmJobOpening(currentJobId)
+        console.log('Job opening confirmed and published successfully:', confirmationResponse)
+      } else if (currentJobId) {
+        // If we have a job but no rounds, still confirm it
+        const confirmationResponse = await JobOpeningsApi.confirmJobOpening(currentJobId)
+        console.log('Job opening confirmed and published successfully:', confirmationResponse)
       }
       
       console.log("Job published:", { jobData: jobFormData, rounds: selectedRounds })
@@ -263,9 +271,9 @@ export default function ATSInterface() {
       setSelectedOriginalTemplates([])
       setCurrentJobId(null)
     } catch (error) {
-      console.error('Failed to save job round templates:', error)
+      console.error('Failed to publish job:', error)
       // TODO: Show error notification to user
-      // For now, continue with the flow even if rounds saving fails
+      // For now, continue with the flow even if publishing fails
       setShowPublishConfirmation(false)
       setAppView("dashboard")
       setJobFormData({})

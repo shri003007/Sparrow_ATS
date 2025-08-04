@@ -4,6 +4,7 @@ export const API_CONFIG = {
     JOB_TEMPLATES: '/job-templates',
     JOB_OPENINGS: '/job-openings',
     RECRUITMENT_ROUNDS: '/recruitment-rounds',
-    JOB_ROUND_TEMPLATES: '/job-openings'
+    JOB_ROUND_TEMPLATES: '/job-openings',
+    JOB_CONFIRM: '/job-openings'
   }
 } as const

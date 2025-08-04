@@ -131,3 +131,12 @@ export interface JobRoundTemplateBulkResponse {
   job_round_templates: JobRoundTemplateResponse[]
   job_opening_id: string
 }
+
+// Job Confirmation API Types
+export interface JobConfirmationResponse {
+  message: string
+  job_opening: JobOpeningResponse
+  previous_status?: string
+  new_status?: string
+  published_at?: string
+}

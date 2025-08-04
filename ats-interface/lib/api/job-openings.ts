@@ -2,7 +2,8 @@ import { API_CONFIG } from '@/lib/config'
 import type { 
   JobOpeningCreateRequest, 
   JobOpeningUpdateRequest, 
-  JobOpeningApiResponse 
+  JobOpeningApiResponse,
+  JobConfirmationResponse
 } from '@/lib/job-types'
 
 export class JobOpeningsApi {
@@ -51,6 +52,33 @@ export class JobOpeningsApi {
       return result
     } catch (error) {
       console.error('Failed to update job opening:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Confirm and publish a job opening
+   */
+  static async confirmJobOpening(jobOpeningId: string): Promise<JobConfirmationResponse> {
+    try {
+      const url = `${this.baseUrl}${API_CONFIG.ENDPOINTS.JOB_CONFIRM}/${jobOpeningId}/confirm`
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (!response.ok) {
+        const errorData = await response.text()
+        throw new Error(`Failed to confirm job opening: ${response.status} - ${errorData}`)
+      }
+
+      const result = await response.json()
+      return result
+    } catch (error) {
+      console.error('Failed to confirm job opening:', error)
       throw error
     }
   }
