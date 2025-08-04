@@ -1,9 +1,10 @@
 "use client"
 
-import { useState } from "react"
-import { X, Search, Check, Clock, BarChart2, FileText } from "lucide-react"
+import { useState, useEffect } from "react"
+import { X, Search, Check, Clock, BarChart2, FileText, Loader2, AlertCircle } from "lucide-react"
 import type { HiringRound } from "@/lib/hiring-types"
-import { presetRounds } from "@/lib/hiring-types"
+import { RecruitmentRoundsApi } from "@/lib/api/recruitment-rounds"
+import { RecruitmentRoundsTransformer } from "@/lib/transformers/recruitment-rounds-transformer"
 
 interface HiringRoundsModalProps {
   isOpen: boolean
@@ -12,9 +13,42 @@ interface HiringRoundsModalProps {
 }
 
 export function HiringRoundsModal({ isOpen, onClose, onContinue }: HiringRoundsModalProps) {
+  const [rounds, setRounds] = useState<HiringRound[]>([])
   const [selectedRoundIds, setSelectedRoundIds] = useState<Set<string>>(new Set())
   const [searchQuery, setSearchQuery] = useState("")
   const [previewRound, setPreviewRound] = useState<HiringRound | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Fetch rounds when modal opens
+  useEffect(() => {
+    if (isOpen && rounds.length === 0) {
+      fetchRounds()
+    }
+  }, [isOpen, rounds.length])
+
+  const fetchRounds = async () => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const apiResponse = await RecruitmentRoundsApi.getRecruitmentRounds()
+      const transformedRounds = RecruitmentRoundsTransformer.transformApiListToUi(apiResponse.recruitment_rounds)
+      setRounds(transformedRounds)
+      
+      // Auto-select default rounds
+      const defaultRoundIds = new Set(
+        transformedRounds
+          .filter(round => round.isSelected)
+          .map(round => round.id)
+      )
+      setSelectedRoundIds(defaultRoundIds)
+    } catch (err) {
+      setError('Failed to load recruitment rounds. Please try again.')
+      console.error('Error fetching rounds:', err)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   if (!isOpen) return null
 
@@ -30,16 +64,16 @@ export function HiringRoundsModal({ isOpen, onClose, onContinue }: HiringRoundsM
     setSelectedRoundIds(newSelection)
 
     // Also set the clicked round as the preview
-    const roundToPreview = presetRounds.find((r) => r.id === roundId)
+    const roundToPreview = rounds.find((r) => r.id === roundId)
     setPreviewRound(roundToPreview || null)
   }
 
   const handleContinue = () => {
-    const selected = presetRounds.filter((round) => selectedRoundIds.has(round.id))
+    const selected = rounds.filter((round) => selectedRoundIds.has(round.id))
     onContinue(selected)
   }
 
-  const filteredRounds = presetRounds.filter((round) => round.name.toLowerCase().includes(searchQuery.toLowerCase()))
+  const filteredRounds = rounds.filter((round) => round.name.toLowerCase().includes(searchQuery.toLowerCase()))
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
@@ -88,37 +122,63 @@ export function HiringRoundsModal({ isOpen, onClose, onContinue }: HiringRoundsM
           </div>
 
           <div className="flex-1 overflow-y-auto -mr-3 pr-3 space-y-2">
-            {filteredRounds.map((round) => {
-              const isSelected = selectedRoundIds.has(round.id)
-              const isPreviewed = previewRound?.id === round.id
-              return (
-                <div
-                  key={round.id}
-                  onClick={() => handleToggleRound(round.id)}
-                  onMouseEnter={() => setPreviewRound(round)}
-                  className={`p-4 border rounded-lg cursor-pointer transition-all flex items-center gap-4 ${
-                    isPreviewed ? "border-blue-300 bg-blue-50" : "hover:border-blue-300 hover:bg-blue-50"
-                  }`}
-                  style={{ borderColor: isPreviewed ? "#93C5FD" : "#E5E7EB" }}
+            {isLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin" style={{ color: "#6366F1" }} />
+                <span className="ml-2" style={{ color: "#6B7280", fontSize: "14px" }}>
+                  Loading rounds...
+                </span>
+              </div>
+            ) : error ? (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <AlertCircle className="w-6 h-6 mb-2" style={{ color: "#EF4444" }} />
+                <p style={{ color: "#EF4444", fontSize: "14px" }}>{error}</p>
+                <button
+                  onClick={fetchRounds}
+                  className="mt-2 px-3 py-1 text-sm bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors"
                 >
+                  Retry
+                </button>
+              </div>
+            ) : filteredRounds.length === 0 ? (
+              <div className="text-center py-8">
+                <p style={{ color: "#6B7280", fontSize: "14px" }}>
+                  {searchQuery ? "No rounds match your search." : "No rounds available."}
+                </p>
+              </div>
+            ) : (
+              filteredRounds.map((round) => {
+                const isSelected = selectedRoundIds.has(round.id)
+                const isPreviewed = previewRound?.id === round.id
+                return (
                   <div
-                    className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${
-                      isSelected ? "bg-blue-600 border-blue-600" : "bg-white border-gray-300"
+                    key={round.id}
+                    onClick={() => handleToggleRound(round.id)}
+                    onMouseEnter={() => setPreviewRound(round)}
+                    className={`p-4 border rounded-lg cursor-pointer transition-all flex items-center gap-4 ${
+                      isPreviewed ? "border-blue-300 bg-blue-50" : "hover:border-blue-300 hover:bg-blue-50"
                     }`}
+                    style={{ borderColor: isPreviewed ? "#93C5FD" : "#E5E7EB" }}
                   >
-                    {isSelected && <Check className="w-3 h-3 text-white" />}
-                  </div>
-                  <div className="flex-1">
-                    <div className="font-medium" style={{ color: "#111827", fontSize: "14px", fontWeight: 500 }}>
-                      {round.name}
+                    <div
+                      className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${
+                        isSelected ? "bg-blue-600 border-blue-600" : "bg-white border-gray-300"
+                      }`}
+                    >
+                      {isSelected && <Check className="w-3 h-3 text-white" />}
                     </div>
-                    <p className="text-sm mt-1" style={{ color: "#6B7280", fontSize: "13px" }}>
-                      {round.description}
-                    </p>
+                    <div className="flex-1">
+                      <div className="font-medium" style={{ color: "#111827", fontSize: "14px", fontWeight: 500 }}>
+                        {round.name}
+                      </div>
+                      <p className="text-sm mt-1" style={{ color: "#6B7280", fontSize: "13px" }}>
+                        {round.description}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              )
-            })}
+                )
+              })
+            )}
           </div>
 
           <div className="mt-auto pt-6 flex items-center justify-end gap-3 border-t" style={{ borderColor: "#E5E7EB" }}>
@@ -160,17 +220,6 @@ export function HiringRoundsModal({ isOpen, onClose, onContinue }: HiringRoundsM
                   {previewRound.description}
                 </p>
 
-                <div className="flex items-center gap-4 mb-6">
-                  <div className="flex items-center gap-2 text-sm" style={{ color: "#6B7280" }}>
-                    <Clock className="w-4 h-4" />
-                    <span>{previewRound.duration}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm" style={{ color: "#6B7280" }}>
-                    <BarChart2 className="w-4 h-4" />
-                    <span>{previewRound.difficulty}</span>
-                  </div>
-                </div>
-
                 <h4
                   className="font-semibold mb-4 border-t pt-4"
                   style={{ color: "#111827", fontSize: "14px", fontWeight: 600, borderColor: "#E5E7EB" }}
@@ -179,31 +228,50 @@ export function HiringRoundsModal({ isOpen, onClose, onContinue }: HiringRoundsM
                 </h4>
 
                 <div className="space-y-4">
-                  {previewRound.competencies.map((comp) => (
-                    <div key={comp.id}>
-                      <div className="flex items-center justify-between">
-                        <div className="font-medium" style={{ color: "#374151", fontSize: "14px", fontWeight: 500 }}>
-                          {comp.name}
-                        </div>
-                        <span className="text-xs" style={{ color: "#6B7280" }}>
-                          {comp.questions.length} question{comp.questions.length !== 1 ? "s" : ""}
-                        </span>
+                  {previewRound.competencies.map((comp, index) => (
+                    <div key={`comp-${index}`}>
+                      <div className="font-medium mb-2" style={{ color: "#374151", fontSize: "14px", fontWeight: 500 }}>
+                        {comp.name}
                       </div>
-                      {comp.questions.length > 0 && (
-                        <ul className="mt-2 space-y-2 pl-1">
-                          {comp.questions.map((question) => (
-                            <li key={question.id} className="flex items-start">
-                              <span className="mr-2 mt-1 text-gray-400">•</span>
-                              <span className="text-sm" style={{ color: "#6B7280", fontSize: "13px", lineHeight: 1.5 }}>
-                                {question.text}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
+                      {comp.description && (
+                        <p className="text-sm mb-3" style={{ color: "#6B7280", fontSize: "13px", lineHeight: 1.5 }}>
+                          {comp.description}
+                        </p>
+                      )}
+                      {comp.rubricScorecard && Object.keys(comp.rubricScorecard).length > 0 && (
+                        <div className="mt-2">
+                          <div className="text-xs font-medium mb-2" style={{ color: "#6B7280" }}>
+                            Evaluation Questions:
+                          </div>
+                          <ul className="space-y-1 pl-1">
+                            {Object.entries(comp.rubricScorecard).map(([key, question]) => (
+                              <li key={key} className="flex items-start">
+                                <span className="mr-2 mt-1 text-gray-400">•</span>
+                                <span className="text-sm" style={{ color: "#6B7280", fontSize: "13px", lineHeight: 1.5 }}>
+                                  {question}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
                       )}
                     </div>
                   ))}
                 </div>
+
+                {previewRound.evaluationCriteria && (
+                  <div className="border-t pt-4 mt-6" style={{ borderColor: "#E5E7EB" }}>
+                    <h4
+                      className="font-semibold mb-3"
+                      style={{ color: "#111827", fontSize: "14px", fontWeight: 600 }}
+                    >
+                      Evaluation Criteria
+                    </h4>
+                    <p className="text-sm" style={{ color: "#6B7280", fontSize: "13px", lineHeight: 1.6 }}>
+                      {previewRound.evaluationCriteria}
+                    </p>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="flex items-center justify-center h-full text-center">

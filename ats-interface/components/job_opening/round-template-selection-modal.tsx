@@ -1,9 +1,10 @@
 "use client"
 
-import { useState } from "react"
-import { X, Search, FileText, Clock, BarChart2 } from "lucide-react"
+import { useState, useEffect } from "react"
+import { X, Search, FileText, Loader2, AlertCircle } from "lucide-react"
 import type { HiringRound } from "@/lib/hiring-types"
-import { presetRounds } from "@/lib/hiring-types"
+import { RecruitmentRoundsApi } from "@/lib/api/recruitment-rounds"
+import { RecruitmentRoundsTransformer } from "@/lib/transformers/recruitment-rounds-transformer"
 
 interface RoundTemplateSelectionModalProps {
   isOpen: boolean
@@ -12,14 +13,39 @@ interface RoundTemplateSelectionModalProps {
 }
 
 export function RoundTemplateSelectionModal({ isOpen, onClose, onSelect }: RoundTemplateSelectionModalProps) {
+  const [templates, setTemplates] = useState<HiringRound[]>([])
   const [hoveredTemplate, setHoveredTemplate] = useState<HiringRound | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Fetch templates when modal opens
+  useEffect(() => {
+    if (isOpen && templates.length === 0) {
+      fetchTemplates()
+    }
+  }, [isOpen, templates.length])
+
+  const fetchTemplates = async () => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const apiResponse = await RecruitmentRoundsApi.getRecruitmentRounds()
+      const transformedTemplates = RecruitmentRoundsTransformer.transformApiListToUi(apiResponse.recruitment_rounds)
+      setTemplates(transformedTemplates)
+    } catch (err) {
+      setError('Failed to load round templates. Please try again.')
+      console.error('Error fetching templates:', err)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   if (!isOpen) return null
 
   const fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
 
-  const filteredTemplates = presetRounds.filter((template) =>
+  const filteredTemplates = templates.filter((template) =>
     template.name.toLowerCase().includes(searchQuery.toLowerCase()),
   )
 
@@ -67,22 +93,48 @@ export function RoundTemplateSelectionModal({ isOpen, onClose, onSelect }: Round
           </div>
 
           <div className="flex-1 overflow-y-auto -mr-3 pr-3 space-y-2">
-            {filteredTemplates.map((template) => (
-              <div
-                key={template.id}
-                onClick={() => onSelect(template)}
-                onMouseEnter={() => setHoveredTemplate(template)}
-                className="p-4 border rounded-lg cursor-pointer hover:border-blue-300 hover:bg-blue-50 transition-all"
-                style={{ borderColor: "#E5E7EB" }}
-              >
-                <div className="font-medium" style={{ color: "#111827", fontSize: "14px", fontWeight: 500 }}>
-                  {template.name}
-                </div>
-                <p className="text-sm mt-1" style={{ color: "#6B7280", fontSize: "13px" }}>
-                  {template.description}
+            {isLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin" style={{ color: "#6366F1" }} />
+                <span className="ml-2" style={{ color: "#6B7280", fontSize: "14px" }}>
+                  Loading templates...
+                </span>
+              </div>
+            ) : error ? (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <AlertCircle className="w-6 h-6 mb-2" style={{ color: "#EF4444" }} />
+                <p style={{ color: "#EF4444", fontSize: "14px" }}>{error}</p>
+                <button
+                  onClick={fetchTemplates}
+                  className="mt-2 px-3 py-1 text-sm bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : filteredTemplates.length === 0 ? (
+              <div className="text-center py-8">
+                <p style={{ color: "#6B7280", fontSize: "14px" }}>
+                  {searchQuery ? "No templates match your search." : "No templates available."}
                 </p>
               </div>
-            ))}
+            ) : (
+              filteredTemplates.map((template) => (
+                <div
+                  key={template.id}
+                  onClick={() => onSelect(template)}
+                  onMouseEnter={() => setHoveredTemplate(template)}
+                  className="p-4 border rounded-lg cursor-pointer hover:border-blue-300 hover:bg-blue-50 transition-all"
+                  style={{ borderColor: "#E5E7EB" }}
+                >
+                  <div className="font-medium" style={{ color: "#111827", fontSize: "14px", fontWeight: 500 }}>
+                    {template.name}
+                  </div>
+                  <p className="text-sm mt-1" style={{ color: "#6B7280", fontSize: "13px" }}>
+                    {template.description}
+                  </p>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
@@ -98,17 +150,6 @@ export function RoundTemplateSelectionModal({ isOpen, onClose, onSelect }: Round
                   {hoveredTemplate.description}
                 </p>
 
-                <div className="flex items-center gap-4 mb-6">
-                  <div className="flex items-center gap-2 text-sm" style={{ color: "#6B7280" }}>
-                    <Clock className="w-4 h-4" />
-                    <span>{hoveredTemplate.duration}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm" style={{ color: "#6B7280" }}>
-                    <BarChart2 className="w-4 h-4" />
-                    <span>{hoveredTemplate.difficulty}</span>
-                  </div>
-                </div>
-
                 <h4
                   className="font-semibold mb-4 border-t pt-4"
                   style={{ color: "#111827", fontSize: "14px", fontWeight: 600, borderColor: "#E5E7EB" }}
@@ -117,31 +158,50 @@ export function RoundTemplateSelectionModal({ isOpen, onClose, onSelect }: Round
                 </h4>
 
                 <div className="space-y-4">
-                  {hoveredTemplate.competencies.map((comp) => (
-                    <div key={comp.id}>
-                      <div className="flex items-center justify-between">
-                        <div className="font-medium" style={{ color: "#374151", fontSize: "14px", fontWeight: 500 }}>
-                          {comp.name}
-                        </div>
-                        <span className="text-xs" style={{ color: "#6B7280" }}>
-                          {comp.questions.length} question{comp.questions.length !== 1 ? "s" : ""}
-                        </span>
+                  {hoveredTemplate.competencies.map((comp, index) => (
+                    <div key={`comp-${index}`}>
+                      <div className="font-medium mb-2" style={{ color: "#374151", fontSize: "14px", fontWeight: 500 }}>
+                        {comp.name}
                       </div>
-                      {comp.questions.length > 0 && (
-                        <ul className="mt-2 space-y-2 pl-1">
-                          {comp.questions.map((question) => (
-                            <li key={question.id} className="flex items-start">
-                              <span className="mr-2 mt-1 text-gray-400">•</span>
-                              <span className="text-sm" style={{ color: "#6B7280", fontSize: "13px", lineHeight: 1.5 }}>
-                                {question.text}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
+                      {comp.description && (
+                        <p className="text-sm mb-3" style={{ color: "#6B7280", fontSize: "13px", lineHeight: 1.5 }}>
+                          {comp.description}
+                        </p>
+                      )}
+                      {comp.rubricScorecard && Object.keys(comp.rubricScorecard).length > 0 && (
+                        <div className="mt-2">
+                          <div className="text-xs font-medium mb-2" style={{ color: "#6B7280" }}>
+                            Evaluation Questions:
+                          </div>
+                          <ul className="space-y-1 pl-1">
+                            {Object.entries(comp.rubricScorecard).map(([key, question]) => (
+                              <li key={key} className="flex items-start">
+                                <span className="mr-2 mt-1 text-gray-400">•</span>
+                                <span className="text-sm" style={{ color: "#6B7280", fontSize: "13px", lineHeight: 1.5 }}>
+                                  {question}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
                       )}
                     </div>
                   ))}
                 </div>
+
+                {hoveredTemplate.evaluationCriteria && (
+                  <div className="border-t pt-4 mt-6" style={{ borderColor: "#E5E7EB" }}>
+                    <h4
+                      className="font-semibold mb-3"
+                      style={{ color: "#111827", fontSize: "14px", fontWeight: 600 }}
+                    >
+                      Evaluation Criteria
+                    </h4>
+                    <p className="text-sm" style={{ color: "#6B7280", fontSize: "13px", lineHeight: 1.6 }}>
+                      {hoveredTemplate.evaluationCriteria}
+                    </p>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="flex items-center justify-center h-full text-center">
