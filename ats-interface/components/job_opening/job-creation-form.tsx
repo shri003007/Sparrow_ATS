@@ -12,9 +12,10 @@ interface JobCreationFormProps {
   onSubmit: (data: JobFormData) => void
   onBack?: () => void
   hasRoundsConfigured: boolean
+  isExistingJob?: boolean
 }
 
-export function JobCreationForm({ initialData, onSubmit, onBack, hasRoundsConfigured }: JobCreationFormProps) {
+export function JobCreationForm({ initialData, onSubmit, onBack, hasRoundsConfigured, isExistingJob = false }: JobCreationFormProps) {
   const [formData, setFormData] = useState<JobFormData>({
     title: initialData?.title || "",
     employmentType: initialData?.employmentType || "Full-time",
@@ -50,7 +51,7 @@ export function JobCreationForm({ initialData, onSubmit, onBack, hasRoundsConfig
     if (hasRoundsConfigured) {
       return isDirty ? "Update & View Process" : "Next"
     }
-    return "Save & Continue"
+    return isExistingJob && isDirty ? "Update & Continue" : "Save & Continue"
   }
 
   return (

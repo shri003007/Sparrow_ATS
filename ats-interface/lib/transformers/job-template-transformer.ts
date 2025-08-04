@@ -1,4 +1,4 @@
-import type { JobTemplateApiResponse, JobTemplate } from '@/lib/job-types'
+import type { JobTemplateApiResponse, JobTemplate, JobFormData } from '@/lib/job-types'
 
 export class JobTemplateTransformer {
   static transformApiToUi(apiTemplate: JobTemplateApiResponse): JobTemplate {
@@ -56,5 +56,64 @@ export class JobTemplateTransformer {
 
   static transformApiListToUi(apiTemplates: JobTemplateApiResponse[]): JobTemplate[] {
     return apiTemplates.map(template => this.transformApiToUi(template))
+  }
+
+  // Transform API template data to form data format
+  static transformApiToFormData(apiTemplate: JobTemplateApiResponse): Partial<JobFormData> {
+    // Format employment type (convert snake_case to readable format)
+    const employmentTypeMap: Record<string, string> = {
+      'full_time': 'Full-time',
+      'part_time': 'Part-time',
+      'contract': 'Contract',
+      'internship': 'Internship',
+      'freelance': 'Freelance'
+    }
+
+    // Map compensation type
+    const compensationTypeMap: Record<string, string> = {
+      'salary': 'Salary Range',
+      'hourly': 'Hourly Rate'
+    }
+
+    // Format compensation amount for form input
+    const formatCompensationForForm = (value: number, currency: string): string => {
+      if (currency === 'INR') {
+        return value.toLocaleString()
+      }
+      return value.toString()
+    }
+
+    return {
+      title: apiTemplate.title,
+      employmentType: employmentTypeMap[apiTemplate.employment_type] || 'Full-time',
+      minExperience: apiTemplate.minimum_experience,
+      compensationType: compensationTypeMap[apiTemplate.compensation_type] || 'Salary Range',
+      compensationAmount: formatCompensationForForm(apiTemplate.compensation_value, apiTemplate.compensation_currency),
+      currency: apiTemplate.compensation_currency,
+      description: apiTemplate.job_description
+    }
+  }
+
+  // Transform JobTemplate (UI format) to form data
+  static transformTemplateToFormData(template: JobTemplate): Partial<JobFormData> {
+    // Extract compensation value from the formatted display string
+    const extractCompensationValue = (compensationStr: string): string => {
+      // Handle formats like "₹15 LPA", "₹1,500,000", etc.
+      const match = compensationStr.match(/₹?(\d+(?:,\d+)*(?:\.\d+)?)/);
+      if (match) {
+        return match[1].replace(/,/g, '');
+      }
+      return '';
+    }
+
+    return {
+      title: template.title,
+      employmentType: template.employmentType,
+      minExperience: template.minExperience,
+      compensationType: 'Salary Range', // Default for templates
+      compensationAmount: extractCompensationValue(template.compensation),
+      currency: 'INR', // Default currency
+      description: template.description
+    }
   }
 }

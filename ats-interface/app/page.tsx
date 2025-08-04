@@ -12,6 +12,9 @@ import { AICreationModal } from "@/components/job_opening/ai-creation-modal"
 import { AILoadingModal } from "@/components/job_opening/ai-loading-modal"
 import { UploadModal } from "@/components/job_opening/upload-modal"
 import type { CreationMethod, JobTemplate, JobFormData } from "@/lib/job-types"
+import { JobTemplateTransformer } from "@/lib/transformers/job-template-transformer"
+import { JobOpeningsApi } from "@/lib/api/job-openings"
+import { JobOpeningTransformer } from "@/lib/transformers/job-opening-transformer"
 import type { HiringRound } from "@/lib/hiring-types"
 import { HiringRoundsModal } from "@/components/job_opening/hiring-rounds-modal"
 import { HiringProcessCanvas } from "@/components/job_opening/hiring-process-canvas"
@@ -84,6 +87,7 @@ export default function ATSInterface() {
   const [appView, setAppView] = useState<AppView>("dashboard")
   const [jobCreationView, setJobCreationView] = useState<JobCreationView>("form")
   const [jobFormData, setJobFormData] = useState<Partial<JobFormData>>({})
+  const [currentJobId, setCurrentJobId] = useState<string | null>(null)
 
   // Modal states
   const [showCreationModal, setShowCreationModal] = useState(false)
@@ -107,6 +111,7 @@ export default function ATSInterface() {
     switch (method) {
       case "scratch":
         setJobFormData({})
+        setCurrentJobId(null)
         setAppView("job-creation")
         setJobCreationView("form")
         break
@@ -124,15 +129,10 @@ export default function ATSInterface() {
 
   const handleTemplateSelect = (template: JobTemplate) => {
     setShowTemplateModal(false)
-    setJobFormData({
-      title: template.title,
-      employmentType: template.employmentType,
-      minExperience: template.minExperience,
-      compensationType: "Salary Range",
-      compensationAmount: "",
-      currency: "INR",
-      description: template.description,
-    })
+    // Use the transformer to properly populate all form fields from template
+    const formData = JobTemplateTransformer.transformTemplateToFormData(template)
+    setJobFormData(formData)
+    setCurrentJobId(null) // Reset job ID for new creation
     setAppView("job-creation")
     setJobCreationView("form")
   }
@@ -153,6 +153,7 @@ export default function ATSInterface() {
         description:
           "We are looking for a talented UI Designer with expertise in micro-interactions and prototyping to join our remote team...",
       })
+      setCurrentJobId(null)
       setAppView("job-creation")
       setJobCreationView("form")
     }, 3000)
@@ -169,6 +170,7 @@ export default function ATSInterface() {
       currency: "USD",
       description: "Parsed content from uploaded file...",
     })
+    setCurrentJobId(null)
     setAppView("job-creation")
     setJobCreationView("form")
   }
@@ -184,16 +186,41 @@ export default function ATSInterface() {
       currency: "USD",
       description: text,
     })
+    setCurrentJobId(null)
     setAppView("job-creation")
     setJobCreationView("form")
   }
 
-  const handleJobFormSubmit = (data: JobFormData) => {
-    setJobFormData(data)
-    if (selectedRounds.length > 0) {
-      setJobCreationView("canvas")
-    } else {
-      setShowHiringRoundsModal(true)
+  const handleJobFormSubmit = async (data: JobFormData) => {
+    try {
+      // Check if there are changes by comparing current data with initial data
+      const hasChanges = JSON.stringify(data) !== JSON.stringify(jobFormData)
+      
+      if (currentJobId && hasChanges) {
+        // Only update existing job if there are changes
+        const updateRequest = JobOpeningTransformer.transformFormToUpdateRequest(data)
+        const response = await JobOpeningsApi.updateJobOpening(currentJobId, updateRequest)
+        console.log('Job updated successfully:', response)
+      } else if (!currentJobId) {
+        // Create new job
+        // TODO: Get actual user ID from auth context
+        const mockUserId = "6693120e-31e2-4727-92c0-3606885e7e9e"
+        const createRequest = JobOpeningTransformer.transformFormToCreateRequest(data, mockUserId)
+        const response = await JobOpeningsApi.createJobOpening(createRequest)
+        console.log('Job created successfully:', response)
+        setCurrentJobId(response.job_opening.id)
+      }
+      // If currentJobId exists and no changes, skip API call
+      
+      setJobFormData(data)
+      if (selectedRounds.length > 0) {
+        setJobCreationView("canvas")
+      } else {
+        setShowHiringRoundsModal(true)
+      }
+    } catch (error) {
+      console.error('Failed to save job:', error)
+      // TODO: Show error notification to user
     }
   }
 
@@ -217,6 +244,7 @@ export default function ATSInterface() {
     setAppView("dashboard")
     setJobFormData({})
     setSelectedRounds([])
+    setCurrentJobId(null)
   }
 
   const renderJobCreationView = () => {
@@ -230,6 +258,7 @@ export default function ATSInterface() {
               onSubmit={handleJobFormSubmit}
               onBack={() => setAppView("dashboard")}
               hasRoundsConfigured={selectedRounds.length > 0}
+              isExistingJob={currentJobId !== null}
             />
           )}
           {jobCreationView === "canvas" && (
