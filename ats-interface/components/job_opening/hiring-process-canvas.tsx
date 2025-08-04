@@ -17,7 +17,7 @@ interface HiringProcessCanvasProps {
 }
 
 export function HiringProcessCanvas({ rounds, onUpdateRounds, onPublish, onBack, jobTitle }: HiringProcessCanvasProps) {
-  const [activeRoundId, setActiveRoundId] = useState<string>(rounds[0]?.id || "")
+  const [activeRoundId, setActiveRoundId] = useState<string | null>(rounds[0]?.id || null)
   const [draggedRoundId, setDraggedRoundId] = useState<string | null>(null)
   const [hoveredInsertIndex, setHoveredInsertIndex] = useState<number | null>(null)
   const [showTemplateModal, setShowTemplateModal] = useState(false)
@@ -37,7 +37,7 @@ export function HiringProcessCanvas({ rounds, onUpdateRounds, onPublish, onBack,
     } else if (rounds.length > 0 && !rounds.find((r) => r.id === activeRoundId)) {
       setActiveRoundId(rounds[0].id)
     } else if (rounds.length === 0) {
-      setActiveRoundId("")
+      setActiveRoundId(null)
     }
   }, [rounds, activeRoundId])
 
@@ -80,9 +80,10 @@ export function HiringProcessCanvas({ rounds, onUpdateRounds, onPublish, onBack,
   }
 
   const handleAddBlankRound = (index: number) => {
+    const newRoundId = `custom-${Date.now()}`
     const newRound: HiringRound = {
-      id: `custom-${Date.now()}`,
-      name: "New Custom Round",
+      id: newRoundId,
+      name: "",
       type: "custom",
       isSelected: true,
       order: index,
@@ -93,6 +94,11 @@ export function HiringProcessCanvas({ rounds, onUpdateRounds, onPublish, onBack,
       evaluationCriteria: "Define the rubric for this custom round.",
     }
     addRound(newRound, index)
+    
+    // Auto-focus the round name field for immediate editing
+    setTimeout(() => {
+      setEditingId(`round-name-${newRoundId}`)
+    }, 100)
   }
 
   const handleAddRoundFromTemplate = (template: HiringRound) => {
@@ -121,9 +127,10 @@ export function HiringProcessCanvas({ rounds, onUpdateRounds, onPublish, onBack,
     setShowRoundAILoading(true)
 
     setTimeout(() => {
+      const newRoundId = `ai-${Date.now()}`
       const newRound: HiringRound = {
-        id: `ai-${Date.now()}`,
-        name: "AI Generated: Culture Fit",
+        id: newRoundId,
+        name: "",
         type: "custom",
         isSelected: true,
         order: insertIndex!,
@@ -162,10 +169,20 @@ export function HiringProcessCanvas({ rounds, onUpdateRounds, onPublish, onBack,
 
       setShowRoundAILoading(false)
       setInsertIndex(null)
+      
+      // Auto-focus the round name field for immediate editing
+      setTimeout(() => {
+        setEditingId(`round-name-${newRoundId}`)
+      }, 100)
     }, 2500)
   }
 
   const handleUpdateRoundField = (roundId: string, field: keyof HiringRound, value: string) => {
+    // Validate round name - don't allow empty names
+    if (field === 'name' && !value.trim()) {
+      return // Don't update if name is empty
+    }
+    
     const updatedRounds = rounds.map((r) => (r.id === roundId ? { ...r, [field]: value } : r))
     onUpdateRounds(updatedRounds)
   }
@@ -252,21 +269,30 @@ export function HiringProcessCanvas({ rounds, onUpdateRounds, onPublish, onBack,
   }
 
   const cleanupEmptyItems = () => {
-    const updatedRounds = rounds.map((r) => {
-      if (r.id === activeRoundId) {
-        return {
-          ...r,
-          competencies: r.competencies
-            .filter((c) => c.name.trim())
-            .map((c) => ({
-              ...c,
-              questions: c.questions.filter((q) => q.text.trim()),
-            })),
+    // Filter out rounds with empty names first
+    const cleanedRounds = rounds
+      .filter((r) => r.name.trim()) // Remove rounds with empty names
+      .map((r) => {
+        if (r.id === activeRoundId) {
+          return {
+            ...r,
+            competencies: r.competencies
+              .filter((c) => c.name.trim())
+              .map((c) => ({
+                ...c,
+                questions: c.questions.filter((q) => q.text.trim()),
+              })),
+          }
         }
-      }
-      return r
-    })
-    onUpdateRounds(updatedRounds)
+        return r
+      })
+    
+    // If the active round was deleted, reset activeRoundId
+    if (activeRoundId && !cleanedRounds.find(r => r.id === activeRoundId)) {
+      setActiveRoundId(cleanedRounds.length > 0 ? cleanedRounds[0].id : null)
+    }
+    
+    onUpdateRounds(cleanedRounds)
   }
 
   useEffect(() => {
@@ -486,6 +512,8 @@ export function HiringProcessCanvas({ rounds, onUpdateRounds, onPublish, onBack,
                     setEditingId={setEditingId}
                     className="text-xl font-semibold text-gray-800 mb-2"
                     inputClassName="text-xl font-semibold"
+                    placeholder="Enter round name..."
+                    onDelete={() => handleDeleteRound(activeRound.id)}
                   />
                   <p className="text-sm text-gray-500">{activeRound.description}</p>
                 </div>
