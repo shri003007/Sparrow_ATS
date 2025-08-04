@@ -32,8 +32,7 @@ export function Sidebar({ currentRole }: SidebarProps) {
             </div>
             <div className="text-left">
               <div className="flex items-center gap-2">
-                <span className="font-medium text-sm">HighValueTeam</span>
-                <span className="bg-orange-500 text-white text-xs px-2 py-0.5 rounded-full font-medium">PRO</span>
+                <span className="font-medium text-sm">SparrowATS</span>
               </div>
             </div>
           </div>

@@ -41,8 +41,7 @@ export function Sidebar({
             <span className="text-white text-sm font-bold">*</span>
           </div>
           <div className="flex items-center gap-1">
-            <span className="text-blue-600 text-sm font-medium">PRO</span>
-            <span className="text-gray-900 text-sm font-medium">HighValueTeam</span>
+            <span className="text-gray-900 text-sm font-medium">SparrowATS</span>
           </div>
           <div className="ml-auto">
             <div className="w-8 h-8 bg-gray-300 rounded-full"></div>

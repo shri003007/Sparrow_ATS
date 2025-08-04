@@ -54,13 +54,7 @@ export function AppSidebar({ onCreateJob }: AppSidebarProps) {
                   fontFamily,
                 }}
               >
-                HighValueTeam
-              </span>
-              <span
-                className="px-2 py-0.5 rounded-full text-white text-xs font-medium"
-                style={{ backgroundColor: "#FF8D4D", fontFamily }}
-              >
-                PRO
+                SparrowATS
               </span>
             </div>
           </div>
