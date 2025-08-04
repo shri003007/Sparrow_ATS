@@ -89,3 +89,45 @@ export interface JobOpeningApiResponse {
 
 export type CreationMethod = "scratch" | "template" | "ai" | "upload"
 export type JobCreationStep = "method" | "form" | "template" | "ai-input" | "ai-loading" | "upload"
+
+// Job Round Templates API Types
+export interface JobRoundTemplateCompetency {
+  name: string
+  description: string
+  rubric_scorecard: Record<string, string>
+}
+
+export interface JobRoundTemplateRequest {
+  round_id?: string | null
+  round_name: string
+  round_type: string
+  order_index: number
+  is_active?: boolean
+  is_required?: boolean
+  custom_evaluation_criteria?: string
+  custom_competencies?: JobRoundTemplateCompetency[]
+}
+
+export interface JobRoundTemplateBulkRequest {
+  templates: JobRoundTemplateRequest[]
+}
+
+export interface JobRoundTemplateResponse {
+  id: string
+  job_opening_id: string
+  round_id: string | null
+  round_name: string
+  round_type: string
+  order_index: number
+  is_active: boolean
+  is_required: boolean
+  custom_evaluation_criteria: string | null
+  custom_competencies: JobRoundTemplateCompetency[] | null
+  created_at: string
+}
+
+export interface JobRoundTemplateBulkResponse {
+  message: string
+  job_round_templates: JobRoundTemplateResponse[]
+  job_opening_id: string
+}

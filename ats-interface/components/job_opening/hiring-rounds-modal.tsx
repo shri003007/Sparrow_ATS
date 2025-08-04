@@ -9,7 +9,7 @@ import { RecruitmentRoundsTransformer } from "@/lib/transformers/recruitment-rou
 interface HiringRoundsModalProps {
   isOpen: boolean
   onClose: () => void
-  onContinue: (selectedRounds: HiringRound[]) => void
+  onContinue: (selectedRounds: HiringRound[], originalTemplates: any[]) => void
 }
 
 export function HiringRoundsModal({ isOpen, onClose, onContinue }: HiringRoundsModalProps) {
@@ -19,6 +19,7 @@ export function HiringRoundsModal({ isOpen, onClose, onContinue }: HiringRoundsM
   const [previewRound, setPreviewRound] = useState<HiringRound | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [originalApiRounds, setOriginalApiRounds] = useState<any[]>([])
 
   // Fetch rounds when modal opens
   useEffect(() => {
@@ -34,6 +35,7 @@ export function HiringRoundsModal({ isOpen, onClose, onContinue }: HiringRoundsM
       const apiResponse = await RecruitmentRoundsApi.getRecruitmentRounds()
       const transformedRounds = RecruitmentRoundsTransformer.transformApiListToUi(apiResponse.recruitment_rounds)
       setRounds(transformedRounds)
+      setOriginalApiRounds(apiResponse.recruitment_rounds) // Store original API data
       
       // Auto-select default rounds
       const defaultRoundIds = new Set(
@@ -70,7 +72,10 @@ export function HiringRoundsModal({ isOpen, onClose, onContinue }: HiringRoundsM
 
   const handleContinue = () => {
     const selected = rounds.filter((round) => selectedRoundIds.has(round.id))
-    onContinue(selected)
+    const selectedOriginalTemplates = originalApiRounds.filter((apiRound) => 
+      selectedRoundIds.has(apiRound.id)
+    )
+    onContinue(selected, selectedOriginalTemplates)
   }
 
   const filteredRounds = rounds.filter((round) => round.name.toLowerCase().includes(searchQuery.toLowerCase()))

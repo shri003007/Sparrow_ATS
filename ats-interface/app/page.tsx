@@ -15,6 +15,8 @@ import type { CreationMethod, JobTemplate, JobFormData } from "@/lib/job-types"
 import { JobTemplateTransformer } from "@/lib/transformers/job-template-transformer"
 import { JobOpeningsApi } from "@/lib/api/job-openings"
 import { JobOpeningTransformer } from "@/lib/transformers/job-opening-transformer"
+import { JobRoundTemplatesApi } from "@/lib/api/job-round-templates"
+import { JobRoundTemplatesTransformer } from "@/lib/transformers/job-round-templates-transformer"
 import type { HiringRound } from "@/lib/hiring-types"
 import { HiringRoundsModal } from "@/components/job_opening/hiring-rounds-modal"
 import { HiringProcessCanvas } from "@/components/job_opening/hiring-process-canvas"
@@ -99,6 +101,8 @@ export default function ATSInterface() {
   const [showHiringRoundsModal, setShowHiringRoundsModal] = useState(false)
   const [selectedRounds, setSelectedRounds] = useState<HiringRound[]>([])
   const [showPublishConfirmation, setShowPublishConfirmation] = useState(false)
+  const [originalTemplateRounds, setOriginalTemplateRounds] = useState<any[]>([])
+  const [selectedOriginalTemplates, setSelectedOriginalTemplates] = useState<any[]>([])
 
   const handleCreateJobClick = () => {
     setShowCreationModal(true)
@@ -224,8 +228,9 @@ export default function ATSInterface() {
     }
   }
 
-  const handleRoundsContinue = (rounds: HiringRound[]) => {
+  const handleRoundsContinue = (rounds: HiringRound[], originalTemplates: any[]) => {
     setSelectedRounds(rounds)
+    setSelectedOriginalTemplates(originalTemplates)
     setShowHiringRoundsModal(false)
     setJobCreationView("canvas")
   }
@@ -238,13 +243,36 @@ export default function ATSInterface() {
     setShowPublishConfirmation(true)
   }
 
-  const handleConfirmPublish = () => {
-    console.log("Job published:", { jobData: jobFormData, rounds: selectedRounds })
-    setShowPublishConfirmation(false)
-    setAppView("dashboard")
-    setJobFormData({})
-    setSelectedRounds([])
-    setCurrentJobId(null)
+  const handleConfirmPublish = async () => {
+    try {
+      // Save rounds to job opening if we have a job ID and rounds
+      if (currentJobId && selectedRounds.length > 0) {
+        const roundTemplatesRequest = JobRoundTemplatesTransformer.transformRoundsWithTemplateContext(
+          selectedRounds, 
+          selectedOriginalTemplates
+        )
+        const response = await JobRoundTemplatesApi.createJobRoundTemplates(currentJobId, roundTemplatesRequest)
+        console.log('Job round templates created successfully:', response)
+      }
+      
+      console.log("Job published:", { jobData: jobFormData, rounds: selectedRounds })
+      setShowPublishConfirmation(false)
+      setAppView("dashboard")
+      setJobFormData({})
+      setSelectedRounds([])
+      setSelectedOriginalTemplates([])
+      setCurrentJobId(null)
+    } catch (error) {
+      console.error('Failed to save job round templates:', error)
+      // TODO: Show error notification to user
+      // For now, continue with the flow even if rounds saving fails
+      setShowPublishConfirmation(false)
+      setAppView("dashboard")
+      setJobFormData({})
+      setSelectedRounds([])
+      setSelectedOriginalTemplates([])
+      setCurrentJobId(null)
+    }
   }
 
   const renderJobCreationView = () => {
