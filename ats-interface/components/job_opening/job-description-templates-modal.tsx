@@ -1,15 +1,10 @@
 "use client"
 
-import { useState } from "react"
-import { X, Search } from "lucide-react"
-
-interface JobDescriptionTemplate {
-  id: string
-  title: string
-  summary: string
-  responsibilities: string[]
-  fullDescription: string
-}
+import { useState, useEffect } from "react"
+import { X, Search, Loader2, AlertCircle } from "lucide-react"
+import type { JobTemplateApiResponse } from "@/lib/job-types"
+import { JobTemplatesApi } from "@/lib/api/job-templates"
+import { MarkdownRenderer } from "@/components/ui/markdown-renderer"
 
 interface JobDescriptionTemplatesModalProps {
   isOpen: boolean
@@ -17,100 +12,54 @@ interface JobDescriptionTemplatesModalProps {
   onSelect: (description: string) => void
 }
 
-const mockJobDescriptions: JobDescriptionTemplate[] = [
-  {
-    id: "1",
-    title: "Product Manager",
-    summary:
-      "The Product Manager in the Internet and New Media industry is responsible for overseeing the development, marketing, promotion, and support of the company's products or services. The ideal candidate should have a strong technical understanding of software and hardware technologies, infrastructure, and cloud services, as well as experience in product management and agile methodologies.",
-    responsibilities: [
-      "Develop a comprehensive product vision, strategy, and roadmap",
-      "Define user personas and customer requirements",
-      "Conduct market research, competitive analysis, and customer feedback analysis",
-      "Collaborate with cross-functional teams",
-      "Develop and maintain product backlog, user stories, acceptance criteria, and documentation",
-      "Review and prioritize product features",
-      "Work with the engineering team to ensure product development meets quality standards",
-      "Work with the sales and marketing teams to develop product positioning, messaging, pricing, and go-to-market strategy",
-      "Collaborate with the customer support team to ensure product support and customer satisfaction",
-      "Continuously monitor product performance through key metrics and feedback",
-    ],
-    fullDescription:
-      "The Product Manager in the Internet and New Media industry is responsible for overseeing the development, marketing, promotion, and support of the company's products or services. The ideal candidate should have a strong technical understanding of software and hardware technologies, infrastructure, and cloud services, as well as experience in product management and agile methodologies.\n\nResponsibilities:\n• Develop a comprehensive product vision, strategy, and roadmap\n• Define user personas and customer requirements\n• Conduct market research, competitive analysis, and customer feedback analysis\n• Collaborate with cross-functional teams\n• Develop and maintain product backlog, user stories, acceptance criteria, and documentation\n• Review and prioritize product features\n• Work with the engineering team to ensure product development meets quality standards\n• Work with the sales and marketing teams to develop product positioning, messaging, pricing, and go-to-market strategy\n• Collaborate with the customer support team to ensure product support and customer satisfaction\n• Continuously monitor product performance through key metrics and feedback",
-  },
-  {
-    id: "2",
-    title: "Assistant Production Manager",
-    summary:
-      "Support the Production Manager in overseeing daily production operations, ensuring quality standards and efficiency targets are met.",
-    responsibilities: [
-      "Assist in production planning and scheduling",
-      "Monitor production processes and quality control",
-      "Coordinate with different departments",
-      "Maintain production records and reports",
-    ],
-    fullDescription:
-      "Support the Production Manager in overseeing daily production operations, ensuring quality standards and efficiency targets are met.\n\nResponsibilities:\n• Assist in production planning and scheduling\n• Monitor production processes and quality control\n• Coordinate with different departments\n• Maintain production records and reports",
-  },
-  {
-    id: "3",
-    title: "Assistant Product Manager",
-    summary:
-      "Support the Product Manager in product development lifecycle, market research, and cross-functional collaboration.",
-    responsibilities: [
-      "Assist in product roadmap development",
-      "Conduct market and competitive analysis",
-      "Support user research initiatives",
-      "Collaborate with engineering and design teams",
-    ],
-    fullDescription:
-      "Support the Product Manager in product development lifecycle, market research, and cross-functional collaboration.\n\nResponsibilities:\n• Assist in product roadmap development\n• Conduct market and competitive analysis\n• Support user research initiatives\n• Collaborate with engineering and design teams",
-  },
-  {
-    id: "4",
-    title: "Associate Product Manager",
-    summary:
-      "Entry-level product management role focused on learning product strategy, user research, and cross-functional collaboration.",
-    responsibilities: [
-      "Support product discovery and research",
-      "Assist in feature specification and documentation",
-      "Participate in agile development processes",
-      "Analyze product metrics and user feedback",
-    ],
-    fullDescription:
-      "Entry-level product management role focused on learning product strategy, user research, and cross-functional collaboration.\n\nResponsibilities:\n• Support product discovery and research\n• Assist in feature specification and documentation\n• Participate in agile development processes\n• Analyze product metrics and user feedback",
-  },
-  {
-    id: "5",
-    title: "Senior Product Manager",
-    summary:
-      "Lead product strategy and execution for complex products, mentor junior team members, and drive cross-functional initiatives.",
-    responsibilities: [
-      "Define and execute comprehensive product strategy",
-      "Lead cross-functional product teams",
-      "Mentor junior product managers",
-      "Drive product innovation and market expansion",
-    ],
-    fullDescription:
-      "Lead product strategy and execution for complex products, mentor junior team members, and drive cross-functional initiatives.\n\nResponsibilities:\n• Define and execute comprehensive product strategy\n• Lead cross-functional product teams\n• Mentor junior product managers\n• Drive product innovation and market expansion",
-  },
-]
+// Removed mock data - now using API data
 
 export function JobDescriptionTemplatesModal({ isOpen, onClose, onSelect }: JobDescriptionTemplatesModalProps) {
-  const [selectedTemplate, setSelectedTemplate] = useState<JobDescriptionTemplate | null>(mockJobDescriptions[0])
+  const [templates, setTemplates] = useState<JobTemplateApiResponse[]>([])
+  const [selectedTemplate, setSelectedTemplate] = useState<JobTemplateApiResponse | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Fetch templates when modal opens
+  useEffect(() => {
+    if (isOpen && templates.length === 0) {
+      fetchTemplates()
+    }
+  }, [isOpen, templates.length])
+
+  // Set first template as selected when templates are loaded
+  useEffect(() => {
+    if (templates.length > 0 && !selectedTemplate) {
+      setSelectedTemplate(templates[0])
+    }
+  }, [templates, selectedTemplate])
+
+  const fetchTemplates = async () => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const apiResponse = await JobTemplatesApi.getJobTemplates()
+      setTemplates(apiResponse.job_templates)
+    } catch (err) {
+      setError('Failed to load job templates. Please try again.')
+      console.error('Error fetching templates:', err)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   if (!isOpen) return null
 
   const fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
 
-  const filteredTemplates = mockJobDescriptions.filter((template) =>
+  const filteredTemplates = templates.filter((template) =>
     template.title.toLowerCase().includes(searchQuery.toLowerCase()),
   )
 
   const handleSelect = () => {
     if (selectedTemplate) {
-      onSelect(selectedTemplate.fullDescription)
+      onSelect(selectedTemplate.job_description)
     }
   }
 
@@ -170,39 +119,65 @@ export function JobDescriptionTemplatesModal({ isOpen, onClose, onSelect }: JobD
 
             {/* Template List */}
             <div className="space-y-2">
-              {filteredTemplates.map((template) => (
-                <button
-                  key={template.id}
-                  onClick={() => setSelectedTemplate(template)}
-                  className={`w-full text-left p-3 rounded-lg transition-colors flex items-center gap-3 ${
-                    selectedTemplate?.id === template.id ? "bg-blue-50 border-blue-200" : "hover:bg-gray-50"
-                  }`}
-                  style={{
-                    borderWidth: selectedTemplate?.id === template.id ? "1px" : "0",
-                    borderColor: selectedTemplate?.id === template.id ? "#DBEAFE" : "transparent",
-                  }}
-                >
-                  <div
-                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                      selectedTemplate?.id === template.id ? "border-blue-600" : "border-gray-300"
-                    }`}
+              {isLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin" style={{ color: "#6366F1" }} />
+                  <span className="ml-2" style={{ color: "#6B7280", fontSize: "14px" }}>
+                    Loading templates...
+                  </span>
+                </div>
+              ) : error ? (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <AlertCircle className="w-6 h-6 mb-2" style={{ color: "#EF4444" }} />
+                  <p style={{ color: "#EF4444", fontSize: "14px" }}>{error}</p>
+                  <button
+                    onClick={fetchTemplates}
+                    className="mt-2 px-3 py-1 text-sm bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors"
                   >
-                    {selectedTemplate?.id === template.id && (
-                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: "#2563EB" }} />
-                    )}
-                  </div>
-                  <div
-                    className="font-medium"
+                    Retry
+                  </button>
+                </div>
+              ) : filteredTemplates.length === 0 ? (
+                <div className="text-center py-8">
+                  <p style={{ color: "#6B7280", fontSize: "14px" }}>
+                    {searchQuery ? "No templates match your search." : "No templates available."}
+                  </p>
+                </div>
+              ) : (
+                filteredTemplates.map((template) => (
+                  <button
+                    key={template.id}
+                    onClick={() => setSelectedTemplate(template)}
+                    className={`w-full text-left p-3 rounded-lg transition-colors flex items-center gap-3 ${
+                      selectedTemplate?.id === template.id ? "bg-blue-50 border-blue-200" : "hover:bg-gray-50"
+                    }`}
                     style={{
-                      color: selectedTemplate?.id === template.id ? "#1D4ED8" : "#111827",
-                      fontSize: "14px",
-                      fontWeight: 500,
+                      borderWidth: selectedTemplate?.id === template.id ? "1px" : "0",
+                      borderColor: selectedTemplate?.id === template.id ? "#DBEAFE" : "transparent",
                     }}
                   >
-                    {template.title}
-                  </div>
-                </button>
-              ))}
+                    <div
+                      className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                        selectedTemplate?.id === template.id ? "border-blue-600" : "border-gray-300"
+                      }`}
+                    >
+                      {selectedTemplate?.id === template.id && (
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: "#2563EB" }} />
+                      )}
+                    </div>
+                    <div
+                      className="font-medium"
+                      style={{
+                        color: selectedTemplate?.id === template.id ? "#1D4ED8" : "#111827",
+                        fontSize: "14px",
+                        fontWeight: 500,
+                      }}
+                    >
+                      {template.title}
+                    </div>
+                  </button>
+                ))
+              )}
             </div>
           </div>
 
@@ -218,61 +193,16 @@ export function JobDescriptionTemplatesModal({ isOpen, onClose, onSelect }: JobD
                     fontWeight: 500,
                   }}
                 >
-                  Description
+                  Job Description
                 </h3>
 
-                <div className="space-y-6">
-                  <div>
-                    <h4
-                      className="font-medium mb-2"
-                      style={{
-                        color: "#111827",
-                        fontSize: "14px",
-                        fontWeight: 500,
-                      }}
-                    >
-                      Summary:
-                    </h4>
-                    <p
-                      style={{
-                        color: "#374151",
-                        fontSize: "14px",
-                        lineHeight: "1.6",
-                      }}
-                    >
-                      {selectedTemplate.summary}
-                    </p>
-                  </div>
-
-                  <div>
-                    <h4
-                      className="font-medium mb-3"
-                      style={{
-                        color: "#111827",
-                        fontSize: "14px",
-                        fontWeight: 500,
-                      }}
-                    >
-                      Responsibilities:
-                    </h4>
-                    <ul className="space-y-2">
-                      {selectedTemplate.responsibilities.map((responsibility, index) => (
-                        <li
-                          key={index}
-                          className="flex items-start"
-                          style={{
-                            color: "#374151",
-                            fontSize: "14px",
-                            lineHeight: "1.6",
-                          }}
-                        >
-                          <span className="mr-2 mt-1">•</span>
-                          <span>{responsibility}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
+                <MarkdownRenderer 
+                  content={selectedTemplate.job_description}
+                  style={{
+                    maxHeight: "500px",
+                    overflowY: "auto"
+                  }}
+                />
               </>
             )}
           </div>
