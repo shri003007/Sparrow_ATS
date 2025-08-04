@@ -380,7 +380,7 @@ export function HiringProcessCanvas({ rounds, onUpdateRounds, onPublish, onBack,
         <div className="grid grid-cols-12 gap-8">
           {/* Left Pane - Rounds */}
           <div className="col-span-5">
-            <div className="space-y-1">
+            <div className="space-y-1 h-[calc(100vh-280px)] overflow-y-auto pr-2">
               {rounds.map((round, index) => (
                 <div
                   key={round.id}
@@ -474,7 +474,8 @@ export function HiringProcessCanvas({ rounds, onUpdateRounds, onPublish, onBack,
             }}
           >
             {activeRound ? (
-              <div className="bg-white p-6 rounded-lg border border-gray-200 space-y-6">
+              <div className="bg-white rounded-lg border border-gray-200 h-[calc(100vh-280px)] flex flex-col">
+                <div className="p-6 overflow-y-auto flex-1 space-y-6">
                 {/* Round Header */}
                 <div>
                   <EditableField
@@ -590,9 +591,10 @@ export function HiringProcessCanvas({ rounds, onUpdateRounds, onPublish, onBack,
                     style={{ borderColor: "#E5E7EB" }}
                   />
                 </div>
+                </div>
               </div>
             ) : (
-              <div className="flex items-center justify-center h-full text-center bg-white rounded-lg border border-gray-200">
+              <div className="flex items-center justify-center h-[calc(100vh-280px)] text-center bg-white rounded-lg border border-gray-200">
                 <div className="text-gray-400">
                   <p>Select a round to configure its details</p>
                 </div>
