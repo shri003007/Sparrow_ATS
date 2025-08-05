@@ -17,6 +17,8 @@ import { JobOpeningsApi } from "@/lib/api/job-openings"
 import { JobOpeningTransformer } from "@/lib/transformers/job-opening-transformer"
 import { JobRoundTemplatesApi } from "@/lib/api/job-round-templates"
 import { JobRoundTemplatesTransformer } from "@/lib/transformers/job-round-templates-transformer"
+import { AIJobGenerationApi } from "@/lib/api/ai-job-generation"
+import { AIJobTransformer } from "@/lib/transformers/ai-job-transformer"
 import type { HiringRound } from "@/lib/hiring-types"
 import { HiringRoundsModal } from "@/components/job_opening/hiring-rounds-modal"
 import { HiringProcessCanvas } from "@/components/job_opening/hiring-process-canvas"
@@ -141,26 +143,43 @@ export default function ATSInterface() {
     setJobCreationView("form")
   }
 
-  const handleAIGenerate = (prompt: string) => {
+  const handleAIGenerate = async (prompt: string) => {
     setShowAIModal(false)
     setShowAILoading(true)
 
-    setTimeout(() => {
-      setShowAILoading(false)
-      setJobFormData({
-        title: "UI Designer",
-        employmentType: "Part-time",
-        minExperience: "3 years",
-        compensationType: "Hourly Rate",
-        compensationAmount: "100",
-        currency: "USD",
-        description:
-          "We are looking for a talented UI Designer with expertise in micro-interactions and prototyping to join our remote team...",
+    try {
+      // TODO: Get actual user ID from auth context
+      const mockUserId = "6693120e-31e2-4727-92c0-3606885e7e9e"
+      
+      const response = await AIJobGenerationApi.generateJobDescription({
+        user_input: prompt,
+        created_by: mockUserId
       })
-      setCurrentJobId(null)
-      setAppView("job-creation")
-      setJobCreationView("form")
-    }, 3000)
+
+      if (response.success && response.is_valid) {
+        // Success case: AI generated valid job description
+        const formData = AIJobTransformer.transformToFormData(response.job_template)
+        setJobFormData(formData)
+        setCurrentJobId(null)
+        setAppView("job-creation")
+        setJobCreationView("form")
+        console.log('AI job generation successful:', response.generation_info)
+      } else {
+        // Error case: Invalid/vague input or AI couldn't generate content
+        const errorMessage = response.reason || response.error || 'AI could not generate a job description'
+        console.warn('AI generation failed - user input issue:', errorMessage)
+        
+        // TODO: Show user-friendly error message in UI
+        // For now, show in console for debugging
+        alert(`AI Generation Failed: ${errorMessage}`)
+      }
+    } catch (error) {
+      // Network or other technical errors
+      console.error('Failed to generate job with AI (network/technical error):', error)
+      alert('AI Generation Failed: Technical error occurred. Please try again.')
+    } finally {
+      setShowAILoading(false)
+    }
   }
 
   const handleFileUpload = (file: File) => {

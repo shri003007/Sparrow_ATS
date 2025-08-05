@@ -140,3 +140,51 @@ export interface JobConfirmationResponse {
   new_status?: string
   published_at?: string
 }
+
+// AI Job Generation API Types
+export interface AIJobGenerationRequest {
+  user_input: string
+  created_by: string
+}
+
+export interface AIJobGenerationInfo {
+  model_used: string
+  input_tokens: number
+  output_tokens: number
+  reason: string
+}
+
+export interface AIGeneratedJobTemplate {
+  success: boolean
+  is_valid: boolean
+  title: string
+  job_description: string
+  created_by: string
+  created_at: string
+  updated_at: string
+  employment_type: string
+  minimum_experience: string
+  compensation_type: string
+  compensation_value: number
+  compensation_currency: string
+}
+
+// Success response type
+export interface AIJobGenerationSuccessResponse {
+  success: true
+  is_valid: true
+  job_template: AIGeneratedJobTemplate
+  message: string
+  generation_info: AIJobGenerationInfo
+}
+
+// Error response type
+export interface AIJobGenerationErrorResponse {
+  success: false
+  is_valid: false
+  error: string
+  reason: string
+}
+
+// Union type for all possible responses
+export type AIJobGenerationResponse = AIJobGenerationSuccessResponse | AIJobGenerationErrorResponse
