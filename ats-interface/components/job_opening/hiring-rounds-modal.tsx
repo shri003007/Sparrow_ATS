@@ -88,7 +88,7 @@ export function HiringRoundsModal({ isOpen, onClose, onContinue }: HiringRoundsM
         onClick={(e) => e.stopPropagation()}
       >
         {/* Left Panel - Rounds List & Actions */}
-        <div className="w-1/2 border-r p-6 flex flex-col" style={{ borderColor: "#E5E7EB" }}>
+        <div className="w-1/2 border-r p-6 flex flex-col bg-gray-50" style={{ borderColor: "#E5E7EB" }}>
           <div className="flex items-center justify-between mb-2">
             <h2
               className="text-lg font-semibold"
@@ -118,11 +118,11 @@ export function HiringRoundsModal({ isOpen, onClose, onContinue }: HiringRoundsM
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search rounds..."
-              className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full pl-10 pr-4 py-2 rounded-lg"
               style={{
-                borderColor: "#E5E7EB",
                 fontSize: "14px",
               }}
+              autoFocus={true}
             />
           </div>
 
@@ -173,8 +173,16 @@ export function HiringRoundsModal({ isOpen, onClose, onContinue }: HiringRoundsM
                       {isSelected && <Check className="w-3 h-3 text-white" />}
                     </div>
                     <div className="flex-1">
-                      <div className="font-medium" style={{ color: "#111827", fontSize: "14px", fontWeight: 500 }}>
-                        {round.name}
+                      <div className="flex items-center gap-2">
+                        <div className="font-medium" style={{ color: "#111827", fontSize: "14px", fontWeight: 500 }}>
+                          {round.name}
+                        </div>
+                        {round.type.toLowerCase() === 'interview' && round.competencies.length === 0 && (
+                          <div className="flex items-center gap-1 px-1.5 py-0.5 bg-red-50 border border-red-200 rounded text-xs">
+                            <AlertCircle className="w-2.5 h-2.5 text-red-500" />
+                            <span className="text-red-600 text-xs">Empty</span>
+                          </div>
+                        )}
                       </div>
                       <p className="text-sm mt-1" style={{ color: "#6B7280", fontSize: "13px" }}>
                         {round.description}
@@ -214,13 +222,21 @@ export function HiringRoundsModal({ isOpen, onClose, onContinue }: HiringRoundsM
         </div>
 
         {/* Right Panel - Round Preview */}
-        <div className="w-1/2 p-6 bg-gray-50">
+        <div className="w-1/2 p-6 bg-white">
           <div className="h-full overflow-y-auto">
             {previewRound ? (
               <div className="animate-fade-in">
-                <h3 className="font-semibold mb-2" style={{ color: "#111827", fontSize: "16px", fontWeight: 600 }}>
-                  {previewRound.name}
-                </h3>
+                <div className="flex items-center gap-2 mb-2">
+                  <h3 className="font-semibold" style={{ color: "#111827", fontSize: "16px", fontWeight: 600 }}>
+                    {previewRound.name}
+                  </h3>
+                  {previewRound.type.toLowerCase() === 'interview' && previewRound.competencies.length === 0 && (
+                    <div className="flex items-center gap-1 px-2 py-1 bg-red-50 border border-red-200 rounded text-xs">
+                      <AlertCircle className="w-3 h-3 text-red-500" />
+                      <span className="text-red-600">Needs competencies</span>
+                    </div>
+                  )}
+                </div>
                 <p className="text-sm mb-6" style={{ color: "#6B7280", fontSize: "14px", lineHeight: 1.6 }}>
                   {previewRound.description}
                 </p>

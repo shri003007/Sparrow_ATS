@@ -2,11 +2,12 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import { GripVertical, Trash2, Plus, Edit2, Check, ArrowLeft, Sparkles, ChevronDown } from "lucide-react"
+import { GripVertical, Trash2, Plus, Edit2, Check, ArrowLeft, Sparkles, ChevronDown, Info, Loader2, AlertTriangle } from "lucide-react"
 import type { HiringRound, Competency, Question } from "@/lib/hiring-types"
 import { RoundTemplateSelectionModal } from "./round-template-selection-modal"
 import { RoundAICreationModal } from "./round-ai-creation-modal"
 import { RoundAILoadingModal } from "./round-ai-loading-modal"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 interface HiringProcessCanvasProps {
   rounds: HiringRound[]
@@ -14,9 +15,10 @@ interface HiringProcessCanvasProps {
   onPublish: () => void
   onBack: () => void
   jobTitle: string
+  isPublishing?: boolean
 }
 
-export function HiringProcessCanvas({ rounds, onUpdateRounds, onPublish, onBack, jobTitle }: HiringProcessCanvasProps) {
+export function HiringProcessCanvas({ rounds, onUpdateRounds, onPublish, onBack, jobTitle, isPublishing = false }: HiringProcessCanvasProps) {
   const [activeRoundId, setActiveRoundId] = useState<string | null>(rounds[0]?.id || null)
   const [draggedRoundId, setDraggedRoundId] = useState<string | null>(null)
   const [hoveredInsertIndex, setHoveredInsertIndex] = useState<number | null>(null)
@@ -29,6 +31,48 @@ export function HiringProcessCanvas({ rounds, onUpdateRounds, onPublish, onBack,
   const fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
 
   const activeRound = rounds.find((round) => round.id === activeRoundId)
+
+  // Validation functions
+  const validateRounds = () => {
+    const errors: string[] = []
+    console.log(rounds.map((round) => round.type))
+    rounds.forEach((round, index) => {
+      // Only validate interview rounds - screening rounds can be empty
+      const roundType = round.type?.toLowerCase() || 'interview' // Default to interview if type is missing
+      if (roundType === 'interview') {
+        if (round.competencies.length === 0) {
+          errors.push(`Round ${index + 1} (${round.name}) must have at least one competency`)
+        } else {
+          round.competencies.forEach((competency, compIndex) => {
+            if (competency.questions.length === 0) {
+              errors.push(`Round ${index + 1} (${round.name}) - Competency ${compIndex + 1} (${competency.name}) must have at least one question`)
+            }
+          })
+        }
+      }
+    })
+    
+    return errors
+  }
+
+  // Check if a specific round is invalid
+  const isRoundInvalid = (round: HiringRound) => {
+    // Only validate interview rounds (including custom rounds which are now interview type)
+    const roundType = round.type?.toLowerCase() || 'interview' // Default to interview if type is missing
+    if (roundType !== 'interview') {
+      return false
+    }
+    
+    if (round.competencies.length === 0) {
+      return true
+    }
+    
+    return round.competencies.some(competency => competency.questions.length === 0)
+  }
+
+  const canPublish = () => {
+    return validateRounds().length === 0
+  }
 
   // Effect to ensure a valid round is always selected if the list changes
   useEffect(() => {
@@ -84,7 +128,7 @@ export function HiringProcessCanvas({ rounds, onUpdateRounds, onPublish, onBack,
     const newRound: HiringRound = {
       id: newRoundId,
       name: "",
-      type: "custom",
+      type: "interview", // Changed from "custom" to "interview" for proper validation
       isSelected: true,
       order: index,
       competencies: [],
@@ -131,7 +175,7 @@ export function HiringProcessCanvas({ rounds, onUpdateRounds, onPublish, onBack,
       const newRound: HiringRound = {
         id: newRoundId,
         name: "",
-        type: "custom",
+        type: "interview", // Changed from "custom" to "interview" for proper validation
         isSelected: true,
         order: insertIndex!,
         description: `An AI-generated round to assess candidate alignment with company culture for the ${jobTitle} role.`,
@@ -348,17 +392,49 @@ export function HiringProcessCanvas({ rounds, onUpdateRounds, onPublish, onBack,
               <ArrowLeft className="w-4 h-4" />
               Back
             </button>
-            <button
-              onClick={onPublish}
-              className="px-6 py-2 rounded-lg text-white font-medium hover:bg-blue-700 transition-colors"
-              style={{
-                backgroundColor: "#6366F1",
-                fontSize: "14px",
-                fontWeight: 500,
-              }}
-            >
-              Publish Job
-            </button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="inline-block">
+                    <button
+                      onClick={() => {
+                        const errors = validateRounds()
+                        if (errors.length > 0) {
+                          return;
+                        }
+                        onPublish()
+                      }}
+                      disabled={isPublishing || validateRounds().length > 0}
+                      className="px-6 py-2 rounded-lg text-white font-medium transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      style={{
+                        backgroundColor: isPublishing ? "#9CA3AF" : "#6366F1",
+                        fontSize: "14px",
+                        fontWeight: 500,
+                      }}
+                    >
+                      {isPublishing ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Publishing...
+                        </>
+                      ) : (
+                        "Publish Job"
+                      )}
+                    </button>
+                  </div>
+                </TooltipTrigger>
+                {validateRounds().length > 0 && !isPublishing && (
+                  <TooltipContent>
+                    <div className="space-y-1">
+                      <p className="font-medium">Warning - Interview rounds with issues:</p>
+                      {validateRounds().map((error, index) => (
+                        <p key={index} className="text-sm">• {error}</p>
+                      ))}
+                    </div>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
           </div>
         </div>
 
@@ -440,15 +516,35 @@ export function HiringProcessCanvas({ rounds, onUpdateRounds, onPublish, onBack,
                         <div className="text-xs text-gray-500 mt-1">{round.competencies.length} competencies</div>
                       </div>
                     </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleDeleteRound(round.id)
-                      }}
-                      className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-100 rounded transition-all"
-                    >
-                      <Trash2 className="w-4 h-4 text-red-500" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      {/* Warning icon for invalid interview rounds */}
+                      {isRoundInvalid(round) && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="p-1">
+                                <AlertTriangle className="w-4 h-4 text-red-500" />
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="text-sm">
+                                Interview round requires competencies and questions
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                      
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDeleteRound(round.id)
+                        }}
+                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-100 rounded transition-all"
+                      >
+                        <Trash2 className="w-4 h-4 text-red-500" />
+                      </button>
+                    </div>
                   </div>
 
                   {/* Floating Action Buttons */}
@@ -521,7 +617,26 @@ export function HiringProcessCanvas({ rounds, onUpdateRounds, onPublish, onBack,
                 {/* Competencies Section */}
                 <div>
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-gray-800">Competencies</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-lg font-semibold text-gray-800">Competencies</h3>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info className="w-4 h-4 text-gray-400 hover:text-gray-600 cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="max-w-xs">
+                            <div className="space-y-2">
+                              <p className="font-medium">How to structure competencies and questions</p>
+                              <div className="text-sm space-y-1">
+                                <p><strong>Competencies:</strong> Key skills or areas you want to evaluate (e.g., "Team & Culture Alignment", "Technical Skills")</p>
+                                <p><strong>Questions:</strong> Specific questions to assess each competency (e.g., "Did the candidate's description of their ideal work environment match the team's?")</p>
+                                <p className="text-gray-500 italic">Each round needs at least one competency, and each competency needs at least one question.</p>
+                              </div>
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                     <button
                       onClick={handleAddCompetency}
                       className="flex items-center gap-2 px-3 py-1.5 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
@@ -609,7 +724,25 @@ export function HiringProcessCanvas({ rounds, onUpdateRounds, onPublish, onBack,
 
                 {/* Evaluation Criteria Section */}
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-800 mb-3">Evaluation Criteria</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-semibold text-gray-800">Evaluation Criteria</h3>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="w-4 h-4 text-gray-400 hover:text-gray-600 cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent side="right" className="max-w-xs">
+                          <div className="space-y-2">
+                            <p className="font-medium">How to structure evaluation criteria</p>
+                            <div className="text-sm space-y-1">
+                              <p><strong>Evaluation Criteria:</strong> Key skills or areas you want to evaluate (e.g., "Team & Culture Alignment", "Technical Skills")</p>
+                              <p className="text-gray-500 italic">Each round needs at least one evaluation criteria.</p>
+                            </div>
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                   <textarea
                     value={activeRound.evaluationCriteria}
                     onChange={(e) => handleUpdateRoundField(activeRound.id, "evaluationCriteria", e.target.value)}

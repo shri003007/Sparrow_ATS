@@ -99,9 +99,9 @@ export class JobTemplateTransformer {
     // Extract compensation value from the formatted display string
     const extractCompensationValue = (compensationStr: string): string => {
       // Handle formats like "₹15 LPA", "₹1,500,000", etc.
-      const match = compensationStr.match(/₹?(\d+(?:,\d+)*(?:\.\d+)?)/);
+      const match = compensationStr.match(/₹?(\d+(?:\.\d+)*)/);
       if (match) {
-        return match[1].replace(/,/g, '');
+        return String(Number(match[1])*100000);
       }
       return '';
     }

@@ -1,6 +1,6 @@
 "use client"
 
-import { X, CheckCircle, ArrowRight } from "lucide-react"
+import { X, CheckCircle, ArrowRight, Loader2 } from "lucide-react"
 import type { HiringRound } from "@/lib/hiring-types"
 import type { JobFormData } from "@/lib/job-types"
 
@@ -10,6 +10,7 @@ interface JobPublishConfirmationModalProps {
   onConfirm: () => void
   jobData: Partial<JobFormData>
   rounds: HiringRound[]
+  isPublishing?: boolean
 }
 
 export function JobPublishConfirmationModal({
@@ -18,6 +19,7 @@ export function JobPublishConfirmationModal({
   onConfirm,
   jobData,
   rounds,
+  isPublishing = false,
 }: JobPublishConfirmationModalProps) {
   if (!isOpen) return null
 
@@ -272,15 +274,25 @@ export function JobPublishConfirmationModal({
           </button>
           <button
             onClick={onConfirm}
-            className="px-6 py-2 rounded-lg text-white font-medium hover:bg-green-700 transition-colors flex items-center gap-2"
+            disabled={isPublishing}
+            className="px-6 py-2 rounded-lg text-white font-medium transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{
-              backgroundColor: "#10B981",
+              backgroundColor: isPublishing ? "#9CA3AF" : "#10B981",
               fontSize: "14px",
               fontWeight: 500,
             }}
           >
-            <CheckCircle className="w-4 h-4" />
-            Publish Job
+            {isPublishing ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Publishing...
+              </>
+            ) : (
+              <>
+                <CheckCircle className="w-4 h-4" />
+                Publish Job
+              </>
+            )}
           </button>
         </div>
       </div>

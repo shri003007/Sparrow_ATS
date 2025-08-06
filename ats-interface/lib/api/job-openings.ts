@@ -107,4 +107,29 @@ export class JobOpeningsApi {
       throw error
     }
   }
+
+  /**
+   * Delete a job opening and all related data
+   */
+  static async deleteJobOpening(jobOpeningId: string): Promise<{ message: string }> {
+    try {
+      const response = await fetch(`${this.baseUrl}${API_CONFIG.ENDPOINTS.JOB_OPENINGS}/${jobOpeningId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (!response.ok) {
+        const errorData = await response.text()
+        throw new Error(`Failed to delete job opening: ${response.status} - ${errorData}`)
+      }
+
+      const result = await response.json()
+      return result
+    } catch (error) {
+      console.error('Failed to delete job opening:', error)
+      throw error
+    }
+  }
 }

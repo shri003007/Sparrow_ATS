@@ -20,6 +20,8 @@ import type { HiringRound } from "@/lib/hiring-types"
 import { HiringRoundsModal } from "@/components/job_opening/hiring-rounds-modal"
 import { HiringProcessCanvas } from "@/components/job_opening/hiring-process-canvas"
 import { JobPublishConfirmationModal } from "@/components/job_opening/job-publish-confirmation-modal"
+import { NavigationWarningDialog } from "@/components/job_opening/navigation-warning-dialog"
+import { useNavigationPrevention } from "@/hooks/use-navigation-prevention"
 import { JobListingsApp } from "@/components/job_listings/job-listings-app"
 
 const mockCandidates = [
@@ -103,6 +105,34 @@ export default function ATSInterface() {
   const [showPublishConfirmation, setShowPublishConfirmation] = useState(false)
   const [originalTemplateRounds, setOriginalTemplateRounds] = useState<any[]>([])
   const [selectedOriginalTemplates, setSelectedOriginalTemplates] = useState<any[]>([])
+  const [isPublishing, setIsPublishing] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  
+  // Navigation prevention states
+  const [showNavigationWarning, setShowNavigationWarning] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [isReloadAttempt, setIsReloadAttempt] = useState(false)
+
+  // Check if user is in job creation flow and has unsaved changes
+  // Prevent navigation if user is in job creation flow and either:
+  // 1. Has a job created (currentJobId exists) - needs to delete
+  // 2. Is in the middle of creating (has form data but no job saved yet) - can just leave
+  const hasUnsavedJobData = Object.keys(jobFormData).length > 0 && 
+    Object.values(jobFormData).some(value => value && value.toString().trim() !== "")
+  const shouldPreventNavigation = appView === "job-creation" && (currentJobId !== null || hasUnsavedJobData)
+  
+  // Navigation prevention hook
+  const { safeNavigate, safeReload } = useNavigationPrevention({
+    shouldPrevent: shouldPreventNavigation,
+    onNavigationAttempt: () => {
+      setIsReloadAttempt(false)
+      setShowNavigationWarning(true)
+    },
+    onReloadAttempt: () => {
+      setIsReloadAttempt(true)
+      setShowNavigationWarning(true)
+    }
+  })
 
   const handleCreateJobClick = () => {
     setShowCreationModal(true)
@@ -214,6 +244,7 @@ export default function ATSInterface() {
 
   const handleJobFormSubmit = async (data: JobFormData) => {
     try {
+      setIsSaving(true)
       // Check if there are changes by comparing current data with initial data
       const hasChanges = JSON.stringify(data) !== JSON.stringify(jobFormData)
       
@@ -242,6 +273,8 @@ export default function ATSInterface() {
     } catch (error) {
       console.error('Failed to save job:', error)
       // TODO: Show error notification to user
+    } finally {
+      setIsSaving(false)
     }
   }
 
@@ -262,6 +295,7 @@ export default function ATSInterface() {
 
   const handleConfirmPublish = async () => {
     try {
+      setIsPublishing(true)
       // Save rounds to job opening if we have a job ID and rounds
       if (currentJobId && selectedRounds.length > 0) {
         const roundTemplatesRequest = JobRoundTemplatesTransformer.transformRoundsWithTemplateContext(
@@ -297,6 +331,74 @@ export default function ATSInterface() {
       setSelectedRounds([])
       setSelectedOriginalTemplates([])
       setCurrentJobId(null)
+    } finally {
+      setIsPublishing(false)
+    }
+  }
+
+  const handleNavigationWarningCancel = () => {
+    setShowNavigationWarning(false)
+    setIsReloadAttempt(false)
+  }
+
+  const handleNavigationWarningConfirm = async () => {
+    const shouldReload = isReloadAttempt
+    
+    if (!currentJobId) {
+      // No job to delete, just reset state and navigate/reload
+      setShowNavigationWarning(false)
+      setIsReloadAttempt(false)
+      setJobFormData({})
+      setSelectedRounds([])
+      setSelectedOriginalTemplates([])
+      setCurrentJobId(null)
+      setJobCreationView("form")
+      
+      if (shouldReload) {
+        safeReload()
+      } else {
+        setAppView("dashboard")
+      }
+      return
+    }
+
+    try {
+      setIsDeleting(true)
+      await JobOpeningsApi.deleteJobOpening(currentJobId)
+      console.log('Job opening deleted successfully')
+      
+      // Reset all job creation state
+      setShowNavigationWarning(false)
+      setIsReloadAttempt(false)
+      setJobFormData({})
+      setSelectedRounds([])
+      setSelectedOriginalTemplates([])
+      setCurrentJobId(null)
+      setJobCreationView("form")
+      
+      if (shouldReload) {
+        safeReload()
+      } else {
+        setAppView("dashboard")
+      }
+    } catch (error) {
+      console.error('Failed to delete job opening:', error)
+      // Even if delete fails, still navigate away
+      setShowNavigationWarning(false)
+      setIsReloadAttempt(false)
+      setJobFormData({})
+      setSelectedRounds([])
+      setSelectedOriginalTemplates([])
+      setCurrentJobId(null)
+      setJobCreationView("form")
+      
+      if (shouldReload) {
+        safeReload()
+      } else {
+        setAppView("dashboard")
+      }
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -312,9 +414,16 @@ export default function ATSInterface() {
             <JobCreationForm
               initialData={jobFormData}
               onSubmit={handleJobFormSubmit}
-              onBack={() => setAppView("job-listings")}
+              onBack={() => {
+                if (shouldPreventNavigation) {
+                  setShowNavigationWarning(true)
+                } else {
+                  setAppView("job-listings")
+                }
+              }}
               hasRoundsConfigured={selectedRounds.length > 0}
               isExistingJob={currentJobId !== null}
+              isSaving={isSaving}
             />
           )}
           {jobCreationView === "canvas" && (
@@ -324,6 +433,7 @@ export default function ATSInterface() {
               onPublish={handlePublishJob}
               onBack={() => setJobCreationView("form")}
               jobTitle={jobFormData.title || ""}
+              isPublishing={isPublishing}
             />
           )}
         </div>
@@ -339,6 +449,7 @@ export default function ATSInterface() {
           onConfirm={handleConfirmPublish}
           jobData={jobFormData}
           rounds={selectedRounds}
+          isPublishing={isPublishing}
         />
       </div>
     )
@@ -369,6 +480,14 @@ export default function ATSInterface() {
         onClose={() => setShowUploadModal(false)}
         onUpload={handleFileUpload}
         onPasteText={handlePasteText}
+      />
+      <NavigationWarningDialog
+        isOpen={showNavigationWarning}
+        onCancel={handleNavigationWarningCancel}
+        onConfirm={handleNavigationWarningConfirm}
+        isDeleting={isDeleting}
+        hasJobToDelete={currentJobId !== null}
+        isReloadAttempt={isReloadAttempt}
       />
     </>
   )

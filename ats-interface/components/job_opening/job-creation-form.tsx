@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
-import { ChevronDown, Bold, Italic, Underline, List, Upload } from "lucide-react"
+import { ChevronDown, Bold, Italic, Underline, List, Upload, Loader2 } from "lucide-react"
 import type { JobFormData } from "@/lib/job-types"
 import { JobDescriptionTemplatesModal } from "./job-description-templates-modal"
 
@@ -13,14 +13,15 @@ interface JobCreationFormProps {
   onBack?: () => void
   hasRoundsConfigured: boolean
   isExistingJob?: boolean
+  isSaving?: boolean
 }
 
-export function JobCreationForm({ initialData, onSubmit, onBack, hasRoundsConfigured, isExistingJob = false }: JobCreationFormProps) {
+export function JobCreationForm({ initialData, onSubmit, onBack, hasRoundsConfigured, isExistingJob = false, isSaving = false }: JobCreationFormProps) {
   const [formData, setFormData] = useState<JobFormData>({
     title: initialData?.title || "",
     employmentType: initialData?.employmentType || "Full-time",
-    minExperience: initialData?.minExperience || "5 years",
-    compensationType: initialData?.compensationType || "Salary Range",
+    minExperience: initialData?.minExperience || "5+ years",
+    compensationType: initialData?.compensationType || "Fixed Salary",
     compensationAmount: initialData?.compensationAmount || "",
     currency: initialData?.currency || "INR",
     description: initialData?.description || "",
@@ -39,7 +40,13 @@ export function JobCreationForm({ initialData, onSubmit, onBack, hasRoundsConfig
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    onSubmit(formData)
+    // Create a copy of form data to avoid mutating the original
+    const submitData = { ...formData }
+    // Only append "+ years" if it doesn't already end with "years"
+    if (!submitData.minExperience.endsWith("years")) {
+      submitData.minExperience = submitData.minExperience + "+ years"
+    }
+    onSubmit(submitData)
   }
 
   const handleJDTemplateSelect = (description: string) => {
@@ -53,6 +60,12 @@ export function JobCreationForm({ initialData, onSubmit, onBack, hasRoundsConfig
     }
     return isExistingJob && isDirty ? "Update & Continue" : "Save & Continue"
   }
+
+  let compensationOptions = [
+    { label: "Fixed Salary", value: "Fixed Salary" },
+    { label: "Hourly Rate", value: "Hourly Rate" },
+    { label: "Confidential", value: "Confidential" },
+  ]
 
   return (
     <>
@@ -69,17 +82,41 @@ export function JobCreationForm({ initialData, onSubmit, onBack, hasRoundsConfig
           >
             Create a new job
           </h1>
-          <button
-            onClick={handleSubmit}
-            className="px-6 py-2 rounded-lg text-white font-medium hover:bg-blue-700 transition-colors"
-            style={{
-              backgroundColor: "#6366F1",
-              fontSize: "14px",
-              fontWeight: 500,
-            }}
-          >
-            {getButtonText()}
-          </button>
+          <div className="flex items-center gap-4">
+            {onBack && (
+                <button
+                  onClick={onBack}
+                  className="px-4 py-2 border rounded-lg hover:bg-gray-50 transition-colors"
+                  style={{
+                    borderColor: "#E5E7EB",
+                    color: "#374151",
+                    fontSize: "14px",
+                    fontWeight: 500,
+                  }}
+                >
+                  ← Back
+                </button>
+              )}
+            <button
+              onClick={handleSubmit}
+              disabled={isSaving}
+              className="px-6 py-2 rounded-lg text-white font-medium transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{
+                backgroundColor: isSaving ? "#9CA3AF" : "#6366F1",
+                fontSize: "14px",
+                fontWeight: 500,
+              }}
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                getButtonText()
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Stepper */}
@@ -142,9 +179,8 @@ export function JobCreationForm({ initialData, onSubmit, onBack, hasRoundsConfig
               value={formData.title}
               onChange={(e) => setFormData({ ...formData, title: e.target.value })}
               placeholder="e.g., Senior Product Manager"
-              className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-4 py-3 rounded-lg"
               style={{
-                borderColor: "#E5E7EB",
                 fontSize: "14px",
               }}
             />
@@ -168,9 +204,8 @@ export function JobCreationForm({ initialData, onSubmit, onBack, hasRoundsConfig
                 <select
                   value={formData.employmentType}
                   onChange={(e) => setFormData({ ...formData, employmentType: e.target.value })}
-                  className="w-full px-4 py-3 border rounded-lg appearance-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-4 py-3 rounded-lg appearance-none"
                   style={{
-                    borderColor: "#E5E7EB",
                     fontSize: "14px",
                   }}
                 >
@@ -199,24 +234,14 @@ export function JobCreationForm({ initialData, onSubmit, onBack, hasRoundsConfig
                 Minimum Experience
               </label>
               <div className="relative">
-                <select
+                <input
+                  type="text"
                   value={formData.minExperience}
                   onChange={(e) => setFormData({ ...formData, minExperience: e.target.value })}
-                  className="w-full px-4 py-3 border rounded-lg appearance-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-4 py-3 rounded-lg appearance-none"
                   style={{
-                    borderColor: "#E5E7EB",
                     fontSize: "14px",
                   }}
-                >
-                  <option>1 year</option>
-                  <option>2 years</option>
-                  <option>3 years</option>
-                  <option>5 years</option>
-                  <option>8+ years</option>
-                </select>
-                <ChevronDown
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4"
-                  style={{ color: "#9CA3AF" }}
                 />
               </div>
             </div>
@@ -240,16 +265,16 @@ export function JobCreationForm({ initialData, onSubmit, onBack, hasRoundsConfig
                 <select
                   value={formData.compensationType}
                   onChange={(e) => setFormData({ ...formData, compensationType: e.target.value })}
-                  className="w-full px-4 py-3 border rounded-lg appearance-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-4 py-3 rounded-lg appearance-none"
                   style={{
-                    borderColor: "#E5E7EB",
                     fontSize: "14px",
                   }}
                 >
-                  <option>Salary Range</option>
-                  <option>Fixed Salary</option>
-                  <option>Hourly Rate</option>
-                  <option>Confidential</option>
+                  {compensationOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
                 <ChevronDown
                   className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4"
@@ -276,9 +301,8 @@ export function JobCreationForm({ initialData, onSubmit, onBack, hasRoundsConfig
                   value={formData.compensationAmount}
                   onChange={(e) => setFormData({ ...formData, compensationAmount: e.target.value })}
                   placeholder="e.g., 12,00,000 - 15,00,000"
-                  className="flex-1 px-4 py-3 border border-r-0 rounded-l-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="flex-1 px-4 py-3 rounded-l-lg"
                   style={{
-                    borderColor: "#E5E7EB",
                     fontSize: "14px",
                   }}
                 />
@@ -286,9 +310,8 @@ export function JobCreationForm({ initialData, onSubmit, onBack, hasRoundsConfig
                   <select
                     value={formData.currency}
                     onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
-                    className="px-3 py-3 border rounded-r-lg appearance-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="px-3 py-3 rounded-r-lg appearance-none"
                     style={{
-                      borderColor: "#E5E7EB",
                       fontSize: "14px",
                     }}
                   >
@@ -356,9 +379,8 @@ export function JobCreationForm({ initialData, onSubmit, onBack, hasRoundsConfig
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               placeholder="Start writing or paste the job description here..."
               rows={12}
-              className="w-full px-4 py-3 border border-t-0 rounded-b-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+              className="w-full px-4 py-3 rounded-b-lg resize-none"
               style={{
-                borderColor: "#E5E7EB",
                 fontSize: "14px",
               }}
             />
