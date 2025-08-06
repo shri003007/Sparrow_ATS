@@ -1,12 +1,50 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { Search, BarChart3, Users, Briefcase, CreditCard, Plus, ChevronDown } from "lucide-react"
+import { JobOpeningsApi } from "@/lib/api/job-openings"
+import type { JobOpeningListItem } from "@/lib/job-types"
 
 interface AppSidebarProps {
   onCreateJob?: () => void
+  onJobSelect?: (job: JobOpeningListItem) => void
+  selectedJobId?: string | null
+  mode?: 'listing' | 'creation' // New prop to handle different modes
 }
 
-export function AppSidebar({ onCreateJob }: AppSidebarProps) {
+export function AppSidebar({ onCreateJob, onJobSelect, selectedJobId, mode = 'listing' }: AppSidebarProps) {
+  const [jobs, setJobs] = useState<JobOpeningListItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showAllJobs, setShowAllJobs] = useState(false)
+
+  const fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+
+  useEffect(() => {
+    const fetchJobs = async () => {
+      try {
+        const response = await JobOpeningsApi.getJobOpenings()
+        // Sort by published_at desc (most recent first), then by updated_at desc
+        const sortedJobs = response.job_openings.sort((a, b) => {
+          const aDate = a.published_at || a.updated_at
+          const bDate = b.published_at || b.updated_at
+          return new Date(bDate).getTime() - new Date(aDate).getTime()
+        })
+        setJobs(sortedJobs)
+        
+        // Auto-select the first job if none is selected and we're in listing mode
+        if (sortedJobs.length > 0 && !selectedJobId && mode === 'listing') {
+          onJobSelect?.(sortedJobs[0])
+        }
+      } catch (error) {
+        console.error('Failed to fetch jobs:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchJobs()
+  }, [selectedJobId, onJobSelect, mode])
+
   const navigationItems = [
     { icon: BarChart3, label: "Dashboard", href: "/dashboard", isActive: false },
     { icon: Briefcase, label: "All roles", href: "/roles", isActive: true, hasSubmenu: true },
@@ -15,13 +53,9 @@ export function AppSidebar({ onCreateJob }: AppSidebarProps) {
     { icon: CreditCard, label: "Billing", href: "/billing", isActive: false },
   ]
 
-  const jobRoles = [
-    { id: "1", title: "Staff Design Engg.", isActive: true },
-    { id: "2", title: "Sr. Frontend Engg.", isActive: false },
-    { id: "3", title: "Sr. Product Manager", isActive: false },
-  ]
-
-  const fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+  // Show first 3 jobs by default, or all when expanded
+  const displayedJobs = showAllJobs ? jobs : jobs.slice(0, 3)
+  const hasMoreJobs = jobs.length > 3
 
   return (
     <div
@@ -149,37 +183,67 @@ export function AppSidebar({ onCreateJob }: AppSidebarProps) {
                 {/* Job Roles Submenu */}
                 {item.label === "All roles" && (
                   <div className="ml-7 mt-1 space-y-1">
-                    {jobRoles.map((role) => (
+                    {loading ? (
                       <div
-                        key={role.id}
-                        className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer text-sm transition-colors ${
-                          role.isActive ? "text-white" : "hover:bg-gray-50"
-                        }`}
+                        className="flex items-center px-3 py-2 text-sm"
                         style={{
-                          backgroundColor: role.isActive ? "#111827" : "transparent",
+                          color: "#6B7280",
                           fontSize: "14px",
                           fontFamily,
                         }}
                       >
-                        <div
-                          className="w-2 h-2 rounded-full border"
-                          style={{
-                            borderColor: role.isActive ? "#FFFFFF" : "#9CA3AF",
-                          }}
-                        />
-                        {role.title}
+                        Loading jobs...
                       </div>
-                    ))}
-                    <div
-                      className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 rounded-lg"
-                      style={{
-                        color: "#6B7280",
-                        fontSize: "14px",
-                        fontFamily,
-                      }}
-                    >
-                      See all 6 jobs
-                    </div>
+                    ) : jobs.length === 0 ? (
+                      <div
+                        className="flex items-center px-3 py-2 text-sm"
+                        style={{
+                          color: "#6B7280",
+                          fontSize: "14px",
+                          fontFamily,
+                        }}
+                      >
+                        No jobs found
+                      </div>
+                    ) : (
+                      <>
+                        {displayedJobs.map((job) => (
+                          <div
+                            key={job.id}
+                            className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer text-sm transition-colors ${
+                              selectedJobId === job.id ? "text-white" : "hover:bg-gray-50"
+                            }`}
+                            style={{
+                              backgroundColor: selectedJobId === job.id ? "#111827" : "transparent",
+                              fontSize: "14px",
+                              fontFamily,
+                            }}
+                            onClick={() => mode === 'listing' ? onJobSelect?.(job) : undefined}
+                          >
+                            <div
+                              className="w-2 h-2 rounded-full border"
+                              style={{
+                                borderColor: selectedJobId === job.id ? "#FFFFFF" : "#9CA3AF",
+                              }}
+                            />
+                            <span className="truncate">{job.posting_title}</span>
+                          </div>
+                        ))}
+                        {hasMoreJobs && (
+                          <div
+                            className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 rounded-lg"
+                            style={{
+                              color: "#6B7280",
+                              fontSize: "14px",
+                              fontFamily,
+                            }}
+                            onClick={() => setShowAllJobs(!showAllJobs)}
+                          >
+                            {showAllJobs ? 'Show less' : `See all ${jobs.length} jobs`}
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
                 )}
               </div>
@@ -190,3 +254,6 @@ export function AppSidebar({ onCreateJob }: AppSidebarProps) {
     </div>
   )
 }
+
+// Alias for backward compatibility
+export { AppSidebar as JobListingSidebar }

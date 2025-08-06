@@ -188,3 +188,25 @@ export interface AIJobGenerationErrorResponse {
 
 // Union type for all possible responses
 export type AIJobGenerationResponse = AIJobGenerationSuccessResponse | AIJobGenerationErrorResponse
+
+// Job Openings List API Types
+export interface JobOpeningListItem {
+  id: string
+  posting_title: string
+  custom_job_description: string
+  job_status: 'draft' | 'active' | 'paused' | 'closed'
+  employment_type: string
+  minimum_experience?: string
+  compensation_type?: string
+  compensation_value?: number
+  compensation_currency?: string
+  created_by: string
+  created_at: string
+  updated_at: string
+  published_at?: string | null
+  expires_at?: string | null
+}
+
+export interface JobOpeningsListResponse {
+  job_openings: JobOpeningListItem[]
+}

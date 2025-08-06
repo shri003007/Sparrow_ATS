@@ -1,10 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Settings, Check } from "lucide-react"
-import { AppSidebar } from "@/components/job_opening/app-sidebar"
-import { PipelineTabs } from "@/components/job_opening/pipeline-tabs"
-import { CandidatesTable } from "@/components/job_opening/candidates-table"
+import { AppSidebar } from "@/components/job_listings/sidebar"
 import { JobCreationModal } from "@/components/job_opening/job-creation-modal"
 import { JobCreationForm } from "@/components/job_opening/job-creation-form"
 import { TemplateSelectionModal } from "@/components/job_opening/template-selection-modal"
@@ -23,6 +20,7 @@ import type { HiringRound } from "@/lib/hiring-types"
 import { HiringRoundsModal } from "@/components/job_opening/hiring-rounds-modal"
 import { HiringProcessCanvas } from "@/components/job_opening/hiring-process-canvas"
 import { JobPublishConfirmationModal } from "@/components/job_opening/job-publish-confirmation-modal"
+import { JobListingsApp } from "@/components/job_listings/job-listings-app"
 
 const mockCandidates = [
   {
@@ -83,12 +81,12 @@ const mockCandidates = [
   },
 ]
 
-type AppView = "dashboard" | "job-creation"
+type AppView = "job-listings" | "job-creation"
 type JobCreationView = "form" | "canvas"
 
 export default function ATSInterface() {
   const [activeTab, setActiveTab] = useState("all")
-  const [appView, setAppView] = useState<AppView>("dashboard")
+  const [appView, setAppView] = useState<AppView>("job-listings")
   const [jobCreationView, setJobCreationView] = useState<JobCreationView>("form")
   const [jobFormData, setJobFormData] = useState<Partial<JobFormData>>({})
   const [currentJobId, setCurrentJobId] = useState<string | null>(null)
@@ -284,7 +282,7 @@ export default function ATSInterface() {
       
       console.log("Job published:", { jobData: jobFormData, rounds: selectedRounds })
       setShowPublishConfirmation(false)
-      setAppView("dashboard")
+      setAppView("job-listings")
       setJobFormData({})
       setSelectedRounds([])
       setSelectedOriginalTemplates([])
@@ -294,7 +292,7 @@ export default function ATSInterface() {
       // TODO: Show error notification to user
       // For now, continue with the flow even if publishing fails
       setShowPublishConfirmation(false)
-      setAppView("dashboard")
+      setAppView("job-listings")
       setJobFormData({})
       setSelectedRounds([])
       setSelectedOriginalTemplates([])
@@ -305,13 +303,16 @@ export default function ATSInterface() {
   const renderJobCreationView = () => {
     return (
       <div className="flex h-screen" style={{ backgroundColor: "#F9F9F7" }}>
-        <AppSidebar />
+        <AppSidebar 
+          onCreateJob={handleCreateJobClick}
+          mode="creation"
+        />
         <div className="flex-1 overflow-y-auto">
           {jobCreationView === "form" && (
             <JobCreationForm
               initialData={jobFormData}
               onSubmit={handleJobFormSubmit}
-              onBack={() => setAppView("dashboard")}
+              onBack={() => setAppView("job-listings")}
               hasRoundsConfigured={selectedRounds.length > 0}
               isExistingJob={currentJobId !== null}
             />
@@ -343,104 +344,11 @@ export default function ATSInterface() {
     )
   }
 
-  const renderDashboard = () => (
-    <div className="flex h-screen" style={{ backgroundColor: "#F9F9F7" }}>
-      <AppSidebar onCreateJob={handleCreateJobClick} />
-      <div className="flex-1 flex flex-col">
-        <div className="bg-white border-b px-8 py-6" style={{ borderColor: "#E5E7EB" }}>
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <span
-                style={{
-                  color: "#6B7280",
-                  fontSize: "14px",
-                  fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-                }}
-              >
-                All roles
-              </span>
-            </div>
-            <div className="flex gap-3">
-              <button
-                className="flex items-center gap-2 px-4 py-2 rounded-lg border hover:bg-gray-50 transition-colors"
-                style={{
-                  borderColor: "#E5E7EB",
-                  color: "#374151",
-                  fontSize: "14px",
-                  fontWeight: 500,
-                  fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-                }}
-              >
-                <Settings className="w-4 h-4" />
-                Edit JD
-              </button>
-              <button
-                className="flex items-center gap-2 px-4 py-2 rounded-lg text-white hover:bg-gray-800 transition-colors"
-                style={{
-                  backgroundColor: "#111827",
-                  fontSize: "14px",
-                  fontWeight: 500,
-                  fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-                }}
-              >
-                <Check className="w-4 h-4" />
-                Mark closed
-              </button>
-            </div>
-          </div>
-          <div>
-            <h1
-              className="mb-2"
-              style={{
-                fontSize: "24px",
-                fontWeight: 700,
-                color: "#111827",
-                fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-              }}
-            >
-              Staff Design Engg.
-            </h1>
-            <div className="flex items-center gap-6">
-              <div className="flex items-center gap-2">
-                <span>👥</span>
-                <span
-                  style={{
-                    color: "#6B7280",
-                    fontSize: "14px",
-                    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-                  }}
-                >
-                  366 people applied to this role
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span>📅</span>
-                <span
-                  style={{
-                    color: "#6B7280",
-                    fontSize: "14px",
-                    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-                  }}
-                >
-                  Role opened on 5 January 2025
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="flex-1 px-8 py-6">
-          <div className="mb-6">
-            <PipelineTabs activeTab={activeTab} onTabChange={setActiveTab} />
-          </div>
-          <CandidatesTable candidates={mockCandidates} />
-        </div>
-      </div>
-    </div>
-  )
+
 
   return (
     <>
-      {appView === "dashboard" && renderDashboard()}
+      {appView === "job-listings" && <JobListingsApp onCreateJob={handleCreateJobClick} />}
       {appView === "job-creation" && renderJobCreationView()}
 
       {/* Global Modals */}
