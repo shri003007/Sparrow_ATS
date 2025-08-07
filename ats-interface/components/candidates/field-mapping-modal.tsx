@@ -1,8 +1,10 @@
 "use client"
 
 import { useState } from "react"
-import { X, ChevronDown } from "lucide-react"
+import { X, ChevronDown, Settings, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { CustomFieldsDefinitionModal } from "./custom-fields-definition-modal"
+import type { CandidateCustomFieldDefinition } from "@/lib/custom-field-types"
 
 interface FieldMapping {
   fieldName: string
@@ -15,16 +17,22 @@ interface FieldMappingModalProps {
   isOpen: boolean
   onClose: () => void
   csvHeaders: string[]
+  customFields?: CandidateCustomFieldDefinition[]
+  jobOpeningId?: string
   onNext: (mappings: Record<string, string>) => void
   onPrevious: () => void
+  onCustomFieldsUpdate?: () => Promise<void>
 }
 
 export function FieldMappingModal({ 
   isOpen, 
   onClose, 
   csvHeaders, 
+  customFields = [],
+  jobOpeningId,
   onNext,
-  onPrevious 
+  onPrevious,
+  onCustomFieldsUpdate
 }: FieldMappingModalProps) {
   const fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
 
@@ -45,6 +53,26 @@ export function FieldMappingModal({
     { fieldName: "Available to Join (Days)", csvColumn: "", isRequired: false, fieldType: "number" },
     { fieldName: "Current Location", csvColumn: "", isRequired: false, fieldType: "text" },
   ]
+
+  // Convert custom fields to field mapping format
+  const customFieldMappings: FieldMapping[] = customFields.map(field => ({
+    fieldName: field.field_name,  // Use field_name as the key, not field_label
+    csvColumn: "",
+    isRequired: field.is_required,
+    fieldType: mapCustomFieldTypeToFieldType(field.field_type)
+  }))
+
+  // Helper function to map custom field types to basic field types
+  function mapCustomFieldTypeToFieldType(customType: string): 'text' | 'email' | 'phone' | 'number' | 'date' {
+    switch (customType) {
+      case 'email': return 'email'
+      case 'number': 
+      case 'decimal': return 'number'
+      case 'date': return 'date'
+      case 'phone': return 'phone'
+      default: return 'text'
+    }
+  }
 
   const [fieldMappings, setFieldMappings] = useState<Record<string, string>>(() => {
     const initialMappings: Record<string, string> = {}
@@ -71,9 +99,16 @@ export function FieldMappingModal({
     autoMapField("Current Salary", ["current salary", "salary", "current pay"])
     autoMapField("Expected Salary", ["expected salary", "expected pay", "desired salary"])
     autoMapField("Current Location", ["location", "city", "current location"])
+    
+    // Auto-map custom fields
+    customFields.forEach(field => {
+      autoMapField(field.field_name, [field.field_name, field.field_label.toLowerCase()])
+    })
 
     return initialMappings
   })
+
+  const [showCustomFieldsModal, setShowCustomFieldsModal] = useState(false)
 
   if (!isOpen) return null
 
@@ -85,17 +120,50 @@ export function FieldMappingModal({
   }
 
   const handleNext = () => {
-    // Validate required fields are mapped
-    const requiredMappings = requiredFields.filter(field => 
+    // Validate required standard fields are mapped
+    const requiredStandardMappings = requiredFields.filter(field => 
       fieldMappings[field.fieldName] && fieldMappings[field.fieldName] !== ""
     )
     
-    if (requiredMappings.length < requiredFields.length) {
-      alert("Please map all required fields before proceeding.")
+    if (requiredStandardMappings.length < requiredFields.length) {
+      alert("Please map all required standard fields before proceeding.")
+      return
+    }
+
+    // Validate required custom fields are mapped
+    const requiredCustomFields = customFieldMappings.filter(field => field.isRequired)
+    const requiredCustomMappings = requiredCustomFields.filter(field => 
+      fieldMappings[field.fieldName] && fieldMappings[field.fieldName] !== ""
+    )
+    
+    if (requiredCustomMappings.length < requiredCustomFields.length) {
+      alert("Please map all required custom fields before proceeding.")
       return
     }
 
     onNext(fieldMappings)
+  }
+
+  const handleSetupCustomFields = () => {
+    setShowCustomFieldsModal(true)
+  }
+
+  const handleCustomFieldsSave = async (fields: CandidateCustomFieldDefinition[]) => {
+    setShowCustomFieldsModal(false)
+    if (onCustomFieldsUpdate) {
+      await onCustomFieldsUpdate()
+    }
+  }
+
+  const handleCustomFieldsClose = () => {
+    setShowCustomFieldsModal(false)
+  }
+
+  // Helper function to get display name for custom fields
+  const getFieldDisplayName = (field: FieldMapping) => {
+    // For custom fields, find the original custom field to get the label
+    const customField = customFields.find(cf => cf.field_name === field.fieldName)
+    return customField ? customField.field_label : field.fieldName
   }
 
   const renderFieldMapping = (field: FieldMapping) => (
@@ -106,7 +174,7 @@ export function FieldMappingModal({
             className="font-medium"
             style={{ color: "#111827", fontSize: "14px", fontFamily }}
           >
-            {field.fieldName}
+            {getFieldDisplayName(field)}
           </span>
           {field.isRequired && (
             <span
@@ -206,6 +274,44 @@ export function FieldMappingModal({
               {optionalFields.map(renderFieldMapping)}
             </div>
           </div>
+
+          {/* Custom Fields */}
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h3
+                className="text-sm font-semibold text-gray-900 uppercase tracking-wide flex items-center space-x-2"
+                style={{ fontFamily }}
+              >
+                <Settings className="w-4 h-4" />
+                <span>Custom Fields</span>
+              </h3>
+              {jobOpeningId && onCustomFieldsUpdate && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSetupCustomFields}
+                  className="flex items-center space-x-1"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>Set Up Custom Fields</span>
+                </Button>
+              )}
+            </div>
+            {customFieldMappings.length > 0 ? (
+              <div className="space-y-0">
+                {customFieldMappings.map(renderFieldMapping)}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <Settings className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                <p className="text-sm">No custom fields configured for this job</p>
+                {jobOpeningId && onCustomFieldsUpdate && (
+                  <p className="text-xs mt-1">Click "Set Up Custom Fields" to add job-specific fields</p>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Footer */}
@@ -246,6 +352,17 @@ export function FieldMappingModal({
           </div>
         </div>
       </div>
+
+      {/* Custom Fields Definition Modal */}
+      {jobOpeningId && (
+        <CustomFieldsDefinitionModal
+          isOpen={showCustomFieldsModal}
+          onClose={handleCustomFieldsClose}
+          jobOpeningId={jobOpeningId}
+          onSave={handleCustomFieldsSave}
+          existingFields={customFields}
+        />
+      )}
     </div>
   )
 }

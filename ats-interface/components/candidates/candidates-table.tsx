@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useRef, useEffect } from "react"
-import { ChevronDown, Download, MapPin, Calendar, DollarSign } from "lucide-react"
+import { ChevronDown, Users } from "lucide-react"
 import type { CandidateDisplay, CandidateUIStatus } from "@/lib/candidate-types"
 
 interface CandidatesTableProps {
@@ -231,6 +231,33 @@ export function CandidatesTable({ candidates, onStatusChange }: CandidatesTableP
     return candidates.filter(candidate => candidate.status === selectedFilter)
   }, [candidates, selectedFilter])
 
+  // Extract unique custom fields from candidates
+  const customFields = useMemo(() => {
+    const fieldMap = new Map<string, { field_name: string; field_label: string; field_type: string }>()
+    
+    candidates.forEach(candidate => {
+      candidate.custom_field_values?.forEach(cfv => {
+        if (cfv.field_definition) {
+          fieldMap.set(cfv.field_definition.field_name, {
+            field_name: cfv.field_definition.field_name,
+            field_label: cfv.field_definition.field_label,
+            field_type: cfv.field_definition.field_type
+          })
+        }
+      })
+    })
+    
+    return Array.from(fieldMap.values())
+  }, [candidates])
+
+  // Helper function to get custom field value for a candidate
+  const getCustomFieldValue = (candidate: CandidateDisplay, fieldName: string): string => {
+    const fieldValue = candidate.custom_field_values?.find(
+      cfv => cfv.field_definition?.field_name === fieldName
+    )
+    return fieldValue?.field_value || '-'
+  }
+
   if (candidates.length === 0) {
     return (
       <div className="text-center py-12">
@@ -250,7 +277,7 @@ export function CandidatesTable({ candidates, onStatusChange }: CandidatesTableP
   }
 
   return (
-    <div className="w-full">
+    <div className="w-full max-w-full overflow-hidden">
       {/* Status Filter */}
       <StatusFilter
         selectedFilter={selectedFilter}
@@ -258,122 +285,90 @@ export function CandidatesTable({ candidates, onStatusChange }: CandidatesTableP
         candidateCounts={candidateCounts}
       />
 
-      {/* Table Header */}
-      <div className="bg-gray-50 px-6 py-3 border-b border-gray-200">
-        <div className="grid grid-cols-12 gap-4 text-sm font-medium text-gray-500" style={{ fontFamily }}>
-          <div className="col-span-2">Applicant's name</div>
-          <div className="col-span-2">Status</div>
-          <div className="col-span-2">Email</div>
-          <div className="col-span-2">Phone</div>
-          <div className="col-span-2">Location</div>
-          <div className="col-span-1">Experience</div>
-          <div className="col-span-1">Resume</div>
-        </div>
-      </div>
-
-      {/* Table Body */}
-      <div className="divide-y divide-gray-200 max-h-[600px] overflow-y-auto">
-        {filteredCandidates.map((candidate) => (
-          <div key={candidate.id} className="px-6 py-4 hover:bg-gray-50 transition-colors group">
-            <div className="grid grid-cols-12 gap-4 items-center">
-              {/* Name */}
-              <div className="col-span-2">
-                <div 
-                  className="font-medium text-gray-900 truncate"
-                  style={{ fontFamily }}
-                  title={candidate.name}
-                >
-                  <div className="relative">
-                    <span className="block truncate">{candidate.name}</span>
-                    <div className="absolute top-0 right-0 w-4 h-full bg-gradient-to-l from-white group-hover:from-gray-50 to-transparent pointer-events-none"></div>
+      {/* Table Container with Horizontal Scroll */}
+      <div className="border border-gray-200 rounded-lg overflow-hidden">
+        <div className="overflow-x-auto" style={{ maxWidth: '100%' }}>
+          <div style={{ minWidth: 'max-content', width: 'fit-content' }}>
+            {/* Table Header */}
+            <div className="bg-gray-50 border-b border-gray-200">
+              <div className="flex px-6 py-3 gap-4 text-sm font-medium text-gray-500" style={{ fontFamily }}>
+                <div className="w-48 flex-shrink-0">Applicant's name</div>
+                <div className="w-32 flex-shrink-0">Status</div>
+                <div className="w-48 flex-shrink-0">Email</div>
+                <div className="w-32 flex-shrink-0">Phone</div>
+                {customFields.map((field) => (
+                  <div key={field.field_name} className="w-32 flex-shrink-0" title={field.field_label}>
+                    {field.field_label}
                   </div>
-                </div>
-              </div>
-
-              {/* Status */}
-              <div className="col-span-2">
-                <StatusDropdown
-                  currentStatus={candidate.status}
-                  candidateId={candidate.id}
-                  onStatusChange={onStatusChange}
-                />
-              </div>
-
-              {/* Email */}
-              <div className="col-span-2">
-                <div 
-                  className="text-sm text-gray-900 truncate"
-                  style={{ fontFamily }}
-                  title={candidate.email}
-                >
-                  <div className="relative">
-                    <span className="block truncate">{candidate.email}</span>
-                    <div className="absolute top-0 right-0 w-4 h-full bg-gradient-to-l from-white group-hover:from-gray-50 to-transparent pointer-events-none"></div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Phone */}
-              <div className="col-span-2">
-                <div 
-                  className="text-sm text-gray-500 truncate"
-                  style={{ fontFamily }}
-                  title={candidate.mobile_phone}
-                >
-                  <div className="relative">
-                    <span className="block truncate">{candidate.mobile_phone}</span>
-                    <div className="absolute top-0 right-0 w-4 h-full bg-gradient-to-l from-white group-hover:from-gray-50 to-transparent pointer-events-none"></div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Location */}
-              <div className="col-span-2">
-                <div 
-                  className="text-sm text-gray-500 truncate"
-                  style={{ fontFamily }}
-                  title={candidate.current_location || 'Not specified'}
-                >
-                  {candidate.current_location ? (
-                    <div className="flex items-center space-x-1">
-                      <MapPin className="w-3 h-3 text-gray-400 flex-shrink-0" />
-                      <div className="relative flex-1 min-w-0">
-                        <span className="block truncate">{candidate.current_location}</span>
-                        <div className="absolute top-0 right-0 w-4 h-full bg-gradient-to-l from-white group-hover:from-gray-50 to-transparent pointer-events-none"></div>
-                      </div>
-                    </div>
-                  ) : (
-                    <span className="text-gray-400">Not specified</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Experience */}
-              <div className="col-span-1">
-                <div className="text-sm text-gray-900" style={{ fontFamily }}>
-                  {candidate.experience_display}
-                </div>
-              </div>
-
-              {/* Resume Download */}
-              <div className="col-span-1">
-                {candidate.resume_url ? (
-                  <button
-                    onClick={() => window.open(candidate.resume_url, '_blank')}
-                    className="flex items-center justify-center w-8 h-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
-                    title="Download Resume"
-                  >
-                    <Download className="w-4 h-4" />
-                  </button>
-                ) : (
-                  <div className="flex items-center justify-center w-8 h-8">
-                    <span className="text-gray-400 text-xs">N/A</span>
-                  </div>
-                )}
+                ))}
               </div>
             </div>
+
+            {/* Table Body */}
+            <div className="divide-y divide-gray-200 max-h-[600px] overflow-y-auto">
+              {filteredCandidates.map((candidate) => (
+                <div key={candidate.id} className="hover:bg-gray-50 transition-colors group">
+                  <div className="flex px-6 py-4 gap-4 items-center">
+                    {/* Name */}
+                    <div className="w-48 flex-shrink-0">
+                      <div 
+                        className="font-medium text-gray-900 truncate"
+                        style={{ fontFamily }}
+                        title={candidate.name}
+                      >
+                        {candidate.name}
+                      </div>
+                    </div>
+
+                    {/* Status */}
+                    <div className="w-32 flex-shrink-0">
+                      <StatusDropdown
+                        currentStatus={candidate.status}
+                        candidateId={candidate.id}
+                        onStatusChange={onStatusChange}
+                      />
+                    </div>
+
+                    {/* Email */}
+                    <div className="w-48 flex-shrink-0">
+                      <div 
+                        className="text-sm text-gray-900 truncate"
+                        style={{ fontFamily }}
+                        title={candidate.email}
+                      >
+                        {candidate.email}
+                      </div>
+                    </div>
+
+                    {/* Phone */}
+                    <div className="w-32 flex-shrink-0">
+                      <div 
+                        className="text-sm text-gray-500 truncate"
+                        style={{ fontFamily }}
+                        title={candidate.mobile_phone}
+                      >
+                        {candidate.mobile_phone}
+                      </div>
+                    </div>
+
+                    {/* Custom Fields */}
+                    {customFields.map((field) => (
+                      <div key={field.field_name} className="w-32 flex-shrink-0">
+                        <div 
+                          className="text-sm text-gray-900 truncate"
+                          style={{ fontFamily }}
+                          title={getCustomFieldValue(candidate, field.field_name)}
+                        >
+                          {getCustomFieldValue(candidate, field.field_name)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-        ))}
+        </div>
       </div>
 
       {/* Footer with count */}

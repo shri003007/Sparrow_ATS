@@ -24,64 +24,6 @@ import { NavigationWarningDialog } from "@/components/job_opening/navigation-war
 import { useNavigationPrevention } from "@/hooks/use-navigation-prevention"
 import { JobListingsApp } from "@/components/job_listings/job-listings-app"
 
-const mockCandidates = [
-  {
-    id: "1",
-    name: "Sankalp Sinha",
-    recommendation: { type: "highly" as const, label: "Highly recommended", score: 4.7, maxScore: 5 },
-    status: "Action pending",
-    experience: "13 yrs.",
-  },
-  {
-    id: "2",
-    name: "Maria Rodriguez",
-    recommendation: { type: "highly" as const, label: "Highly recommended", score: 4.5, maxScore: 5 },
-    status: "Action pending",
-    experience: "8 yrs.",
-  },
-  {
-    id: "3",
-    name: "Sofia Kowalski",
-    recommendation: { type: "highly" as const, label: "Highly recommended", score: 4.3, maxScore: 5 },
-    status: "Action pending",
-    experience: "8 yrs.",
-  },
-  {
-    id: "4",
-    name: "Yuki Tanaka",
-    recommendation: { type: "good" as const, label: "Good hire", score: 4.1, maxScore: 5 },
-    status: "Action pending",
-    experience: "9 yrs.",
-  },
-  {
-    id: "5",
-    name: "Mei Lin",
-    recommendation: { type: "good" as const, label: "Good hire", score: 4.0, maxScore: 5 },
-    status: "Action pending",
-    experience: "6 yrs.",
-  },
-  {
-    id: "6",
-    name: "Jamal Washington",
-    recommendation: { type: "needs" as const, label: "Needs discussion", score: 3.9, maxScore: 5 },
-    status: "Action pending",
-    experience: "5 yrs.",
-  },
-  {
-    id: "7",
-    name: "Ahmed Mahmoud",
-    recommendation: { type: "needs" as const, label: "Needs discussion", score: 3.9, maxScore: 5 },
-    status: "Action pending",
-    experience: "7 yrs.",
-  },
-  {
-    id: "8",
-    name: "Abhishek Petrov",
-    recommendation: { type: "needs" as const, label: "Needs discussion", score: 3.6, maxScore: 5 },
-    status: "Action pending",
-    experience: "9 yrs.",
-  },
-]
 
 type AppView = "job-listings" | "job-creation"
 type JobCreationView = "form" | "canvas"

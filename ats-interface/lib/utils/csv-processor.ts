@@ -1,4 +1,5 @@
 import type { CSVData, CandidatePreview, ValidationResult } from '@/lib/candidate-types'
+import type { CandidateCustomFieldDefinition } from '@/lib/custom-field-types'
 
 export class CSVProcessor {
   /**
@@ -22,6 +23,8 @@ export class CSVProcessor {
           
           // Make headers unique by adding suffixes to duplicates
           const headers = this.makeHeadersUnique(rawHeaders.map(h => h.trim()))
+          
+
           
           // Parse data rows
           const rows = lines.slice(1).map(line => this.parseCSVLine(line))
@@ -116,12 +119,13 @@ export class CSVProcessor {
    */
   static processCSVData(
     csvData: CSVData,
-    fieldMappings: Record<string, string>
+    fieldMappings: Record<string, string>,
+    customFields?: CandidateCustomFieldDefinition[]
   ): CandidatePreview[] {
     const candidates: CandidatePreview[] = []
     
     csvData.rows.forEach((row, index) => {
-      const candidate = this.mapRowToCandidate(row, csvData.headers, fieldMappings, index)
+      const candidate = this.mapRowToCandidate(row, csvData.headers, fieldMappings, index, customFields)
       candidates.push(candidate)
     })
     
@@ -135,7 +139,8 @@ export class CSVProcessor {
     row: string[],
     headers: string[],
     fieldMappings: Record<string, string>,
-    rowIndex: number
+    rowIndex: number,
+    customFields?: CandidateCustomFieldDefinition[]
   ): CandidatePreview {
     const getValue = (fieldName: string): string => {
       const csvColumn = fieldMappings[fieldName]
@@ -177,6 +182,24 @@ export class CSVProcessor {
       expectedSalaryCurrency: getValue('Expected Salary Currency') || 'USD'
     })
 
+    // Process custom fields
+    const customFieldsData: Record<string, any> = {}
+    if (customFields && customFields.length > 0) {
+      customFields.forEach(field => {
+        const value = getValue(field.field_name)
+        
+        // Always include the field if it's in the custom fields definitions
+        if (value !== undefined && value !== null && value.trim() !== '') {
+          // Convert value based on field type
+          const convertedValue = this.convertCustomFieldValue(value, field.field_type)
+          customFieldsData[field.field_name] = convertedValue
+        } else {
+          // Still add the field with empty value to maintain structure for all mapped fields
+          customFieldsData[field.field_name] = ''
+        }
+      })
+    }
+
     return {
       name,
       email,
@@ -189,9 +212,43 @@ export class CSVProcessor {
       expectedSalaryCurrency: getValue('Expected Salary Currency') || 'USD',
       availableToJoinDays,
       currentLocation: getValue('Current Location'),
+      customFields: customFieldsData,
       isValid: validation.isValid,
       issues: validation.issues,
       originalRowIndex: rowIndex
+    }
+  }
+
+  /**
+   * Convert custom field value based on field type
+   */
+  private static convertCustomFieldValue(value: string, fieldType: string): any {
+    if (!value || value.trim() === '') return undefined
+
+    switch (fieldType) {
+      case 'number':
+        const num = parseInt(value.trim())
+        return isNaN(num) ? value : num
+      
+      case 'decimal':
+        const decimal = parseFloat(value.trim())
+        return isNaN(decimal) ? value : decimal
+      
+      case 'boolean':
+        const lowerValue = value.trim().toLowerCase()
+        return lowerValue === 'true' || lowerValue === '1' || lowerValue === 'yes'
+      
+      case 'date':
+        // Keep as string, will be validated later
+        return value.trim()
+      
+      case 'multiselect':
+        // Split by comma and trim each value
+        return value.split(',').map(v => v.trim()).filter(v => v)
+      
+      default:
+        // text, textarea, email, url, select
+        return value.trim()
     }
   }
 

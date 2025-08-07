@@ -498,7 +498,7 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
   const statusColor = getStatusColor(job.job_status)
 
   return (
-    <div className="flex-1 flex flex-col bg-white">
+    <div className="flex-1 flex flex-col bg-white min-w-0 overflow-hidden">
       {/* Header */}
       <div className="p-6 border-b" style={{ borderColor: "#E5E7EB" }}>
         <div className="flex items-center justify-between mb-4">

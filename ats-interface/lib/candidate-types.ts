@@ -131,6 +131,18 @@ export interface CandidateDisplay {
   source: string | null
   notes: string | null
   created_at: string
+  custom_field_values?: Array<{
+    id: string
+    field_value: string
+    field_definition: {
+      field_name: string
+      field_label: string
+      field_type: string
+      field_options: string[]
+      is_required: boolean
+      description: string | null
+    }
+  }>
 }
 
 // CSV Processing Types
@@ -151,6 +163,7 @@ export interface CandidatePreview {
   expectedSalaryCurrency?: string
   availableToJoinDays?: number
   currentLocation?: string
+  customFields?: Record<string, any> // Custom field values
   isValid: boolean
   issues: string[]
   originalRowIndex: number
