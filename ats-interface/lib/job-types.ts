@@ -205,6 +205,7 @@ export interface JobOpeningListItem {
   updated_at: string
   published_at?: string | null
   expires_at?: string | null
+  has_rounds_started?: boolean
 }
 
 export interface JobOpeningsListResponse {

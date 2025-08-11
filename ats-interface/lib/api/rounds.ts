@@ -5,7 +5,9 @@ import type {
   BulkCandidateRoundStatusResponse,
   StartRoundsResponse,
   BulkCandidateRoundsCreateRequest,
-  BulkCandidateRoundsCreateResponse
+  BulkCandidateRoundsCreateResponse,
+  UpdateCandidateRoundStatusRequest,
+  UpdateCandidateRoundStatusResponse,
 } from '@/lib/round-types'
 
 /**
@@ -58,6 +60,30 @@ export class JobRoundTemplatesApi {
       return await response.json()
     } catch (error) {
       console.error('Error starting rounds:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Confirm/activate a job round template
+   */
+  static async confirmJobRoundTemplate(jobRoundTemplateId: string): Promise<any> {
+    try {
+      const url = `${API_CONFIG.CANDIDATES_BASE_URL}/job-round-template/${jobRoundTemplateId}/confirm`
+      const response = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to confirm job round template: ${response.status}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error('Error confirming job round template:', error)
       throw error
     }
   }
@@ -135,6 +161,32 @@ export class CandidateRoundsApi {
       return await response.json()
     } catch (error) {
       console.error('Error creating candidate rounds:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Update per-round status for a specific job_round_template_id (round-to-round)
+   */
+  static async updateCandidateRoundStatus(request: UpdateCandidateRoundStatusRequest): Promise<UpdateCandidateRoundStatusResponse> {
+    try {
+      const url = `${this.baseUrl}${API_CONFIG.ENDPOINTS.UPDATE_CANDIDATE_ROUND_STATUS}`
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+      })
+
+      if (!response.ok) {
+        const text = await response.text().catch(() => '')
+        throw new Error(`Failed to update per-round candidate status: ${response.status} ${text}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error('Error updating per-round candidate status:', error)
       throw error
     }
   }

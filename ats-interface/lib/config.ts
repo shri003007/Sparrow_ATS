@@ -1,6 +1,8 @@
 export const API_CONFIG = {
   BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL ,
   CANDIDATES_BASE_URL: process.env.NEXT_PUBLIC_CANDIDATES_API_BASE_URL,
+  // AI Evaluation APIs
+  RESUME_EVALUATION_API_URL: process.env.NEXT_PUBLIC_RESUME_EVALUATION_URL,
   ENDPOINTS: {
     JOB_TEMPLATES: '/job-templates',
     JOB_OPENINGS: '/job-openings',
@@ -16,6 +18,9 @@ export const API_CONFIG = {
     CANDIDATE_CREATE: '/candidate/create',
     CANDIDATES_BULK_CREATE: '/candidates/bulk-create',
     CANDIDATES_BULK_ROUND_STATUS_UPDATE: '/candidates/bulk-round-status-update',
-    CANDIDATE_ROUNDS_BULK_CREATE: '/candidate-rounds/bulk-create'
+    UPDATE_CANDIDATE_ROUND_STATUS: '/update-candidate-round-status',
+    CANDIDATE_ROUNDS_BULK_CREATE: '/candidate-rounds/bulk-create',
+    // AI Evaluation endpoints
+    RESUME_EVALUATION: '/evaluate' // This will be appended to RESUME_EVALUATION_API_URL
   }
 } as const

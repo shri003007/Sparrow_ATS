@@ -74,7 +74,7 @@ export function AppSidebar({ onCreateJob, onJobSelect, selectedJobId, mode = 'li
         >
           <div className="flex items-center gap-3">
             {/* Logo */}
-            <div className="w-6 h-6 rounded flex items-center justify-center" style={{ backgroundColor: "#FF8D4D" }}>
+            <div className="w-6 h-6 rounded flex items-center justify-center" style={{ backgroundColor: "#5BA4A4" }}>
               <span className="text-white text-sm font-bold">✱</span>
             </div>
 
@@ -83,27 +83,14 @@ export function AppSidebar({ onCreateJob, onJobSelect, selectedJobId, mode = 'li
                 className="font-medium"
                 style={{
                   fontSize: "14px",
-                  fontWeight: 500,
+                  fontWeight: 700,
                   color: "#111827",
                   fontFamily,
                 }}
               >
-                SparrowATS
+                Sparrow ATS
               </span>
             </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {/* User Avatar */}
-            <div
-              className="w-8 h-8 rounded-full flex items-center justify-center"
-              style={{ backgroundColor: "#FF8D4D" }}
-            >
-              <span className="text-white text-sm font-medium" style={{ fontFamily }}>
-                U
-              </span>
-            </div>
-            <ChevronDown className="w-4 h-4" style={{ color: "#6B7280" }} />
           </div>
         </div>
       </div>

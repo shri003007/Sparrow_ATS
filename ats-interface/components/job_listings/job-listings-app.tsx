@@ -3,14 +3,18 @@
 import { useState, useRef } from "react"
 import { AppSidebar } from "./sidebar"
 import { JobDetailsView } from "./job-details-view"
+import { RoundDetailsView } from "./round-details-view"
 import type { JobOpeningListItem } from "@/lib/job-types"
 
 interface JobListingsAppProps {
   onCreateJob?: () => void
 }
 
+type JobView = 'candidates' | 'rounds'
+
 export function JobListingsApp({ onCreateJob }: JobListingsAppProps) {
   const [selectedJob, setSelectedJob] = useState<JobOpeningListItem | null>(null)
+  const [currentView, setCurrentView] = useState<JobView>('candidates')
   const navigationCheckRef = useRef<((callback: () => void) => void) | null>(null)
 
   const handleJobSelect = (job: JobOpeningListItem) => {
@@ -18,9 +22,13 @@ export function JobListingsApp({ onCreateJob }: JobListingsAppProps) {
     if (navigationCheckRef.current) {
       navigationCheckRef.current(() => {
         setSelectedJob(job)
+        // Set view based on has_rounds_started flag
+        setCurrentView(job.has_rounds_started ? 'rounds' : 'candidates')
       })
     } else {
       setSelectedJob(job)
+      // Set view based on has_rounds_started flag
+      setCurrentView(job.has_rounds_started ? 'rounds' : 'candidates')
     }
   }
 
@@ -57,6 +65,14 @@ export function JobListingsApp({ onCreateJob }: JobListingsAppProps) {
     console.log('Add candidates clicked for job:', selectedJob?.id)
   }
 
+  const handleGoToRounds = () => {
+    setCurrentView('rounds')
+  }
+
+  const handleBackToCandidates = () => {
+    setCurrentView('candidates')
+  }
+
   return (
     <div className="flex h-screen bg-white">
       <AppSidebar
@@ -65,12 +81,20 @@ export function JobListingsApp({ onCreateJob }: JobListingsAppProps) {
         selectedJobId={selectedJob?.id || null}
         mode="listing"
       />
-      <JobDetailsView
-        job={selectedJob}
-        onSettings={handleSettings}
-        onAddCandidates={handleAddCandidates}
-        onNavigationCheck={handleNavigationCheck}
-      />
+      {currentView === 'candidates' ? (
+        <JobDetailsView
+          job={selectedJob}
+          onSettings={handleSettings}
+          onAddCandidates={handleAddCandidates}
+          onNavigationCheck={handleNavigationCheck}
+          onGoToRounds={handleGoToRounds}
+        />
+      ) : (
+        <RoundDetailsView
+          job={selectedJob}
+          onBackToCandidates={handleBackToCandidates}
+        />
+      )}
     </div>
   )
 }

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Settings, Plus, Users, Calendar, DollarSign, Clock, MapPin, Play, Loader2 } from "lucide-react"
+import { Settings, Plus, Users, Calendar, DollarSign, Clock, MapPin, Play, Loader2, Eye } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { CSVImportFlow } from "@/components/candidates/csv-import-flow"
 import { CandidatesTable } from "@/components/candidates/candidates-table"
@@ -24,9 +24,10 @@ interface JobDetailsViewProps {
   onSettings?: () => void
   onAddCandidates?: () => void
   onNavigationCheck?: (hasUnsavedChanges: boolean, checkFunction: (callback: () => void) => void) => void
+  onGoToRounds?: () => void
 }
 
-export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationCheck }: JobDetailsViewProps) {
+export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationCheck, onGoToRounds }: JobDetailsViewProps) {
   const [showImportFlow, setShowImportFlow] = useState(false)
   const [candidates, setCandidates] = useState<CandidateDisplay[]>([])
   const [candidatesCount, setCandidatesCount] = useState(0)
@@ -243,6 +244,147 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
     setPendingNavigation(null)
   }
 
+  // Save Changes functionality (when rounds already started)
+  const handleSaveChangesAndGoToRounds = async () => {
+    if (!job?.id || candidates.length === 0) return
+
+    setStartRoundsFlow({
+      isLoading: true,
+      currentStep: 'updating-status',
+      error: null,
+      progress: {
+        templatesLoaded: true, // Skip template loading since rounds already started
+        statusUpdated: false,
+        roundsStarted: true, // Already started
+        candidateRoundsCreated: false
+      }
+    })
+
+    try {
+      // Step 1: Get job round templates (needed for candidate rounds creation)
+      const templatesResponse = await JobRoundTemplatesApi.getJobRoundTemplates(job.id)
+      
+      if (!templatesResponse.job_round_templates || templatesResponse.job_round_templates.length === 0) {
+        throw new Error('No round templates found for this job')
+      }
+
+      // Get the first round template (order_index = 1)
+      const firstRoundTemplate = templatesResponse.job_round_templates
+        .sort((a, b) => a.order_index - b.order_index)[0]
+
+      // Step 2: Update candidate round status (ONLY for candidates with actual changes)
+      setStartRoundsFlow(prev => ({ ...prev, currentStep: 'updating-status' }))
+      
+      // Only include candidates that actually have pending status changes
+      const candidateStatusUpdates: CandidateRoundStatusUpdate[] = []
+      
+      for (const [candidateId, newStatus] of Object.entries(pendingStatusChanges)) {
+        const roundStatus = CandidateTransformer.mapUIStatusToRoundStatus(newStatus)
+        candidateStatusUpdates.push({
+          candidate_id: candidateId,
+          round_status: roundStatus as 'action_pending' | 'selected' | 'rejected'
+        })
+      }
+
+      // Only make API call if there are actual changes
+      let bulkUpdateResponse = null
+      if (candidateStatusUpdates.length > 0) {
+        bulkUpdateResponse = await CandidateRoundsApi.bulkUpdateRoundStatus({ candidates: candidateStatusUpdates })
+        
+        // Update the original state baseline with the saved changes
+        setOriginalCandidatesState(prev => {
+          const updated = { ...prev }
+          Object.entries(pendingStatusChanges).forEach(([candidateId, status]) => {
+            updated[candidateId] = status
+          })
+          return updated
+        })
+      }
+      
+      setStartRoundsFlow(prev => ({ 
+        ...prev, 
+        progress: { ...prev.progress, statusUpdated: true },
+        currentStep: 'creating-rounds'
+      }))
+
+      // Step 3: Create/update candidate rounds to sync with rounds page
+      const candidateRoundsData: Array<{
+        candidate_id: string
+        status: 'selected' | 'rejected' | 'action_pending'
+      }> = []
+      
+      for (const candidate of candidates) {
+        const currentStatus = pendingStatusChanges[candidate.id] || candidate.status
+        const roundStatus = CandidateTransformer.mapUIStatusToRoundStatus(currentStatus)
+        
+        candidateRoundsData.push({
+          candidate_id: candidate.id,
+          status: roundStatus as 'action_pending' | 'selected' | 'rejected'
+        })
+      }
+
+      // Step 4: Confirm job round template before creating candidate rounds
+      setStartRoundsFlow(prev => ({ ...prev, currentStep: 'starting-rounds' }))
+      
+      await JobRoundTemplatesApi.confirmJobRoundTemplate(firstRoundTemplate.id)
+
+      // Step 5: Always sync all candidates with rounds page
+      if (candidateRoundsData.length > 0) {
+        const bulkCreateRequest: BulkCandidateRoundsCreateRequest = {
+          candidates: candidateRoundsData,
+          job_round_template_id: firstRoundTemplate.id,
+          created_by: "6693120e-31e2-4727-92c0-3606885e7e9e" // TODO: Get from user context
+        }
+
+        await CandidateRoundsApi.bulkCreateCandidateRounds(bulkCreateRequest)
+      }
+      
+      setStartRoundsFlow(prev => ({ 
+        ...prev, 
+        progress: { ...prev.progress, candidateRoundsCreated: true },
+        currentStep: 'completed',
+        isLoading: false
+      }))
+
+      // Clear pending changes since they've been saved
+      setPendingStatusChanges({})
+      setHasUnsavedChanges(false)
+
+      // Reset flow state after a delay and redirect to rounds page
+      setTimeout(() => {
+        setStartRoundsFlow({
+          isLoading: false,
+          currentStep: 'idle',
+          error: null,
+          progress: {
+            templatesLoaded: false,
+            statusUpdated: false,
+            roundsStarted: false,
+            candidateRoundsCreated: false
+          }
+        })
+        // Redirect to rounds page after successful save
+        if (onGoToRounds) {
+          onGoToRounds()
+        }
+      }, 2000)
+
+    } catch (error) {
+      console.error('Failed to save changes and sync with rounds:', error)
+      setStartRoundsFlow({
+        isLoading: false,
+        currentStep: 'error',
+        error: error instanceof Error ? error.message : 'Failed to save changes',
+        progress: {
+          templatesLoaded: false,
+          statusUpdated: false,
+          roundsStarted: false,
+          candidateRoundsCreated: false
+        }
+      })
+    }
+  }
+
   // Start Rounds functionality
   const handleStartRounds = async () => {
     if (!job?.id || candidates.length === 0) return
@@ -357,6 +499,9 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
         }))
       })
 
+      // Step 4.5: Confirm job round template before creating candidate rounds
+      await JobRoundTemplatesApi.confirmJobRoundTemplate(firstRoundTemplate.id)
+
       // Only make API call if there are candidate changes
       if (candidateRoundsData.length > 0) {
         const bulkCreateRequest: BulkCandidateRoundsCreateRequest = {
@@ -390,10 +535,7 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
       setPendingStatusChanges({})
       setHasUnsavedChanges(false)
 
-      // Refresh candidates data to reflect changes
-      await fetchCandidates(job.id)
-
-      // Reset flow state after a delay
+      // Reset flow state after a delay and redirect to rounds page
       setTimeout(() => {
         setStartRoundsFlow({
           isLoading: false,
@@ -406,6 +548,10 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
             candidateRoundsCreated: false
           }
         })
+        // Redirect to rounds page after successful start
+        if (onGoToRounds) {
+          onGoToRounds()
+        }
       }, 2000)
 
     } catch (error) {
@@ -552,33 +698,63 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
               Settings
             </Button>
             
-            {/* Start Rounds Button - Only show if there are candidates */}
+            {/* Start/View Rounds Button - Only show if there are candidates */}
             {candidates.length > 0 && (
-              <Button
-                onClick={handleStartRounds}
-                disabled={startRoundsFlow.isLoading}
-                className="flex items-center gap-2 relative"
-                style={{
-                  backgroundColor: startRoundsFlow.isLoading ? "#6B7280" : "#059669",
-                  color: "#FFFFFF",
-                  fontFamily,
-                }}
-              >
-                {hasUnsavedChanges && (
-                  <div className="absolute -top-1 -right-1 w-3 h-3 bg-amber-500 rounded-full"></div>
-                )}
-                {startRoundsFlow.isLoading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
+              <>
+                {job?.has_rounds_started ? (
+                  <Button
+                    onClick={hasUnsavedChanges ? handleSaveChangesAndGoToRounds : onGoToRounds}
+                    disabled={startRoundsFlow.isLoading}
+                    className="flex items-center gap-2 relative"
+                    style={{
+                      backgroundColor: startRoundsFlow.isLoading ? "#6B7280" : hasUnsavedChanges ? "#059669" : "#3B82F6",
+                      color: "#FFFFFF",
+                      fontFamily,
+                    }}
+                  >
+                    {hasUnsavedChanges && (
+                      <div className="absolute -top-1 -right-1 w-3 h-3 bg-amber-500 rounded-full"></div>
+                    )}
+                    {startRoundsFlow.isLoading ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
+                    {startRoundsFlow.isLoading 
+                      ? getLoadingText(startRoundsFlow.currentStep)
+                      : hasUnsavedChanges 
+                        ? 'Save & View Rounds'
+                        : 'View Rounds'
+                    }
+                  </Button>
                 ) : (
-                  <Play className="w-4 h-4" />
+                  <Button
+                    onClick={handleStartRounds}
+                    disabled={startRoundsFlow.isLoading}
+                    className="flex items-center gap-2 relative"
+                    style={{
+                      backgroundColor: startRoundsFlow.isLoading ? "#6B7280" : "#059669",
+                      color: "#FFFFFF",
+                      fontFamily,
+                    }}
+                  >
+                    {hasUnsavedChanges && (
+                      <div className="absolute -top-1 -right-1 w-3 h-3 bg-amber-500 rounded-full"></div>
+                    )}
+                    {startRoundsFlow.isLoading ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Play className="w-4 h-4" />
+                    )}
+                    {startRoundsFlow.isLoading 
+                      ? getLoadingText(startRoundsFlow.currentStep)
+                      : hasUnsavedChanges 
+                        ? 'Save & Start Rounds'
+                        : 'Start Rounds'
+                    }
+                  </Button>
                 )}
-                {startRoundsFlow.isLoading 
-                  ? getLoadingText(startRoundsFlow.currentStep)
-                  : hasUnsavedChanges 
-                    ? 'Save & Start Rounds'
-                    : 'Start Rounds'
-                }
-              </Button>
+              </>
             )}
             
             <Button

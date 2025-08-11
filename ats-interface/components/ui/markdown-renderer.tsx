@@ -101,21 +101,39 @@ export function MarkdownRenderer({ content, className, style }: MarkdownRenderer
     })
   }
   
-  // Handle basic inline formatting (bold, italic)
+  // Handle basic inline formatting (bold, italic) and line breaks
   const formatInlineText = (text: string) => {
-    const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*|__[^_]+__|_[^_]+_)/g)
+    // First handle line breaks by splitting on \n
+    const lines = text.split('\n')
     
-    return parts.map((part, index) => {
-      if (part.startsWith('**') && part.endsWith('**')) {
-        return <strong key={index}>{part.slice(2, -2)}</strong>
-      } else if (part.startsWith('__') && part.endsWith('__')) {
-        return <strong key={index}>{part.slice(2, -2)}</strong>
-      } else if (part.startsWith('*') && part.endsWith('*')) {
-        return <em key={index}>{part.slice(1, -1)}</em>
-      } else if (part.startsWith('_') && part.endsWith('_')) {
-        return <em key={index}>{part.slice(1, -1)}</em>
+    return lines.map((line, lineIndex) => {
+      // Handle formatting within each line
+      const parts = line.split(/(\*\*[^*]+\*\*|\*[^*]+\*|__[^_]+__|_[^_]+_)/g)
+      
+      const formattedLine = parts.map((part, partIndex) => {
+        if (part.startsWith('**') && part.endsWith('**')) {
+          return <strong key={partIndex}>{part.slice(2, -2)}</strong>
+        } else if (part.startsWith('__') && part.endsWith('__')) {
+          return <strong key={partIndex}>{part.slice(2, -2)}</strong>
+        } else if (part.startsWith('*') && part.endsWith('*')) {
+          return <em key={partIndex}>{part.slice(1, -1)}</em>
+        } else if (part.startsWith('_') && part.endsWith('_')) {
+          return <em key={partIndex}>{part.slice(1, -1)}</em>
+        }
+        return part
+      })
+      
+      // Add line break between lines (except for the last line)
+      if (lineIndex < lines.length - 1) {
+        return (
+          <span key={lineIndex}>
+            {formattedLine}
+            <br />
+          </span>
+        )
+      } else {
+        return <span key={lineIndex}>{formattedLine}</span>
       }
-      return part
     })
   }
   

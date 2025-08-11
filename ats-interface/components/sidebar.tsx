@@ -32,7 +32,7 @@ export function Sidebar({ currentRole }: SidebarProps) {
             </div>
             <div className="text-left">
               <div className="flex items-center gap-2">
-                <span className="font-medium text-sm">SparrowATS</span>
+                <span className="font-medium text-sm">Sparrow ATS</span>
               </div>
             </div>
           </div>

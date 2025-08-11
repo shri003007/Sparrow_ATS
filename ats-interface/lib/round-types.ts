@@ -77,6 +77,35 @@ export interface BulkCandidateRoundStatusResponse {
   failed_candidates: any[] | null
 }
 
+// Per-round status update for a specific round template (round-to-round updates)
+export interface UpdateCandidateRoundStatusRequest {
+  job_round_template_id: string
+  candidate_updates: {
+    candidate_id: string
+    status: 'action_pending' | 'selected' | 'rejected'
+  }[]
+}
+
+export interface UpdateCandidateRoundStatusResponse {
+  message: string
+  job_round_template_id: string
+  actually_updated_count: number
+  unchanged_count: number
+  status_summary: {
+    selected: number
+    rejected: number
+    action_pending: number
+  }
+  updated_rounds: Array<{
+    candidate_id: string
+    status: 'action_pending' | 'selected' | 'rejected'
+  }>
+  failed_rounds: Array<{
+    candidate_id: string
+    error: string
+  }>
+}
+
 // Start Rounds Types
 export interface StartRoundsResponse {
   message: string
