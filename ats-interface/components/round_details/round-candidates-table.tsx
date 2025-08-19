@@ -672,6 +672,14 @@ export function RoundCandidatesTable({
         roundType={roundInfo?.round_type || 'GENERAL'}
         onStatusChange={handleStatusChange}
         isEvaluating={selectedCandidate ? evaluatingCandidates.has(selectedCandidate.id) : false}
+        onCandidateUpdated={(updatedCandidate) => {
+          setLocalCandidates(prev => 
+            prev.map(candidate => 
+              candidate.id === updatedCandidate.id ? updatedCandidate : candidate
+            )
+          )
+          onCandidateUpdated(updatedCandidate)
+        }}
       />
     </div>
   )

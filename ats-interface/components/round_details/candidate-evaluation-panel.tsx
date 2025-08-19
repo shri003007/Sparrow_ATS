@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState } from "react"
-import { X, ChevronDown, Check, AlertCircle, Mail, Phone, Settings, Calendar, FileText, Award } from "lucide-react"
+import { X, ChevronDown, Check, AlertCircle, Mail, Phone, Settings, Calendar, FileText, Award, Upload, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -9,6 +9,7 @@ import { EvaluationScoreChart } from "@/components/round_details/evaluation-scor
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer"
 import { Spinner } from "@/components/ui/spinner"
 import type { RoundCandidate } from "@/lib/round-candidate-types"
+import { evaluateInterviewCandidateFromFile, type InterviewEvaluationRequest } from "@/lib/api/evaluation"
 
 type RoundStatus = 'selected' | 'rejected' | 'action_pending'
 
@@ -54,6 +55,7 @@ interface CandidateEvaluationPanelProps {
   roundType: string
   onStatusChange?: (candidateId: string, newStatus: RoundStatus) => void
   isEvaluating?: boolean
+  onCandidateUpdated?: (updatedCandidate: RoundCandidate) => void
 }
 
 export function CandidateEvaluationPanel({ 
@@ -62,9 +64,12 @@ export function CandidateEvaluationPanel({
   onClose, 
   roundType,
   onStatusChange = () => {},
-  isEvaluating = false
+  isEvaluating = false,
+  onCandidateUpdated = () => {}
 }: CandidateEvaluationPanelProps) {
   const [selectedCompetency, setSelectedCompetency] = useState<string>('')
+  const [uploadingFile, setUploadingFile] = useState<boolean>(false)
+  const [fileError, setFileError] = useState<string | null>(null)
 
   // Get evaluation data
   const hasEvaluation = candidate?.candidate_rounds?.[0]?.is_evaluation
@@ -88,6 +93,69 @@ export function CandidateEvaluationPanel({
 
   const handleStatusChange = (newStatus: RoundStatus) => {
     onStatusChange(candidate.id, newStatus)
+  }
+
+  const handleFileUpload = async (file: File) => {
+    if (!candidate?.candidate_rounds?.[0]?.id || !candidate?.job_opening_id) {
+      setFileError('Missing candidate or job information')
+      return
+    }
+
+    try {
+      setUploadingFile(true)
+      setFileError(null)
+
+      // Convert file to base64
+      const arrayBuffer = await file.arrayBuffer()
+      const base64String = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)))
+      
+      // Determine file type
+      const fileType = file.type === 'application/pdf' ? 'pdf' : 'txt'
+      
+      const request: InterviewEvaluationRequest = {
+        candidate_round_id: candidate.candidate_rounds[0].id,
+        job_opening_id: candidate.job_opening_id,
+        file_type: fileType,
+        file_content: base64String
+      }
+
+      const result = await evaluateInterviewCandidateFromFile(request)
+      
+      if (result.success) {
+        // Create updated candidate with evaluation
+        const updatedCandidate: RoundCandidate = {
+          ...candidate,
+          candidate_rounds: candidate.candidate_rounds.map(round => ({
+            ...round,
+            is_evaluation: true,
+            evaluations: [{
+              id: result.result_id || '',
+              candidate_round_id: round.id,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              evaluation_result: {
+                evaluation_summary: result.evaluation_summary || '',
+                competency_evaluation: result.competency_evaluation || {
+                  competency_scores: [],
+                  overall_percentage_score: 0
+                },
+                overall_percentage_score: result.competency_evaluation?.overall_percentage_score || 0,
+                interviewer_evaluation_summary: result.interviewer_evaluation_summary || ''
+              }
+            }]
+          }))
+        }
+        
+        onCandidateUpdated(updatedCandidate)
+      } else {
+        setFileError(result.error_message || 'Evaluation failed')
+      }
+    } catch (error) {
+      console.error('File upload error:', error)
+      setFileError(error instanceof Error ? error.message : 'Upload failed')
+    } finally {
+      setUploadingFile(false)
+    }
   }
 
   const getScoreColor = (score: number) => {
@@ -399,9 +467,65 @@ export function CandidateEvaluationPanel({
                       <FileText className="w-8 h-8 text-gray-400" />
                     </div>
                     <h3 className="text-xl font-semibold text-gray-900 mb-2">No Evaluation Available</h3>
-                    <p className="text-gray-500 max-w-md mx-auto">
-                      This candidate has not been evaluated yet for this round. The evaluation will appear here once completed.
+                    <p className="text-gray-500 max-w-md mx-auto mb-6">
+                      This candidate has not been evaluated yet for this round.
                     </p>
+                    
+                    {/* File Upload for INTERVIEW rounds */}
+                    {roundType === 'INTERVIEW' && (
+                      <div className="max-w-md mx-auto">
+                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-blue-400 transition-colors">
+                          <Upload className="w-8 h-8 text-gray-400 mx-auto mb-3" />
+                          <h4 className="text-sm font-medium text-gray-900 mb-2">Upload Interview Transcript</h4>
+                          <p className="text-xs text-gray-500 mb-4">
+                            Upload a PDF or TXT file containing the interview transcript to generate an AI evaluation.
+                          </p>
+                          
+                          <div className="relative">
+                            <input
+                              type="file"
+                              accept=".pdf,.txt,application/pdf,text/plain"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0]
+                                if (file) {
+                                  handleFileUpload(file)
+                                  e.currentTarget.value = ''
+                                }
+                              }}
+                              disabled={uploadingFile}
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+                            />
+                            <Button 
+                              className="w-full"
+                              disabled={uploadingFile}
+                              variant="outline"
+                            >
+                              {uploadingFile ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                  Processing...
+                                </>
+                              ) : (
+                                <>
+                                  <Upload className="w-4 h-4 mr-2" />
+                                  Choose File
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                          
+                          {fileError && (
+                            <div className="mt-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
+                              {fileError}
+                            </div>
+                          )}
+                        </div>
+                        
+                        <p className="text-xs text-gray-400 mt-3">
+                          Supported formats: PDF, TXT • Maximum file size: 10MB
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

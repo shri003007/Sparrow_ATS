@@ -36,6 +36,53 @@ export interface ResumeEvaluationResponse {
   retry_attempted?: boolean
 }
 
+// Interview transcript evaluation (file-based)
+export interface InterviewEvaluationRequest {
+  candidate_round_id: string
+  job_opening_id: string
+  file_type: 'pdf' | 'txt'
+  file_content: string // base64 (without data: prefix)
+}
+
+export interface InterviewEvaluationResponse {
+  candidate_id: string
+  job_id: string
+  round_id?: string
+  job_pipeline_id?: string
+  round_name?: string
+  round_type?: string
+  evaluation_summary?: string
+  competency_evaluation?: {
+    competency_scores: Array<{
+      competency_name: string
+      questions: Array<{
+        question_id: string
+        question: string
+        score: number
+        explanation: string
+      }>
+      percentage_score: number
+    }>
+    overall_percentage_score: number
+  }
+  interviewer_evaluation_summary?: string
+  overall_percentage_score?: number | null
+  success: boolean
+  error_message: string | null
+  file_stored?: boolean
+  file_s3_path?: string
+  file_metadata?: {
+    file_type: string
+    content_type: string
+    file_size: number
+    content_hash: string
+    upload_timestamp: string
+  }
+  result_saved?: boolean
+  result_action?: string
+  result_id?: string
+}
+
 interface BatchResumeEvaluationRequest {
   requests: ResumeEvaluationRequest[]
 }
@@ -51,6 +98,13 @@ const getResumeEvaluationApiUrl = (): string => {
     throw new Error('Resume evaluation API URL not configured')
   }
   return API_CONFIG.RESUME_EVALUATION_API_URL
+}
+
+const getCandidateEvaluationApiUrl = (): string => {
+  if (!API_CONFIG.CANDIDATE_EVALUATION_API_URL) {
+    throw new Error('Candidate evaluation API URL not configured')
+  }
+  return API_CONFIG.CANDIDATE_EVALUATION_API_URL
 }
 
 // Helper function to create error response
@@ -222,6 +276,23 @@ export async function evaluateResumeCandidate(
     await new Promise(resolve => setTimeout(resolve, RETRY_DELAY))
     return evaluateResumeCandidate(request, retryCount + 1)
   }
+}
+
+// Interview evaluation from uploaded transcript file
+export async function evaluateInterviewCandidateFromFile(
+  request: InterviewEvaluationRequest
+): Promise<InterviewEvaluationResponse> {
+  const apiUrl = getCandidateEvaluationApiUrl()
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  })
+  const data = await response.json()
+  if (!response.ok) {
+    throw new Error(data?.error_message || `Interview evaluation failed: ${response.status}`)
+  }
+  return data as InterviewEvaluationResponse
 }
 
 // Batch resume evaluation with delay between batches

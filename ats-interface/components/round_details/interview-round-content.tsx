@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { Loader2, AlertCircle, Users, ArrowRight } from "lucide-react"
 import { RoundCandidatesApi } from "@/lib/api/round-candidates"
 import { CandidateRoundsApi, JobRoundTemplatesApi } from "@/lib/api/rounds"
+import { evaluateInterviewCandidateFromFile } from "@/lib/api/evaluation"
 import type { JobRoundTemplate } from "@/lib/round-types"
 import type { RoundCandidateResponse, RoundCandidate } from "@/lib/round-candidate-types"
 import { Button } from "@/components/ui/button"
@@ -108,6 +109,8 @@ export function InterviewRoundContent({
   const [localCandidates, setLocalCandidates] = useState<RoundCandidate[]>([])
   const [selectedCandidate, setSelectedCandidate] = useState<RoundCandidate | null>(null)
   const [isPanelOpen, setIsPanelOpen] = useState(false)
+  const [uploadingFor, setUploadingFor] = useState<string | null>(null)
+  const [fileError, setFileError] = useState<string | null>(null)
   const [originalStatusById, setOriginalStatusById] = useState<Record<string, RoundStatus>>({})
   const [currentStatusById, setCurrentStatusById] = useState<Record<string, RoundStatus>>({})
   const [pendingChanges, setPendingChanges] = useState<Record<string, RoundStatus>>({})
@@ -203,6 +206,60 @@ export function InterviewRoundContent({
     setSelectedCandidate(candidate)
     setIsPanelOpen(true)
   }
+  const handleFileUpload = async (candidate: RoundCandidate, file: File) => {
+    try {
+      setUploadingFor(candidate.id)
+      setFileError(null)
+      const arrayBuffer = await file.arrayBuffer()
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)))
+      const candidateRoundId = candidate.candidate_rounds?.[0]?.id
+      const file_type = file.type === 'application/pdf' ? 'pdf' : 'txt'
+      if (!candidateRoundId) throw new Error('Missing candidate_round_id')
+      const result = await evaluateInterviewCandidateFromFile({
+        candidate_round_id: candidateRoundId,
+        job_opening_id: candidate.job_opening_id,
+        file_type,
+        file_content: base64,
+      })
+      // Update local state with new evaluation
+      setLocalCandidates(prev => prev.map(c => {
+        if (c.id !== candidate.id) return c
+        const updated = { ...c }
+        if (!updated.candidate_rounds || updated.candidate_rounds.length === 0) return updated
+        updated.candidate_rounds[0].is_evaluation = true
+        updated.candidate_rounds[0].evaluations = [
+          {
+            id: result.result_id || `eval-${Date.now()}`,
+            candidate_round_id: candidateRoundId,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            evaluation_result: {
+              evaluation_summary: result.evaluation_summary || '',
+              competency_evaluation: result.competency_evaluation || { competency_scores: [], overall_percentage_score: 0 },
+              overall_percentage_score: result.competency_evaluation?.overall_percentage_score || 0,
+            },
+          },
+        ]
+        return updated
+      }))
+      if (selectedCandidate?.id === candidate.id) {
+        setSelectedCandidate(prev => {
+          if (!prev) return prev
+          const updated = { ...prev }
+          if (updated.candidate_rounds && updated.candidate_rounds.length > 0) {
+            updated.candidate_rounds[0].is_evaluation = true
+            updated.candidate_rounds[0].evaluations = setLocalCandidates as any
+          }
+          return updated
+        })
+      }
+    } catch (e: any) {
+      setFileError(e?.message || 'Upload failed')
+    } finally {
+      setUploadingFor(null)
+    }
+  }
+
 
   const closeEvaluationPanel = () => {
     setIsPanelOpen(false)
@@ -493,16 +550,57 @@ export function InterviewRoundContent({
 
                       {/* Interview Score */}
                       <TableCell>
-                        <div className="flex items-center justify-center">
-                          <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center border-2 border-blue-200">
-                            <span className="text-sm font-medium text-blue-600" style={{ fontFamily }}>
-                              -
-                            </span>
-                          </div>
-                          <span className="text-xs text-gray-400 ml-2" style={{ fontFamily }}>
-                            /10
-                          </span>
-                        </div>
+                        {(() => {
+                          const hasEvaluation = candidate.candidate_rounds?.[0]?.is_evaluation
+                          const evaluation = candidate.candidate_rounds?.[0]?.evaluations?.[0]?.evaluation_result
+                          
+                          if (hasEvaluation && evaluation?.overall_percentage_score !== undefined) {
+                            const score = evaluation.overall_percentage_score
+                            const getScoreColor = (score: number) => {
+                              if (score >= 80) return "#10b981" // green-500
+                              if (score >= 60) return "#f59e0b" // amber-500
+                              return "#ef4444" // red-500
+                            }
+                            
+                            return (
+                              <div className="flex items-center justify-center">
+                                <div 
+                                  className="w-10 h-10 rounded-full flex items-center justify-center border-2"
+                                  style={{
+                                    backgroundColor: `${getScoreColor(score)}20`,
+                                    borderColor: getScoreColor(score)
+                                  }}
+                                >
+                                  <span 
+                                    className="text-sm font-medium" 
+                                    style={{ 
+                                      fontFamily,
+                                      color: getScoreColor(score)
+                                    }}
+                                  >
+                                    {score}
+                                  </span>
+                                </div>
+                                <span className="text-xs text-gray-400 ml-2" style={{ fontFamily }}>
+                                  %
+                                </span>
+                              </div>
+                            )
+                          } else {
+                            return (
+                              <div className="flex items-center justify-center">
+                                <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center border-2 border-gray-200">
+                                  <span className="text-sm font-medium text-gray-400" style={{ fontFamily }}>
+                                    -
+                                  </span>
+                                </div>
+                                <span className="text-xs text-gray-400 ml-2" style={{ fontFamily }}>
+                                  %
+                                </span>
+                              </div>
+                            )
+                          }
+                        })()}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -521,6 +619,13 @@ export function InterviewRoundContent({
         roundType="INTERVIEW"
         onStatusChange={handleStatusChange}
         isEvaluating={false}
+        onCandidateUpdated={(updatedCandidate) => {
+          setLocalCandidates(prev => 
+            prev.map(candidate => 
+              candidate.id === updatedCandidate.id ? updatedCandidate : candidate
+            )
+          )
+        }}
       />
     </div>
   )
