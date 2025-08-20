@@ -1,12 +1,19 @@
-import { Search, BarChart3, Users, Briefcase, CreditCard, Plus, ChevronDown } from "lucide-react"
+"use client"
+
+import { Search, BarChart3, Users, Briefcase, CreditCard, Plus, ChevronDown, LogOut, User } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { useAuth } from "@/contexts/auth-context"
 
 interface SidebarProps {
   currentRole?: string
 }
 
 export function Sidebar({ currentRole }: SidebarProps) {
+  const { user, logout } = useAuth()
+  
   const navigationItems = [
     { icon: BarChart3, label: "Dashboard", href: "/dashboard" },
     { icon: Briefcase, label: "All roles", href: "/roles", hasSubmenu: true },
@@ -25,22 +32,50 @@ export function Sidebar({ currentRole }: SidebarProps) {
     <div className="w-80 bg-white border-r border-gray-200 h-screen flex flex-col">
       {/* Header */}
       <div className="p-4 border-b border-gray-100">
-        <Button variant="ghost" className="w-full justify-between p-3 h-auto rounded-full bg-gray-50 hover:bg-gray-100">
-          <div className="flex items-center gap-3">
-            <div className="w-6 h-6 bg-orange-500 rounded flex items-center justify-center">
-              <span className="text-white text-xs font-bold">*</span>
-            </div>
-            <div className="text-left">
-              <div className="flex items-center gap-2">
-                <span className="font-medium text-sm">Sparrow ATS</span>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" className="w-full justify-between p-3 h-auto rounded-full bg-gray-50 hover:bg-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="w-6 h-6 bg-orange-500 rounded flex items-center justify-center">
+                  <span className="text-white text-xs font-bold">*</span>
+                </div>
+                <div className="text-left">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-sm">SparrowATS</span>
+                  </div>
+                </div>
               </div>
+              <div className="flex items-center gap-2">
+                <Avatar className="w-8 h-8">
+                  <AvatarImage src={user?.photoURL || ''} alt={user?.displayName || 'User'} />
+                  <AvatarFallback className="bg-orange-500 text-white text-sm font-medium">
+                    {user?.displayName?.charAt(0) || user?.email?.charAt(0) || 'U'}
+                  </AvatarFallback>
+                </Avatar>
+                <ChevronDown className="w-4 h-4 text-gray-500" />
+              </div>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <div className="px-2 py-1.5">
+              <p className="text-sm font-medium">{user?.displayName || 'User'}</p>
+              <p className="text-xs text-gray-500">{user?.email}</p>
             </div>
-          </div>
-          <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center">
-            <span className="text-white text-sm font-medium">U</span>
-          </div>
-          <ChevronDown className="w-4 h-4 text-gray-500" />
-        </Button>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="cursor-pointer">
+              <User className="w-4 h-4 mr-2" />
+              Profile
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem 
+              className="cursor-pointer text-red-600 focus:text-red-600"
+              onClick={() => logout()}
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Logout
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Search */}

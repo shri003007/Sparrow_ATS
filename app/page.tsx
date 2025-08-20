@@ -1,6 +1,9 @@
 "use client"
 
 import { useState } from "react"
+import { useAuth } from "@/contexts/auth-context"
+import { useRouter } from "next/navigation"
+import { useEffect } from "react"
 import { AppSidebar } from "@/components/job_listings/sidebar"
 import { JobCreationModal } from "@/components/job_opening/job-creation-modal"
 import { JobCreationForm } from "@/components/job_opening/job-creation-form"
@@ -29,6 +32,10 @@ type AppView = "job-listings" | "job-creation"
 type JobCreationView = "form" | "canvas"
 
 export default function ATSInterface() {
+  const { user, isLoading } = useAuth()
+  const router = useRouter()
+  
+  // All useState hooks must be declared before any conditional returns
   const [activeTab, setActiveTab] = useState("all")
   const [appView, setAppView] = useState<AppView>("job-listings")
   const [jobCreationView, setJobCreationView] = useState<JobCreationView>("form")
@@ -75,6 +82,27 @@ export default function ATSInterface() {
       setShowNavigationWarning(true)
     }
   })
+
+  // Auth effect - must be after all hooks
+  useEffect(() => {
+    if (!isLoading && !user) {
+      router.replace('/login')
+    }
+  }, [user, isLoading, router])
+  
+  // Show loading spinner while checking auth
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
+      </div>
+    )
+  }
+  
+  // Don't render anything if not authenticated (will redirect)
+  if (!user) {
+    return null
+  }
 
   const handleCreateJobClick = () => {
     setShowCreationModal(true)
@@ -299,7 +327,7 @@ export default function ATSInterface() {
       if (shouldReload) {
         safeReload()
       } else {
-        setAppView("dashboard")
+        setAppView("job-listings")
       }
       return
     }
@@ -321,7 +349,7 @@ export default function ATSInterface() {
       if (shouldReload) {
         safeReload()
       } else {
-        setAppView("dashboard")
+        setAppView("job-listings")
       }
     } catch (error) {
       console.error('Failed to delete job opening:', error)
@@ -337,7 +365,7 @@ export default function ATSInterface() {
       if (shouldReload) {
         safeReload()
       } else {
-        setAppView("dashboard")
+        setAppView("job-listings")
       }
     } finally {
       setIsDeleting(false)

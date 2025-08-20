@@ -1,9 +1,13 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Search, BarChart3, Users, Briefcase, CreditCard, Plus, ChevronDown } from "lucide-react"
+import { Search, BarChart3, Users, Briefcase, CreditCard, Plus, ChevronDown, LogOut, User } from "lucide-react"
 import { JobOpeningsApi } from "@/lib/api/job-openings"
 import type { JobOpeningListItem } from "@/lib/job-types"
+import { useAuth } from "@/contexts/auth-context"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Button } from "@/components/ui/button"
 
 interface AppSidebarProps {
   onCreateJob?: () => void
@@ -13,6 +17,7 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({ onCreateJob, onJobSelect, selectedJobId, mode = 'listing' }: AppSidebarProps) {
+  const { user, logout } = useAuth()
   const [jobs, setJobs] = useState<JobOpeningListItem[]>([])
   const [loading, setLoading] = useState(true)
   const [showAllJobs, setShowAllJobs] = useState(false)
@@ -68,31 +73,65 @@ export function AppSidebar({ onCreateJob, onJobSelect, selectedJobId, mode = 'li
     >
       {/* Brand Header */}
       <div className="p-4 border-b" style={{ borderColor: "#F3F4F6" }}>
-        <div
-          className="w-full flex items-center justify-between p-3 rounded-full cursor-pointer hover:bg-gray-50 transition-colors"
-          style={{ backgroundColor: "#F3F4F6" }}
-        >
-          <div className="flex items-center gap-3">
-            {/* Logo */}
-            <div className="w-6 h-6 rounded flex items-center justify-center" style={{ backgroundColor: "#5BA4A4" }}>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              className="w-full flex items-center justify-between p-3 rounded-full hover:bg-gray-50 transition-colors h-auto"
+              style={{ backgroundColor: "#F3F4F6" }}
+            >
+              <div className="flex items-center gap-3">
+                {/* Logo */}
+                <div className="w-6 h-6 rounded flex items-center justify-center" style={{ backgroundColor: "#5BA4A4" }}>
               <span className="text-white text-sm font-bold">✱</span>
-            </div>
+                </div>
 
-            <div className="flex items-center gap-2">
-              <span
-                className="font-medium"
-                style={{
-                  fontSize: "14px",
-                  fontWeight: 700,
-                  color: "#111827",
-                  fontFamily,
-                }}
-              >
-                Sparrow ATS
-              </span>
+                <div className="flex items-center gap-2">
+                  <span
+                    className="font-medium"
+                    style={{
+                      fontSize: "14px",
+                      fontWeight: 700,
+                      color: "#111827",
+                      fontFamily,
+                    }}
+                  >
+                    SparrowATS
+                  </span>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <Avatar className="w-8 h-8">
+                  <AvatarImage src={user?.photoURL || ''} alt={user?.displayName || 'User'} />
+                  <AvatarFallback className="text-white text-sm font-medium" style={{ backgroundColor: "#FF6B35" }}>
+                    {user?.displayName?.charAt(0) || user?.email?.charAt(0) || 'U'}
+                  </AvatarFallback>
+                </Avatar>
+                <ChevronDown className="w-4 h-4" style={{ color: "#6B7280" }} />
+              </div>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <div className="px-2 py-1.5">
+              <p className="text-sm font-medium">{user?.displayName || 'User'}</p>
+              <p className="text-xs text-gray-500">{user?.email}</p>
             </div>
-          </div>
-        </div>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="cursor-pointer">
+              <User className="w-4 h-4 mr-2" />
+              Profile
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem 
+              className="cursor-pointer text-red-600 focus:text-red-600"
+              onClick={() => logout()}
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Logout
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Global Search */}
