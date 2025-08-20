@@ -1,143 +1,105 @@
-"use client"
-
-import React from "react"
-import {
-  Search,
-  ChevronDown,
-  BarChart3,
-  Briefcase,
-  Plus,
-  Users,
-  CreditCard,
-  Loader2,
-} from "lucide-react"
+import { Search, BarChart3, Users, Briefcase, CreditCard, Plus, ChevronDown } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
 interface SidebarProps {
-  jobRoles: string[];
-  loadingRoles: boolean;
-  activeJobRole: string;
-  searchQuery: string;
-  onJobRoleClick: (role: string) => void;
-  onAddRoleClick: () => void;
-  onSearchChange: (query: string) => void;
+  currentRole?: string
 }
 
-export function Sidebar({
-  jobRoles,
-  loadingRoles,
-  activeJobRole,
-  searchQuery,
-  onJobRoleClick,
-  onAddRoleClick,
-  onSearchChange,
-}: SidebarProps) {
+export function Sidebar({ currentRole }: SidebarProps) {
+  const navigationItems = [
+    { icon: BarChart3, label: "Dashboard", href: "/dashboard" },
+    { icon: Briefcase, label: "All roles", href: "/roles", hasSubmenu: true },
+    { icon: Users, label: "All candidates", href: "/candidates" },
+    { icon: BarChart3, label: "Analytics", href: "/analytics" },
+    { icon: CreditCard, label: "Billing", href: "/billing" },
+  ]
+
+  const jobRoles = [
+    { id: "1", title: "Staff Design Engg.", isActive: true },
+    { id: "2", title: "Sr. Frontend Engg.", isActive: false },
+    { id: "3", title: "Sr. Product Manager", isActive: false },
+  ]
+
   return (
-    <div className="w-60 bg-gray-50 border border-gray-200 flex flex-col rounded-2xl shadow-sm">
+    <div className="w-80 bg-white border-r border-gray-200 h-screen flex flex-col">
       {/* Header */}
-      <div className="p-4 border-b border-gray-200">
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 bg-orange-400 rounded-lg flex items-center justify-center">
-            <span className="text-white text-sm font-bold">*</span>
+      <div className="p-4 border-b border-gray-100">
+        <Button variant="ghost" className="w-full justify-between p-3 h-auto rounded-full bg-gray-50 hover:bg-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="w-6 h-6 bg-orange-500 rounded flex items-center justify-center">
+              <span className="text-white text-xs font-bold">*</span>
+            </div>
+            <div className="text-left">
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-sm">Sparrow ATS</span>
+              </div>
+            </div>
           </div>
-          <div className="flex items-center gap-1">
-            <span className="text-blue-600 text-sm font-medium">PRO</span>
-            <span className="text-gray-900 text-sm font-medium">HighValueTeam</span>
-          </div>
-          <div className="ml-auto">
-            <div className="w-8 h-8 bg-gray-300 rounded-full"></div>
+          <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center">
+            <span className="text-white text-sm font-medium">U</span>
           </div>
           <ChevronDown className="w-4 h-4 text-gray-500" />
-        </div>
+        </Button>
       </div>
 
       {/* Search */}
       <div className="p-4">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <Input 
-            placeholder="Search candidates by name" 
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-            className="pl-10 bg-white border-gray-200 text-sm rounded-xl"
-          />
-          <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-md">⌘K</span>
+          <Input placeholder="Search anything" className="pl-10 pr-12 bg-gray-50 border-gray-200 rounded-lg" />
+          <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+            <span className="text-xs text-gray-400 bg-gray-200 px-1.5 py-0.5 rounded">⌘K</span>
+          </div>
         </div>
       </div>
 
       {/* Navigation */}
       <div className="flex-1 px-4">
-        <div className="mb-6">
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">NAVIGATE</p>
+        <div className="mb-4">
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">NAVIGATE</h3>
           <nav className="space-y-1">
-            <a
-              href="#"
-              className="flex items-center gap-3 px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-xl transition-colors"
-            >
-              <BarChart3 className="w-4 h-4" />
-              Dashboard
-            </a>
-            <div>
-              <div className="flex items-center gap-3 px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-xl transition-colors">
-                <Briefcase className="w-4 h-4" />
-                All roles
-                <button onClick={onAddRoleClick}>
-                  <Plus className="w-4 h-4 ml-auto hover:text-blue-600 cursor-pointer transition-colors" />
-                </button>
-              </div>
-              <div className="ml-6 mt-2 space-y-1">
-                {loadingRoles ? (
-                  <div className="flex items-center gap-3 px-3 py-2 text-sm text-gray-500">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Loading roles...
-                  </div>
-                ) : (
-                  <>
-                    {/* Individual Job Roles */}
-                    {jobRoles.map((role, index) => (
-                      <button
-                        key={role}
-                        onClick={() => onJobRoleClick(role)}
-                        className={`flex items-center gap-3 px-3 py-2 text-sm rounded-xl transition-colors w-full text-left ${
-                          role === activeJobRole 
-                            ? "bg-white border border-gray-200 shadow-sm" 
-                            : "text-gray-600 hover:bg-gray-100"
+            {navigationItems.map((item) => (
+              <div key={item.label}>
+                <Button
+                  variant="ghost"
+                  className={`w-full justify-start gap-3 h-10 px-3 rounded-lg ${
+                    item.label === "All roles" ? "bg-gray-100" : "hover:bg-gray-50"
+                  }`}
+                >
+                  <item.icon className="w-4 h-4 text-gray-500" />
+                  <span className="text-sm text-gray-700">{item.label}</span>
+                  {item.hasSubmenu && <Plus className="w-4 h-4 text-gray-400 ml-auto" />}
+                </Button>
+
+                {/* Job roles submenu */}
+                {item.label === "All roles" && (
+                  <div className="ml-7 mt-1 space-y-1">
+                    {jobRoles.map((role) => (
+                      <Button
+                        key={role.id}
+                        variant="ghost"
+                        className={`w-full justify-start h-8 px-3 rounded-lg text-sm ${
+                          role.isActive ? "bg-gray-900 text-white hover:bg-gray-800" : "text-gray-600 hover:bg-gray-50"
                         }`}
                       >
-                        <div className={`w-2 h-2 rounded-full ${
-                          role === activeJobRole ? "bg-blue-500" : "bg-gray-400"
-                        }`}></div>
-                        {role}
-                      </button>
+                        <div className="w-2 h-2 rounded-full border border-gray-400 mr-2" />
+                        {role.title}
+                      </Button>
                     ))}
-                  </>
+                    <Button
+                      variant="ghost"
+                      className="w-full justify-start h-8 px-3 rounded-lg text-sm text-gray-500 hover:bg-gray-50"
+                    >
+                      See all 6 jobs
+                    </Button>
+                  </div>
                 )}
               </div>
-            </div>
-            <button
-              onClick={() => onJobRoleClick("All candidates")}
-              className="flex items-center gap-3 px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-xl transition-colors w-full text-left"
-            >
-              <Users className="w-4 h-4" />
-              All candidates
-            </button>
-            <a
-              href="#"
-              className="flex items-center gap-3 px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-xl transition-colors"
-            >
-              <BarChart3 className="w-4 h-4" />
-              Analytics
-            </a>
-            <a
-              href="#"
-              className="flex items-center gap-3 px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-xl transition-colors"
-            >
-              <CreditCard className="w-4 h-4" />
-              Billing
-            </a>
+            ))}
           </nav>
         </div>
       </div>
     </div>
   )
-} 
+}
