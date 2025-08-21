@@ -100,6 +100,9 @@ export function ProjectRoundContent({
   const [localCandidates, setLocalCandidates] = useState<RoundCandidate[]>([])
   const [selectedCandidate, setSelectedCandidate] = useState<RoundCandidate | null>(null)
   const [isPanelOpen, setIsPanelOpen] = useState(false)
+  const [isProgressingCandidates, setIsProgressingCandidates] = useState(false)
+  const [originalStatusById, setOriginalStatusById] = useState<Record<string, RoundStatus>>({})
+  const [currentStatusById, setCurrentStatusById] = useState<Record<string, RoundStatus>>({})
 
   // Fetch round data
   useEffect(() => {
@@ -116,6 +119,17 @@ export function ProjectRoundContent({
         const data = await RoundCandidatesApi.getCandidatesByRoundTemplate(currentRound.id)
         setRoundData(data)
         setLocalCandidates(data.candidates || [])
+        
+        // Initialize status tracking (same pattern as INTERVIEW and SCREENING rounds)
+        const initialOriginal: Record<string, RoundStatus> = {}
+        const initialCurrent: Record<string, RoundStatus> = {}
+        for (const candidate of data.candidates || []) {
+          const status = (candidate.candidate_rounds?.[0]?.status || candidate.round_status || 'action_pending') as RoundStatus
+          initialOriginal[candidate.id] = status
+          initialCurrent[candidate.id] = status
+        }
+        setOriginalStatusById(initialOriginal)
+        setCurrentStatusById(initialCurrent)
       } catch (err) {
         console.error('Failed to fetch round data:', err)
         setError(err instanceof Error ? err.message : 'Failed to load round data')
@@ -128,7 +142,7 @@ export function ProjectRoundContent({
   }, [currentRound?.id])
 
   const handleStatusChange = (candidateId: string, newStatus: RoundStatus) => {
-    // Update local state only (same pattern as INTERVIEW round)
+    // Update local candidates state
     setLocalCandidates(prevCandidates => 
       prevCandidates.map(candidate => {
         if (candidate.id === candidateId) {
@@ -143,6 +157,9 @@ export function ProjectRoundContent({
         return candidate
       })
     )
+    
+    // Update status tracking (same pattern as INTERVIEW and SCREENING rounds)
+    setCurrentStatusById(prev => ({ ...prev, [candidateId]: newStatus }))
     
     // Update selected candidate if it's currently open in the panel
     if (selectedCandidate && selectedCandidate.id === candidateId) {
@@ -173,10 +190,68 @@ export function ProjectRoundContent({
     setIsPanelOpen(false)
   }
 
+  const handleProgressToNextRound = async () => {
+    if (!currentRound?.id || !roundData) return
+
+    setIsProgressingCandidates(true)
+    try {
+      // 1) Persist ALL statuses for CURRENT round (not just changed)
+      const currentRoundUpdates = (roundData.candidates || []).map(c => ({
+        candidate_id: c.id,
+        status: (currentStatusById[c.id] || 'action_pending') as RoundStatus,
+      }))
+      await CandidateRoundsApi.updateCandidateRoundStatus({
+        job_round_template_id: currentRound.id,
+        candidate_updates: currentRoundUpdates,
+      })
+
+      // 2) Build full candidate list for the NEXT round using current statuses
+      const allCandidateIds = (roundData.candidates || []).map(c => c.id)
+
+      const nextRound = rounds[currentStepIndex + 1]
+      if (!nextRound) {
+        alert('No next round available.')
+        return
+      }
+
+      // 3) Progress candidates to next round using the same status from the current round, for ALL candidates
+      const candidate_updates = allCandidateIds.map(candidate_id => ({
+        candidate_id,
+        status: (currentStatusById[candidate_id] || 'action_pending') as 'selected' | 'rejected' | 'action_pending'
+      }))
+
+      await CandidateRoundsApi.updateCandidateRoundStatus({
+        job_round_template_id: nextRound.id,
+        candidate_updates
+      })
+
+      // Confirm/activate the next round template so the UI can navigate
+      await JobRoundTemplatesApi.confirmJobRoundTemplate(nextRound.id)
+
+      // Create/update candidate_rounds for the next round with ALL candidates and individual statuses
+      await CandidateRoundsApi.bulkCreateCandidateRounds({
+        job_round_template_id: nextRound.id,
+        candidates: candidate_updates,
+        created_by: createdBy || 'system'
+      })
+
+      // Navigate to next round immediately
+      onNextRound()
+      
+    } catch (error) {
+      console.error('Error progressing candidates:', error)
+      alert('Failed to progress candidates to next round')
+    } finally {
+      setIsProgressingCandidates(false)
+    }
+  }
+
   const nextRound = rounds[currentStepIndex + 1]
-  const completedCandidatesCount = localCandidates.filter(
-    candidate => getCandidateRoundStatus(candidate) === 'selected'
-  ).length
+  const selectedCandidatesCount = localCandidates.filter(candidate => {
+    const current = currentStatusById[candidate.id]
+    const original = originalStatusById[candidate.id]
+    return current === 'selected' && current !== original
+  }).length
 
   if (isLoading) {
     return (
@@ -215,57 +290,109 @@ export function ProjectRoundContent({
   }
 
   return (
-    <div className="space-y-6">
-      {/* Round Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900" style={{ fontFamily }}>
-            {roundData.template_info.round_name}
-          </h2>
-          <p className="text-gray-600 mt-1" style={{ fontFamily }}>
-            Round {roundData.template_info.order_index} • {roundData.candidate_count} candidates
-          </p>
-        </div>
-        
-        {nextRound && (
-          <Button onClick={onNextRound} className="flex items-center gap-2">
-            Next: {nextRound.round_name}
-            <ArrowRight className="w-4 h-4" />
-          </Button>
-        )}
-      </div>
+    <div className="flex-1 bg-gray-50">
+      <div className="max-w-7xl mx-auto p-6">
+        {/* Round Header */}
+        <div className="mb-6">
+          <div className="bg-white rounded-lg border border-gray-200 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900 mb-2" style={{ fontFamily }}>
+                  {roundData.template_info.round_name}
+                </h2>
+                <div className="flex items-center gap-4 text-sm text-gray-600">
+                  <span style={{ fontFamily }}>
+                    Round {roundData.template_info.order_index} of {rounds.length}
+                  </span>
+                  <span
+                    className="px-2 py-1 rounded-full text-xs font-medium"
+                    style={{
+                      backgroundColor: '#FEF3C7',
+                      color: '#F59E0B',
+                      fontFamily
+                    }}
+                  >
+                    PROJECT
+                  </span>
+                  <span
+                    className="px-2 py-1 rounded-full text-xs font-medium"
+                    style={{
+                      backgroundColor: currentRound?.is_active ? '#DCFCE7' : '#FEE2E2',
+                      color: currentRound?.is_active ? '#16A34A' : '#DC2626',
+                      fontFamily
+                    }}
+                  >
+                    {currentRound?.is_active ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+              </div>
 
-      {/* Round Progress */}
-      {completedCandidatesCount > 0 && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-          <p className="text-green-800 text-sm" style={{ fontFamily }}>
-            {completedCandidatesCount} of {localCandidates.length} candidates have completed this round
-          </p>
-        </div>
-      )}
+              {/* Round Stats & Actions */}
+              <div className="flex items-center gap-6">
+                {roundData && (
+                  <div className="text-right">
+                    <div className="text-2xl font-bold text-gray-900 mb-1" style={{ fontFamily }}>
+                      {localCandidates.length}
+                    </div>
+                    <div className="text-sm text-gray-600" style={{ fontFamily }}>
+                      Candidate{localCandidates.length !== 1 ? 's' : ''}
+                    </div>
+                  </div>
+                )}
 
-      {/* Candidates Table */}
-      <div className="bg-white rounded-lg border border-gray-200">
-        <div className="px-6 py-4 border-b border-gray-100">
-          <h3 className="text-lg font-semibold text-gray-900" style={{ fontFamily }}>
-            Project Candidates
-          </h3>
-        </div>
-        
-        <div className="overflow-hidden">
-          {localCandidates.length === 0 ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="text-center">
-                <Users className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2" style={{ fontFamily }}>
-                  No candidates in this round
-                </h3>
-                <p className="text-gray-500" style={{ fontFamily }}>
-                  Candidates will appear here once they're moved to this round.
-                </p>
+                {/* Next Round Button */}
+                {nextRound && (
+                  <div className="flex flex-col items-end gap-2">
+                    <div className="text-sm text-gray-600" style={{ fontFamily }}>
+                      {selectedCandidatesCount} selected for next round
+                    </div>
+                    <Button
+                      onClick={handleProgressToNextRound}
+                      disabled={isProgressingCandidates}
+                      className="flex items-center gap-2"
+                      style={{
+                        backgroundColor: "#10B981",
+                        color: "#FFFFFF",
+                        fontFamily
+                      }}
+                    >
+                      {isProgressingCandidates ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Next round...
+                        </>
+                      ) : (
+                        <>
+                          <Users className="w-4 h-4" />
+                          Next round
+                          <ArrowRight className="w-4 h-4" />
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
-          ) : (
+          </div>
+        </div>
+
+        {/* Project-specific candidates table */}
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="max-h-[calc(100vh-300px)] overflow-y-auto">
+            {localCandidates.length === 0 ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="text-center">
+                  <div className="text-gray-500 mb-4" style={{ fontFamily }}>
+                    No candidates found for this round
+                  </div>
+                  {roundData?.template_info && (
+                    <div className="text-sm text-gray-400" style={{ fontFamily }}>
+                      {roundData.template_info.round_name} • Round {roundData.template_info.order_index}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
             <Table style={{ minWidth: 'max-content', width: 'fit-content' }}>
               <TableHeader>
                 <TableRow>
@@ -383,7 +510,8 @@ export function ProjectRoundContent({
                 ))}
               </TableBody>
             </Table>
-          )}
+            )}
+          </div>
         </div>
       </div>
 

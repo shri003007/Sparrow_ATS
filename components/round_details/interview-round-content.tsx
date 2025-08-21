@@ -115,6 +115,7 @@ export function InterviewRoundContent({
   const [currentStatusById, setCurrentStatusById] = useState<Record<string, RoundStatus>>({})
   const [pendingChanges, setPendingChanges] = useState<Record<string, RoundStatus>>({})
 
+
   // Fetch round candidates data when current round changes
   useEffect(() => {
     const fetchRoundData = async () => {
@@ -206,6 +207,8 @@ export function InterviewRoundContent({
     setSelectedCandidate(candidate)
     setIsPanelOpen(true)
   }
+
+
   const handleFileUpload = async (candidate: RoundCandidate, file: File) => {
     try {
       setUploadingFor(candidate.id)
@@ -460,6 +463,18 @@ export function InterviewRoundContent({
             </div>
           </div>
         </div>
+
+        {/* Error Display */}
+        {fileError && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-red-600" />
+              <span className="text-sm text-red-700" style={{ fontFamily }}>
+                {fileError}
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Interview-specific candidates table */}
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">

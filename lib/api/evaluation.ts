@@ -83,6 +83,54 @@ export interface InterviewEvaluationResponse {
   result_id?: string
 }
 
+// Sparrow Interviewer evaluation request
+export interface SparrowInterviewerEvaluationRequest {
+  email: string
+  job_round_template_id: string
+  candidate_round_id: string
+  job_opening_id: string
+}
+
+// Sparrow Interviewer evaluation response
+export interface SparrowInterviewerEvaluationResponse {
+  candidate_id: string
+  job_id: string
+  round_id: string
+  job_pipeline_id: string
+  round_name: string
+  round_type: string
+  evaluation_summary: string
+  competency_evaluation: {
+    competency_scores: Array<{
+      competency_name: string
+      questions: Array<{
+        question_id: string
+        question: string
+        score: number
+        explanation: string
+      }>
+      percentage_score: number
+    }>
+    evaluation_summary: string
+    overall_percentage_score: number
+  }
+  interviewer_evaluation_summary: string | null
+  overall_percentage_score: number
+  success: boolean
+  error_message: string | null
+  file_stored: boolean
+  file_s3_path: string | null
+  file_metadata: {
+    assessment_type: string
+    audio_filename: string
+    transcript_length: number
+    questions_count: number
+  } | null
+  result_saved: boolean
+  result_action: string
+  result_id: string
+}
+
 interface BatchResumeEvaluationRequest {
   requests: ResumeEvaluationRequest[]
 }
@@ -105,6 +153,13 @@ const getCandidateEvaluationApiUrl = (): string => {
     throw new Error('Candidate evaluation API URL not configured')
   }
   return API_CONFIG.CANDIDATE_EVALUATION_API_URL
+}
+
+const getSparrowInterviewerEvaluationApiUrl = (): string => {
+  if (!API_CONFIG.CANDIDATE_EVALUATION_FROM_SPARROWINTERVIEWER_URL) {
+    throw new Error('Sparrow Interviewer evaluation API URL not configured')
+  }
+  return API_CONFIG.CANDIDATE_EVALUATION_FROM_SPARROWINTERVIEWER_URL
 }
 
 // Helper function to create error response
@@ -293,6 +348,27 @@ export async function evaluateInterviewCandidateFromFile(
     throw new Error(data?.error_message || `Interview evaluation failed: ${response.status}`)
   }
   return data as InterviewEvaluationResponse
+}
+
+// Sparrow Interviewer evaluation
+export async function evaluateInterviewCandidateFromSparrowInterviewer(
+  request: SparrowInterviewerEvaluationRequest
+): Promise<SparrowInterviewerEvaluationResponse> {
+  const apiUrl = getSparrowInterviewerEvaluationApiUrl()
+  
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  })
+  
+  const data = await response.json()
+  
+  if (!response.ok) {
+    throw new Error(data?.error_message || `Sparrow Interviewer evaluation failed: ${response.status}`)
+  }
+  
+  return data as SparrowInterviewerEvaluationResponse
 }
 
 // Batch resume evaluation with delay between batches

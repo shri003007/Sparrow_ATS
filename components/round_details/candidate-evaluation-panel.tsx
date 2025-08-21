@@ -9,7 +9,7 @@ import { EvaluationScoreChart } from "@/components/round_details/evaluation-scor
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer"
 import { Spinner } from "@/components/ui/spinner"
 import type { RoundCandidate } from "@/lib/round-candidate-types"
-import { evaluateInterviewCandidateFromFile, type InterviewEvaluationRequest } from "@/lib/api/evaluation"
+import { evaluateInterviewCandidateFromFile, evaluateInterviewCandidateFromSparrowInterviewer, type InterviewEvaluationRequest, type SparrowInterviewerEvaluationRequest } from "@/lib/api/evaluation"
 import { AssetManagementTable } from "./asset-management-table"
 import { AssetUploadModal } from "./asset-upload-modal"
 import { CompetencyEditModal } from "./competency-edit-modal"
@@ -78,6 +78,9 @@ export function CandidateEvaluationPanel({
   const [assetRefreshTrigger, setAssetRefreshTrigger] = useState<number>(0)
   const [showCompetencyEditModal, setShowCompetencyEditModal] = useState<boolean>(false)
   const [showAssetEvaluationModal, setShowAssetEvaluationModal] = useState<boolean>(false)
+  const [loadingSparrowEvaluation, setLoadingSparrowEvaluation] = useState<boolean>(false)
+  const [sparrowError, setSparrowError] = useState<string | null>(null)
+  const [showReEvaluationOptions, setShowReEvaluationOptions] = useState<boolean>(false)
 
   // Get evaluation data
   const hasEvaluation = candidate?.candidate_rounds?.[0]?.is_evaluation
@@ -195,6 +198,62 @@ export function CandidateEvaluationPanel({
   const handleEvaluationComplete = (updatedCandidate: RoundCandidate) => {
     onCandidateUpdated(updatedCandidate)
     setShowAssetEvaluationModal(false)
+  }
+
+  const handleSparrowInterviewerEvaluation = async () => {
+    if (!candidate?.candidate_rounds?.[0]?.id || !candidate?.job_opening_id || !candidate?.candidate_rounds?.[0]?.job_round_template_id) {
+      setSparrowError('Missing candidate information required for evaluation')
+      return
+    }
+
+    try {
+      setLoadingSparrowEvaluation(true)
+      setSparrowError(null)
+      
+      const request: SparrowInterviewerEvaluationRequest = {
+        email: candidate.email,
+        job_round_template_id: candidate.candidate_rounds[0].job_round_template_id,
+        candidate_round_id: candidate.candidate_rounds[0].id,
+        job_opening_id: candidate.job_opening_id
+      }
+
+      const result = await evaluateInterviewCandidateFromSparrowInterviewer(request)
+      
+      if (result.success) {
+        // Create updated candidate with evaluation
+        const updatedCandidate: RoundCandidate = {
+          ...candidate,
+          candidate_rounds: candidate.candidate_rounds.map(round => ({
+            ...round,
+            is_evaluation: true,
+            evaluations: [{
+              id: result.result_id || `eval-${Date.now()}`,
+              candidate_round_id: round.id,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              evaluation_result: {
+                evaluation_summary: result.evaluation_summary || '',
+                competency_evaluation: result.competency_evaluation || {
+                  competency_scores: [],
+                  overall_percentage_score: 0
+                },
+                overall_percentage_score: result.overall_percentage_score || 0,
+                interviewer_evaluation_summary: result.interviewer_evaluation_summary || ''
+              }
+            }]
+          }))
+        }
+        
+        onCandidateUpdated(updatedCandidate)
+      } else {
+        setSparrowError(result.error_message || 'Sparrow Interviewer evaluation failed')
+      }
+    } catch (error) {
+      console.error('Sparrow Interviewer evaluation error:', error)
+      setSparrowError(error instanceof Error ? error.message : 'Evaluation failed')
+    } finally {
+      setLoadingSparrowEvaluation(false)
+    }
   }
 
   const getScoreColor = (score: number) => {
@@ -319,6 +378,15 @@ export function CandidateEvaluationPanel({
                       Re-evaluate Project
                     </DropdownMenuItem>
                   )}
+                  {roundType === 'INTERVIEW' && hasEvaluation && (
+                    <DropdownMenuItem
+                      onClick={() => setShowReEvaluationOptions(true)}
+                      className="flex items-center gap-2"
+                    >
+                      <Award className="w-4 h-4" />
+                      Re-evaluate Interview
+                    </DropdownMenuItem>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
 
@@ -350,7 +418,124 @@ export function CandidateEvaluationPanel({
               )}
 
               {/* Evaluation Results or Loading State */}
-              {isEvaluating ? (
+              {showReEvaluationOptions && roundType === 'INTERVIEW' ? (
+                /* Re-evaluation Options for INTERVIEW rounds */
+                <div className="w-full max-w-2xl mx-auto space-y-6">
+                  <div className="bg-white border border-gray-100 rounded-2xl p-8 text-center">
+                    <h3 className="text-xl font-semibold text-gray-900 mb-2">Re-evaluate Interview</h3>
+                    <p className="text-gray-500 max-w-md mx-auto mb-6">
+                      Choose your preferred method to re-evaluate this candidate's interview.
+                    </p>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Option 1: Sparrow Interviewer Evaluation */}
+                      <div className="border border-gray-300 rounded-lg p-6 hover:border-blue-400 transition-colors bg-gradient-to-br from-blue-50 to-indigo-50">
+                        <div className="flex flex-col items-center text-center">
+                          <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-3">
+                            <Award className="w-6 h-6 text-blue-600" />
+                          </div>
+                          <h4 className="text-sm font-semibold text-gray-900 mb-2">Sparrow Interviewer</h4>
+                          <p className="text-xs text-gray-600 mb-4 leading-relaxed">
+                            Automatically fetch updated evaluation results from Sparrow Interviewer assessment platform.
+                          </p>
+                          
+                          <Button 
+                            onClick={() => {
+                              setShowReEvaluationOptions(false)
+                              handleSparrowInterviewerEvaluation()
+                            }}
+                            disabled={loadingSparrowEvaluation || uploadingFile}
+                            className="w-full"
+                            style={{
+                              backgroundColor: "#4F46E5",
+                              color: "#FFFFFF"
+                            }}
+                          >
+                            {loadingSparrowEvaluation ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Fetching...
+                              </>
+                            ) : (
+                              <>
+                                <Award className="w-4 h-4 mr-2" />
+                                Get New Evaluation
+                              </>
+                            )}
+                          </Button>
+                          
+                          {sparrowError && (
+                            <div className="mt-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2 w-full">
+                              {sparrowError}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Option 2: File Upload */}
+                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-blue-400 transition-colors">
+                        <div className="flex flex-col items-center text-center">
+                          <Upload className="w-8 h-8 text-gray-400 mb-3" />
+                          <h4 className="text-sm font-semibold text-gray-900 mb-2">Upload New Transcript</h4>
+                          <p className="text-xs text-gray-600 mb-4 leading-relaxed">
+                            Upload a new PDF or TXT file containing the interview transcript for AI re-evaluation.
+                          </p>
+                          
+                          <div className="relative w-full">
+                            <input
+                              type="file"
+                              accept=".pdf,.txt,application/pdf,text/plain"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0]
+                                if (file) {
+                                  setShowReEvaluationOptions(false)
+                                  handleFileUpload(file)
+                                  e.currentTarget.value = ''
+                                }
+                              }}
+                              disabled={uploadingFile || loadingSparrowEvaluation}
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+                            />
+                            <Button 
+                              className="w-full"
+                              disabled={uploadingFile || loadingSparrowEvaluation}
+                              variant="outline"
+                            >
+                              {uploadingFile ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                  Processing...
+                                </>
+                              ) : (
+                                <>
+                                  <Upload className="w-4 h-4 mr-2" />
+                                  Choose New File
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                          
+                          {fileError && (
+                            <div className="mt-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2 w-full">
+                              {fileError}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="text-center mt-6">
+                      <Button
+                        onClick={() => setShowReEvaluationOptions(false)}
+                        variant="ghost"
+                        className="text-gray-500"
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : isEvaluating ? (
                 <div className="w-full max-w-4xl mx-auto">
                   <div className="bg-white border border-gray-100 rounded-2xl p-12 text-center">
                     <div className="flex flex-col items-center gap-4">
@@ -539,59 +724,110 @@ export function CandidateEvaluationPanel({
                       This candidate has not been evaluated yet for this round.
                     </p>
                     
-                    {/* File Upload for INTERVIEW rounds */}
+                    {/* Evaluation Options for INTERVIEW rounds */}
                     {roundType === 'INTERVIEW' && (
-                      <div className="max-w-md mx-auto">
-                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-blue-400 transition-colors">
-                          <Upload className="w-8 h-8 text-gray-400 mx-auto mb-3" />
-                          <h4 className="text-sm font-medium text-gray-900 mb-2">Upload Interview Transcript</h4>
-                          <p className="text-xs text-gray-500 mb-4">
-                            Upload a PDF or TXT file containing the interview transcript to generate an AI evaluation.
-                          </p>
-                          
-                          <div className="relative">
-                            <input
-                              type="file"
-                              accept=".pdf,.txt,application/pdf,text/plain"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0]
-                                if (file) {
-                                  handleFileUpload(file)
-                                  e.currentTarget.value = ''
-                                }
-                              }}
-                              disabled={uploadingFile}
-                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
-                            />
-                            <Button 
-                              className="w-full"
-                              disabled={uploadingFile}
-                              variant="outline"
-                            >
-                              {uploadingFile ? (
-                                <>
-                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                  Processing...
-                                </>
-                              ) : (
-                                <>
-                                  <Upload className="w-4 h-4 mr-2" />
-                                  Choose File
-                                </>
+                      <div className="max-w-2xl mx-auto space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          {/* Option 1: Sparrow Interviewer Evaluation */}
+                          <div className="border border-gray-300 rounded-lg p-6 hover:border-blue-400 transition-colors bg-gradient-to-br from-blue-50 to-indigo-50">
+                            <div className="flex flex-col items-center text-center">
+                              <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-3">
+                                <Award className="w-6 h-6 text-blue-600" />
+                              </div>
+                              <h4 className="text-sm font-semibold text-gray-900 mb-2">Sparrow Interviewer</h4>
+                              <p className="text-xs text-gray-600 mb-4 leading-relaxed">
+                                Automatically fetch evaluation results from Sparrow Interviewer assessment platform.
+                              </p>
+                              
+                              <Button 
+                                onClick={handleSparrowInterviewerEvaluation}
+                                disabled={loadingSparrowEvaluation || uploadingFile}
+                                className="w-full"
+                                style={{
+                                  backgroundColor: "#4F46E5",
+                                  color: "#FFFFFF"
+                                }}
+                              >
+                                {loadingSparrowEvaluation ? (
+                                  <>
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                    Fetching...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Award className="w-4 h-4 mr-2" />
+                                    Get Evaluation
+                                  </>
+                                )}
+                              </Button>
+                              
+                              {sparrowError && (
+                                <div className="mt-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2 w-full">
+                                  {sparrowError}
+                                </div>
                               )}
-                            </Button>
-                          </div>
-                          
-                          {fileError && (
-                            <div className="mt-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
-                              {fileError}
                             </div>
-                          )}
+                          </div>
+
+                          {/* Option 2: File Upload */}
+                          <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-blue-400 transition-colors">
+                            <div className="flex flex-col items-center text-center">
+                              <Upload className="w-8 h-8 text-gray-400 mb-3" />
+                              <h4 className="text-sm font-semibold text-gray-900 mb-2">Upload Transcript</h4>
+                              <p className="text-xs text-gray-600 mb-4 leading-relaxed">
+                                Upload a PDF or TXT file containing the interview transcript for AI evaluation.
+                              </p>
+                              
+                              <div className="relative w-full">
+                                <input
+                                  type="file"
+                                  accept=".pdf,.txt,application/pdf,text/plain"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0]
+                                    if (file) {
+                                      handleFileUpload(file)
+                                      e.currentTarget.value = ''
+                                    }
+                                  }}
+                                  disabled={uploadingFile || loadingSparrowEvaluation}
+                                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+                                />
+                                <Button 
+                                  className="w-full"
+                                  disabled={uploadingFile || loadingSparrowEvaluation}
+                                  variant="outline"
+                                >
+                                  {uploadingFile ? (
+                                    <>
+                                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                      Processing...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Upload className="w-4 h-4 mr-2" />
+                                      Choose File
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
+                              
+                              {fileError && (
+                                <div className="mt-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2 w-full">
+                                  {fileError}
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </div>
                         
-                        <p className="text-xs text-gray-400 mt-3">
-                          Supported formats: PDF, TXT • Maximum file size: 10MB
-                        </p>
+                        <div className="text-center">
+                          <p className="text-xs text-gray-400">
+                            Choose your preferred evaluation method above
+                          </p>
+                          <p className="text-xs text-gray-400 mt-1">
+                            File uploads support: PDF, TXT • Maximum file size: 10MB
+                          </p>
+                        </div>
                       </div>
                     )}
 
