@@ -431,11 +431,10 @@ export function RoundCandidatesTable({
   }
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-      {/* Table with proper scrolling */}
-      <div className="max-h-[calc(100vh-300px)] overflow-y-auto overflow-x-auto">
-        <Table style={{ minWidth: 'max-content', width: 'fit-content' }}>
-          <TableHeader>
+    <>
+      <div className="overflow-x-auto">
+        <Table className="min-w-full">
+          <TableHeader className="sticky top-0 bg-white z-10">
             <TableRow>
               <TableHead style={{ fontFamily }}>Candidate</TableHead>
               <TableHead style={{ fontFamily }}>Contact</TableHead>
@@ -681,6 +680,6 @@ export function RoundCandidatesTable({
           onCandidateUpdated(updatedCandidate)
         }}
       />
-    </div>
+    </>
   )
 }

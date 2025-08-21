@@ -393,16 +393,17 @@ export function ProjectRoundContent({
                 </div>
               </div>
             ) : (
-            <Table style={{ minWidth: 'max-content', width: 'fit-content' }}>
-              <TableHeader>
-                <TableRow>
-                  <TableHead style={{ fontFamily }}>Candidate</TableHead>
-                  <TableHead style={{ fontFamily }}>Contact</TableHead>
-                  <TableHead style={{ fontFamily }}>Status</TableHead>
-                  <TableHead style={{ fontFamily }}>Score</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+              <div className="overflow-x-auto">
+                <Table className="min-w-full">
+                  <TableHeader className="sticky top-0 bg-white z-10">
+                    <TableRow>
+                      <TableHead style={{ fontFamily }}>Candidate</TableHead>
+                      <TableHead style={{ fontFamily }}>Contact</TableHead>
+                      <TableHead style={{ fontFamily }}>Status</TableHead>
+                      <TableHead style={{ fontFamily }}>Score</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                 {localCandidates.map((candidate) => (
                   <TableRow key={candidate.id}>
                     {/* Candidate Info */}
@@ -508,8 +509,9 @@ export function ProjectRoundContent({
                     </TableCell>
                   </TableRow>
                 ))}
-              </TableBody>
-            </Table>
+                  </TableBody>
+                </Table>
+              </div>
             )}
           </div>
         </div>
