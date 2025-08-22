@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Loader2, AlertCircle, Users, ArrowRight } from "lucide-react"
+import { Loader2, AlertCircle, Users, ArrowRight, Settings } from "lucide-react"
 import { RoundCandidatesApi } from "@/lib/api/round-candidates"
 import { CandidateRoundsApi, JobRoundTemplatesApi } from "@/lib/api/rounds"
 import { evaluateInterviewCandidateFromFile } from "@/lib/api/evaluation"
@@ -11,6 +11,9 @@ import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Mail, Phone, MapPin, Calendar, Clock, ChevronDown } from "lucide-react"
 import { CandidateEvaluationPanel } from "./candidate-evaluation-panel"
 
@@ -114,6 +117,63 @@ export function InterviewRoundContent({
   const [originalStatusById, setOriginalStatusById] = useState<Record<string, RoundStatus>>({})
   const [currentStatusById, setCurrentStatusById] = useState<Record<string, RoundStatus>>({})
   const [pendingChanges, setPendingChanges] = useState<Record<string, RoundStatus>>({})
+  
+  // Re-evaluation states for all candidates
+  const [candidateReEvaluationStates, setCandidateReEvaluationStates] = useState<Record<string, {
+    isReEvaluating: boolean
+    reEvaluationError: string | null
+    showReEvaluationOptions: boolean
+  }>>({})
+  
+  // Sparrow Interviewer round ID settings
+  const [showRoundIdModal, setShowRoundIdModal] = useState(false)
+  const [sparrowRoundId, setSparrowRoundId] = useState<string>('')
+  const [tempRoundId, setTempRoundId] = useState<string>('')
+
+  // Local storage key for round ID settings - using specific round template ID for uniqueness
+  const getRoundIdStorageKey = () => {
+    const roundTemplateId = currentRound?.id
+    return `sparrow_round_id_${roundTemplateId}`
+  }
+
+  // Load saved round ID from localStorage
+  useEffect(() => {
+    if (currentRound?.id) {
+      const storageKey = getRoundIdStorageKey()
+      const savedRoundId = localStorage.getItem(storageKey)
+      if (savedRoundId) {
+        setSparrowRoundId(savedRoundId)
+      } else {
+        // Reset to empty if no saved round ID for this specific round
+        setSparrowRoundId('')
+      }
+    }
+  }, [currentRound?.id])
+
+  // Save round ID to localStorage
+  const saveSparrowRoundId = (roundId: string) => {
+    if (currentRound?.id) {
+      const storageKey = getRoundIdStorageKey()
+      localStorage.setItem(storageKey, roundId)
+      setSparrowRoundId(roundId)
+    }
+  }
+
+  // Handle round ID modal
+  const handleOpenRoundIdModal = () => {
+    setTempRoundId(sparrowRoundId)
+    setShowRoundIdModal(true)
+  }
+
+  const handleSaveRoundId = () => {
+    saveSparrowRoundId(tempRoundId.trim())
+    setShowRoundIdModal(false)
+  }
+
+  const handleCancelRoundId = () => {
+    setTempRoundId('')
+    setShowRoundIdModal(false)
+  }
 
 
   // Fetch round candidates data when current round changes
@@ -203,6 +263,21 @@ export function InterviewRoundContent({
     return candidate.round_status as RoundStatus
   }
 
+  // Handle re-evaluation state changes
+  const handleReEvaluationStateChange = (candidateId: string, state: {
+    isReEvaluating?: boolean
+    reEvaluationError?: string | null
+    showReEvaluationOptions?: boolean
+  }) => {
+    setCandidateReEvaluationStates(prev => ({
+      ...prev,
+      [candidateId]: {
+        ...prev[candidateId],
+        ...state
+      }
+    }))
+  }
+
   const openEvaluationPanel = (candidate: RoundCandidate) => {
     setSelectedCandidate(candidate)
     setIsPanelOpen(true)
@@ -240,6 +315,7 @@ export function InterviewRoundContent({
               evaluation_summary: result.evaluation_summary || '',
               competency_evaluation: result.competency_evaluation || { competency_scores: [], overall_percentage_score: 0 },
               overall_percentage_score: result.competency_evaluation?.overall_percentage_score || 0,
+              transcript_text: result.transcript_text || ''
             },
           },
         ]
@@ -427,6 +503,18 @@ export function InterviewRoundContent({
                     </div>
                   </div>
                 )}
+
+                {/* Sparrow Interviewer Settings Button (for INTERVIEW rounds only) */}
+                <Button
+                  onClick={handleOpenRoundIdModal}
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-2"
+                  style={{ fontFamily }}
+                >
+                  <Settings className="w-4 h-4" />
+                  Settings
+                </Button>
 
                 {/* Next Round Button */}
                 {hasNextRound && (
@@ -628,6 +716,43 @@ export function InterviewRoundContent({
         </div>
       </div>
 
+      {/* Sparrow Interviewer Round ID Settings Modal */}
+      <Dialog open={showRoundIdModal} onOpenChange={setShowRoundIdModal}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Sparrow Interviewer Settings - {currentRound?.round_name || 'Current Round'}</DialogTitle>
+            <DialogDescription>
+              Configure the round ID that will be sent to Sparrow Interviewer for all candidates in this specific round ({currentRound?.round_name || 'Current Round'}).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="round-id" className="text-right">
+                Round ID
+              </Label>
+              <Input
+                id="round-id"
+                value={tempRoundId}
+                onChange={(e) => setTempRoundId(e.target.value)}
+                placeholder="Enter Sparrow Interviewer round ID"
+                className="col-span-3"
+              />
+            </div>
+            <div className="text-sm text-gray-500 col-span-4">
+              This round ID will be used instead of the job_round_template_id when making API calls to Sparrow Interviewer for this specific round ({currentRound?.round_name || 'Current Round'}). Each round can have its own unique round ID.
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={handleCancelRoundId}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={handleSaveRoundId}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Interview-specific Evaluation Panel */}
       <CandidateEvaluationPanel
         candidate={selectedCandidate}
@@ -636,6 +761,9 @@ export function InterviewRoundContent({
         roundType="INTERVIEW"
         onStatusChange={handleStatusChange}
         isEvaluating={false}
+        candidateReEvaluationStates={candidateReEvaluationStates}
+        onReEvaluationStateChange={handleReEvaluationStateChange}
+        sparrowRoundId={sparrowRoundId}
         onCandidateUpdated={(updatedCandidate) => {
           setLocalCandidates(prev => 
             prev.map(candidate => 

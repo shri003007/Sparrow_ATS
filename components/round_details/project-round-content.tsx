@@ -103,6 +103,13 @@ export function ProjectRoundContent({
   const [isProgressingCandidates, setIsProgressingCandidates] = useState(false)
   const [originalStatusById, setOriginalStatusById] = useState<Record<string, RoundStatus>>({})
   const [currentStatusById, setCurrentStatusById] = useState<Record<string, RoundStatus>>({})
+  
+  // Re-evaluation states for all candidates
+  const [candidateReEvaluationStates, setCandidateReEvaluationStates] = useState<Record<string, {
+    isReEvaluating: boolean
+    reEvaluationError: string | null
+    showReEvaluationOptions: boolean
+  }>>({})
 
   // Fetch round data
   useEffect(() => {
@@ -171,6 +178,21 @@ export function ProjectRoundContent({
       }
       setSelectedCandidate(updatedCandidate)
     }
+  }
+
+  // Handle re-evaluation state changes
+  const handleReEvaluationStateChange = (candidateId: string, state: {
+    isReEvaluating?: boolean
+    reEvaluationError?: string | null
+    showReEvaluationOptions?: boolean
+  }) => {
+    setCandidateReEvaluationStates(prev => ({
+      ...prev,
+      [candidateId]: {
+        ...prev[candidateId],
+        ...state
+      }
+    }))
   }
 
   const getCandidateRoundStatus = (candidate: RoundCandidate): RoundStatus => {
@@ -525,6 +547,9 @@ export function ProjectRoundContent({
         roundType="PROJECT"
         onStatusChange={handleStatusChange}
         isEvaluating={false}
+        candidateReEvaluationStates={candidateReEvaluationStates}
+        onReEvaluationStateChange={handleReEvaluationStateChange}
+        sparrowRoundId=""
         onCandidateUpdated={(updatedCandidate) => {
           setLocalCandidates(prev => 
             prev.map(candidate => 

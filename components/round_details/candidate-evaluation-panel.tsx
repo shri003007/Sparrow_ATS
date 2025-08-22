@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState } from "react"
-import { X, ChevronDown, Check, AlertCircle, Mail, Phone, Settings, Calendar, FileText, Award, Upload, Loader2 } from "lucide-react"
+import { X, ChevronDown, Check, AlertCircle, Mail, Phone, Settings, Calendar, FileText, Award, Upload, Loader2, MessageSquare } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -60,6 +60,19 @@ interface CandidateEvaluationPanelProps {
   onStatusChange?: (candidateId: string, newStatus: RoundStatus) => void
   isEvaluating?: boolean
   onCandidateUpdated?: (updatedCandidate: RoundCandidate) => void
+  // Re-evaluation state props
+  candidateReEvaluationStates?: Record<string, {
+    isReEvaluating: boolean
+    reEvaluationError: string | null
+    showReEvaluationOptions: boolean
+  }>
+  onReEvaluationStateChange?: (candidateId: string, state: {
+    isReEvaluating?: boolean
+    reEvaluationError?: string | null
+    showReEvaluationOptions?: boolean
+  }) => void
+  // Sparrow Interviewer round ID
+  sparrowRoundId?: string
 }
 
 export function CandidateEvaluationPanel({ 
@@ -69,7 +82,10 @@ export function CandidateEvaluationPanel({
   roundType,
   onStatusChange = () => {},
   isEvaluating = false,
-  onCandidateUpdated = () => {}
+  onCandidateUpdated = () => {},
+  candidateReEvaluationStates = {},
+  onReEvaluationStateChange = () => {},
+  sparrowRoundId = ''
 }: CandidateEvaluationPanelProps) {
   const [selectedCompetency, setSelectedCompetency] = useState<string>('')
   const [uploadingFile, setUploadingFile] = useState<boolean>(false)
@@ -80,7 +96,29 @@ export function CandidateEvaluationPanel({
   const [showAssetEvaluationModal, setShowAssetEvaluationModal] = useState<boolean>(false)
   const [loadingSparrowEvaluation, setLoadingSparrowEvaluation] = useState<boolean>(false)
   const [sparrowError, setSparrowError] = useState<string | null>(null)
-  const [showReEvaluationOptions, setShowReEvaluationOptions] = useState<boolean>(false)
+  
+  // Get re-evaluation states from props for current candidate
+  const currentCandidateId = candidate?.id || ''
+  const currentReEvaluationState = candidateReEvaluationStates[currentCandidateId] || {
+    isReEvaluating: false,
+    reEvaluationError: null,
+    showReEvaluationOptions: false
+  }
+  
+  const { isReEvaluating, reEvaluationError, showReEvaluationOptions } = currentReEvaluationState
+  
+  // Helper functions to update re-evaluation state
+  const setIsReEvaluating = (value: boolean) => {
+    onReEvaluationStateChange(currentCandidateId, { isReEvaluating: value })
+  }
+  
+  const setReEvaluationError = (value: string | null) => {
+    onReEvaluationStateChange(currentCandidateId, { reEvaluationError: value })
+  }
+  
+  const setShowReEvaluationOptions = (value: boolean) => {
+    onReEvaluationStateChange(currentCandidateId, { showReEvaluationOptions: value })
+  }
 
   // Get evaluation data
   const hasEvaluation = candidate?.candidate_rounds?.[0]?.is_evaluation
@@ -92,6 +130,14 @@ export function CandidateEvaluationPanel({
       setSelectedCompetency(evaluation.competency_evaluation.competency_scores[0].competency_name)
     }
   }, [evaluation, selectedCompetency])
+
+  // Reset initial evaluation states when candidate changes (but keep re-evaluation states)
+  React.useEffect(() => {
+    setLoadingSparrowEvaluation(false)
+    setSparrowError(null)
+    setUploadingFile(false)
+    setFileError(null)
+  }, [candidate?.id])
 
   if (!candidate) return null
 
@@ -106,15 +152,24 @@ export function CandidateEvaluationPanel({
     onStatusChange(candidate.id, newStatus)
   }
 
-  const handleFileUpload = async (file: File) => {
+  const handleFileUpload = async (file: File, isReEvaluation = false) => {
     if (!candidate?.candidate_rounds?.[0]?.id || !candidate?.job_opening_id) {
-      setFileError('Missing candidate or job information')
+      if (isReEvaluation) {
+        setReEvaluationError('Missing candidate or job information')
+      } else {
+        setFileError('Missing candidate or job information')
+      }
       return
     }
 
     try {
-      setUploadingFile(true)
-      setFileError(null)
+      if (isReEvaluation) {
+        setIsReEvaluating(true)
+        setReEvaluationError(null)
+      } else {
+        setUploadingFile(true)
+        setFileError(null)
+      }
 
       // Convert file to base64
       const arrayBuffer = await file.arrayBuffer()
@@ -151,21 +206,39 @@ export function CandidateEvaluationPanel({
                   overall_percentage_score: 0
                 },
                 overall_percentage_score: result.competency_evaluation?.overall_percentage_score || 0,
-                interviewer_evaluation_summary: result.interviewer_evaluation_summary || ''
+                interviewer_evaluation_summary: result.interviewer_evaluation_summary || '',
+                transcript_text: result.transcript_text || ''
               }
             }]
           }))
         }
         
         onCandidateUpdated(updatedCandidate)
+        
+        // Hide re-evaluation options after successful re-evaluation
+        if (isReEvaluation) {
+          setShowReEvaluationOptions(false)
+        }
       } else {
-        setFileError(result.error_message || 'Evaluation failed')
+        if (isReEvaluation) {
+          setReEvaluationError(result.error_message || 'Evaluation failed')
+        } else {
+          setFileError(result.error_message || 'Evaluation failed')
+        }
       }
     } catch (error) {
       console.error('File upload error:', error)
-      setFileError(error instanceof Error ? error.message : 'Upload failed')
+      if (isReEvaluation) {
+        setReEvaluationError(error instanceof Error ? error.message : 'Upload failed')
+      } else {
+        setFileError(error instanceof Error ? error.message : 'Upload failed')
+      }
     } finally {
-      setUploadingFile(false)
+      if (isReEvaluation) {
+        setIsReEvaluating(false)
+      } else {
+        setUploadingFile(false)
+      }
     }
   }
 
@@ -200,19 +273,39 @@ export function CandidateEvaluationPanel({
     setShowAssetEvaluationModal(false)
   }
 
-  const handleSparrowInterviewerEvaluation = async () => {
-    if (!candidate?.candidate_rounds?.[0]?.id || !candidate?.job_opening_id || !candidate?.candidate_rounds?.[0]?.job_round_template_id) {
-      setSparrowError('Missing candidate information required for evaluation')
+  const handleSparrowInterviewerEvaluation = async (isReEvaluation = false) => {
+    // Check if sparrowRoundId is configured for this specific round
+    if (!sparrowRoundId || sparrowRoundId.trim() === '') {
+      const errorMessage = 'Please configure the Sparrow Interviewer Round ID for this specific round in the round settings before evaluation. Each round needs its own unique round ID.'
+      if (isReEvaluation) {
+        setReEvaluationError(errorMessage)
+      } else {
+        setSparrowError(errorMessage)
+      }
+      return
+    }
+
+    if (!candidate?.candidate_rounds?.[0]?.id || !candidate?.job_opening_id) {
+      if (isReEvaluation) {
+        setReEvaluationError('Missing candidate information required for evaluation')
+      } else {
+        setSparrowError('Missing candidate information required for evaluation')
+      }
       return
     }
 
     try {
-      setLoadingSparrowEvaluation(true)
-      setSparrowError(null)
+      if (isReEvaluation) {
+        setIsReEvaluating(true)
+        setReEvaluationError(null)
+      } else {
+        setLoadingSparrowEvaluation(true)
+        setSparrowError(null)
+      }
       
       const request: SparrowInterviewerEvaluationRequest = {
         email: candidate.email,
-        job_round_template_id: candidate.candidate_rounds[0].job_round_template_id,
+        job_round_template_id: sparrowRoundId,
         candidate_round_id: candidate.candidate_rounds[0].id,
         job_opening_id: candidate.job_opening_id
       }
@@ -238,21 +331,39 @@ export function CandidateEvaluationPanel({
                   overall_percentage_score: 0
                 },
                 overall_percentage_score: result.overall_percentage_score || 0,
-                interviewer_evaluation_summary: result.interviewer_evaluation_summary || ''
+                interviewer_evaluation_summary: result.interviewer_evaluation_summary || '',
+                transcript_text: result.file_metadata?.transcript_text || ''
               }
             }]
           }))
         }
         
         onCandidateUpdated(updatedCandidate)
+        
+        // Hide re-evaluation options after successful re-evaluation
+        if (isReEvaluation) {
+          setShowReEvaluationOptions(false)
+        }
       } else {
-        setSparrowError(result.error_message || 'Sparrow Interviewer evaluation failed')
+        if (isReEvaluation) {
+          setReEvaluationError(result.error_message || 'Sparrow Interviewer evaluation failed')
+        } else {
+          setSparrowError(result.error_message || 'Sparrow Interviewer evaluation failed')
+        }
       }
     } catch (error) {
       console.error('Sparrow Interviewer evaluation error:', error)
-      setSparrowError(error instanceof Error ? error.message : 'Evaluation failed')
+      if (isReEvaluation) {
+        setReEvaluationError(error instanceof Error ? error.message : 'Evaluation failed')
+      } else {
+        setSparrowError(error instanceof Error ? error.message : 'Evaluation failed')
+      }
     } finally {
-      setLoadingSparrowEvaluation(false)
+      if (isReEvaluation) {
+        setIsReEvaluating(false)
+      } else {
+        setLoadingSparrowEvaluation(false)
+      }
     }
   }
 
@@ -424,8 +535,26 @@ export function CandidateEvaluationPanel({
                   <div className="bg-white border border-gray-100 rounded-2xl p-8 text-center">
                     <h3 className="text-xl font-semibold text-gray-900 mb-2">Re-evaluate Interview</h3>
                     <p className="text-gray-500 max-w-md mx-auto mb-6">
-                      Choose your preferred method to re-evaluate this candidate's interview.
+                      {isReEvaluating 
+                        ? "Re-evaluation in progress. Please wait..." 
+                        : "Choose your preferred method to re-evaluate this candidate's interview."
+                      }
                     </p>
+                    
+                    {isReEvaluating ? (
+                      /* Loading State during Re-evaluation */
+                      <div className="flex flex-col items-center gap-4">
+                        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+                        <div className="text-sm text-gray-600">
+                          Processing re-evaluation request...
+                        </div>
+                        {reEvaluationError && (
+                          <div className="mt-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded px-4 py-2 max-w-md">
+                            {reEvaluationError}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {/* Option 1: Sparrow Interviewer Evaluation */}
@@ -440,28 +569,16 @@ export function CandidateEvaluationPanel({
                           </p>
                           
                           <Button 
-                            onClick={() => {
-                              setShowReEvaluationOptions(false)
-                              handleSparrowInterviewerEvaluation()
-                            }}
-                            disabled={loadingSparrowEvaluation || uploadingFile}
+                            onClick={() => handleSparrowInterviewerEvaluation(true)}
+                            disabled={isReEvaluating}
                             className="w-full"
                             style={{
                               backgroundColor: "#4F46E5",
                               color: "#FFFFFF"
                             }}
                           >
-                            {loadingSparrowEvaluation ? (
-                              <>
-                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                Fetching...
-                              </>
-                            ) : (
-                              <>
-                                <Award className="w-4 h-4 mr-2" />
-                                Get New Evaluation
-                              </>
-                            )}
+                            <Award className="w-4 h-4 mr-2" />
+                            Get New Evaluation
                           </Button>
                           
                           {sparrowError && (
@@ -488,30 +605,20 @@ export function CandidateEvaluationPanel({
                               onChange={(e) => {
                                 const file = e.target.files?.[0]
                                 if (file) {
-                                  setShowReEvaluationOptions(false)
-                                  handleFileUpload(file)
+                                  handleFileUpload(file, true)
                                   e.currentTarget.value = ''
                                 }
                               }}
-                              disabled={uploadingFile || loadingSparrowEvaluation}
+                              disabled={isReEvaluating}
                               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
                             />
                             <Button 
                               className="w-full"
-                              disabled={uploadingFile || loadingSparrowEvaluation}
+                              disabled={isReEvaluating}
                               variant="outline"
                             >
-                              {uploadingFile ? (
-                                <>
-                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                  Processing...
-                                </>
-                              ) : (
-                                <>
-                                  <Upload className="w-4 h-4 mr-2" />
-                                  Choose New File
-                                </>
-                              )}
+                              <Upload className="w-4 h-4 mr-2" />
+                              Choose New File
                             </Button>
                           </div>
                           
@@ -523,12 +630,14 @@ export function CandidateEvaluationPanel({
                         </div>
                       </div>
                     </div>
+                    )}
                     
                     <div className="text-center mt-6">
                       <Button
                         onClick={() => setShowReEvaluationOptions(false)}
                         variant="ghost"
                         className="text-gray-500"
+                        disabled={isReEvaluating}
                       >
                         Cancel
                       </Button>
@@ -554,6 +663,33 @@ export function CandidateEvaluationPanel({
                 </div>
               ) : hasEvaluation && evaluation ? (
                 <>
+                  {/* Re-evaluation Loading Overlay */}
+                  {isReEvaluating && (
+                    <div className="w-full max-w-4xl mx-auto">
+                      <div className="bg-white border border-gray-100 rounded-2xl p-12 text-center">
+                        <div className="flex flex-col items-center gap-4">
+                          <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+                          <div>
+                            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                              Re-evaluating Interview
+                            </h3>
+                            <p className="text-sm text-gray-600">
+                              Processing your re-evaluation request. This may take a moment.
+                            </p>
+                            {reEvaluationError && (
+                              <div className="mt-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded px-4 py-2 max-w-md mx-auto">
+                                {reEvaluationError}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Show existing evaluation only when not re-evaluating */}
+                  {!isReEvaluating && (
+                  <>
                   {/* Overall Score Section */}
                   <div className="w-full max-w-4xl mx-auto">
                     <div className="bg-white border border-gray-100 rounded-2xl p-6">
@@ -693,7 +829,7 @@ export function CandidateEvaluationPanel({
                     </div>
                   </div>
 
-                  {/* AI Evaluation Summary - Last */}
+                  {/* AI Evaluation Summary */}
                   {evaluation.evaluation_summary && (
                     <div className="w-full max-w-4xl mx-auto">
                       <div className="bg-white border border-gray-100 rounded-2xl">
@@ -712,6 +848,32 @@ export function CandidateEvaluationPanel({
                       </div>
                     </div>
                   )}
+
+                  {/* Interview Transcript - Only for INTERVIEW rounds and only if transcript_text exists */}
+                  {roundType === 'INTERVIEW' && evaluation.transcript_text && (
+                    <div className="w-full max-w-4xl mx-auto">
+                      <div className="bg-white border border-gray-100 rounded-2xl">
+                        <div className="p-6 border-b border-gray-100">
+                          <div className="flex items-center gap-3">
+                            <MessageSquare className="w-5 h-5 text-green-600" />
+                            <h3 className="text-lg font-bold text-gray-900">Interview Transcript</h3>
+                          </div>
+                        </div>
+                        <div className="p-6">
+                          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                            <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap font-mono">
+                              {evaluation.transcript_text}
+                            </p>
+                          </div>
+                          <div className="mt-3 text-xs text-gray-500">
+                            Transcript generated from interview audio recording
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  </>
+                  )}
                 </>
               ) : (
                 <div className="w-full max-w-4xl mx-auto">
@@ -727,6 +889,20 @@ export function CandidateEvaluationPanel({
                     {/* Evaluation Options for INTERVIEW rounds */}
                     {roundType === 'INTERVIEW' && (
                       <div className="max-w-2xl mx-auto space-y-6">
+                        {/* Warning banner when sparrowRoundId is not configured */}
+                        {(!sparrowRoundId || sparrowRoundId.trim() === '') && (
+                          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                            <div className="flex items-center gap-3">
+                              <AlertCircle className="w-5 h-5 text-amber-600" />
+                              <div>
+                                <h4 className="text-sm font-semibold text-amber-800">Round-Specific Configuration Required</h4>
+                                <p className="text-sm text-amber-700">
+                                  Please configure the Sparrow Interviewer Round ID for this specific round in the round settings before using the Sparrow Interviewer evaluation option. Each round needs its own unique round ID.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           {/* Option 1: Sparrow Interviewer Evaluation */}
                           <div className="border border-gray-300 rounded-lg p-6 hover:border-blue-400 transition-colors bg-gradient-to-br from-blue-50 to-indigo-50">
@@ -740,8 +916,8 @@ export function CandidateEvaluationPanel({
                               </p>
                               
                               <Button 
-                                onClick={handleSparrowInterviewerEvaluation}
-                                disabled={loadingSparrowEvaluation || uploadingFile}
+                                onClick={() => handleSparrowInterviewerEvaluation(false)}
+                                disabled={loadingSparrowEvaluation || uploadingFile || !sparrowRoundId || sparrowRoundId.trim() === ''}
                                 className="w-full"
                                 style={{
                                   backgroundColor: "#4F46E5",
@@ -770,7 +946,7 @@ export function CandidateEvaluationPanel({
                           </div>
 
                           {/* Option 2: File Upload */}
-                          <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-blue-400 transition-colors">
+                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-blue-400 transition-colors">
                             <div className="flex flex-col items-center text-center">
                               <Upload className="w-8 h-8 text-gray-400 mb-3" />
                               <h4 className="text-sm font-semibold text-gray-900 mb-2">Upload Transcript</h4>
@@ -779,43 +955,43 @@ export function CandidateEvaluationPanel({
                               </p>
                               
                               <div className="relative w-full">
-                                <input
-                                  type="file"
-                                  accept=".pdf,.txt,application/pdf,text/plain"
-                                  onChange={(e) => {
-                                    const file = e.target.files?.[0]
-                                    if (file) {
-                                      handleFileUpload(file)
-                                      e.currentTarget.value = ''
-                                    }
-                                  }}
+                            <input
+                              type="file"
+                              accept=".pdf,.txt,application/pdf,text/plain"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0]
+                                if (file) {
+                                  handleFileUpload(file, false)
+                                  e.currentTarget.value = ''
+                                }
+                              }}
                                   disabled={uploadingFile || loadingSparrowEvaluation}
-                                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
-                                />
-                                <Button 
-                                  className="w-full"
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+                            />
+                            <Button 
+                              className="w-full"
                                   disabled={uploadingFile || loadingSparrowEvaluation}
-                                  variant="outline"
-                                >
-                                  {uploadingFile ? (
-                                    <>
-                                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                      Processing...
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Upload className="w-4 h-4 mr-2" />
-                                      Choose File
-                                    </>
-                                  )}
-                                </Button>
-                              </div>
-                              
-                              {fileError && (
-                                <div className="mt-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2 w-full">
-                                  {fileError}
-                                </div>
+                              variant="outline"
+                            >
+                              {uploadingFile ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                  Processing...
+                                </>
+                              ) : (
+                                <>
+                                  <Upload className="w-4 h-4 mr-2" />
+                                  Choose File
+                                </>
                               )}
+                            </Button>
+                          </div>
+                          
+                          {fileError && (
+                                <div className="mt-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2 w-full">
+                              {fileError}
+                            </div>
+                          )}
                             </div>
                           </div>
                         </div>

@@ -67,6 +67,7 @@ export interface InterviewEvaluationResponse {
   }
   interviewer_evaluation_summary?: string
   overall_percentage_score?: number | null
+  transcript_text?: string
   success: boolean
   error_message: string | null
   file_stored?: boolean
@@ -123,6 +124,7 @@ export interface SparrowInterviewerEvaluationResponse {
   file_metadata: {
     assessment_type: string
     audio_filename: string
+    transcript_text?: string
     transcript_length: number
     questions_count: number
   } | null
