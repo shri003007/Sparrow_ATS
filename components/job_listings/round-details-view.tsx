@@ -184,6 +184,7 @@ export function RoundDetailsView({ job, onBackToCandidates }: RoundDetailsViewPr
             onPreviousStep={handlePreviousStep}
             onNextStep={handleNextStep}
             onBackToCandidates={onBackToCandidates}
+            hasAudioContent={currentRound?.round_type === 'INTERVIEW'}
           />
 
           {/* Round Content */}

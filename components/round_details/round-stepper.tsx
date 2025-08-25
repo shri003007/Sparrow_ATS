@@ -12,6 +12,7 @@ interface RoundStepperProps {
   onPreviousStep: () => void
   onNextStep: () => void
   onBackToCandidates: () => void
+  hasAudioContent?: boolean // Whether current round has audio content
 }
 
 export function RoundStepper({ 
@@ -20,7 +21,8 @@ export function RoundStepper({
   onStepClick, 
   onPreviousStep, 
   onNextStep, 
-  onBackToCandidates 
+  onBackToCandidates,
+  hasAudioContent = false
 }: RoundStepperProps) {
   const getStepStatus = (round: JobRoundTemplate, index: number) => {
     if (index < currentStepIndex) {
@@ -71,12 +73,11 @@ export function RoundStepper({
 
             {/* Current Round Info */}
             <div className="flex flex-col">
-              <h2 className="text-lg font-semibold text-gray-900">
-                {currentRound?.round_name || "Round Details"}
-              </h2>
-              <p className="text-sm text-gray-500">
-                Round {currentRound?.order_index || 1} • {currentRound?.round_type }
-              </p>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-semibold text-gray-900">
+                  {currentRound?.round_name || "Round Details"}
+                </h2>
+              </div>
             </div>
           </div>
 

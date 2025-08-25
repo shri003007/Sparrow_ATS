@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Loader2, AlertCircle, Users, ArrowRight, Settings } from "lucide-react"
 import { RoundCandidatesApi } from "@/lib/api/round-candidates"
 import { CandidateRoundsApi, JobRoundTemplatesApi } from "@/lib/api/rounds"
-import { evaluateInterviewCandidateFromFile } from "@/lib/api/evaluation"
+import { evaluateInterviewCandidateFromFile, evaluateInterviewCandidateFromSparrowInterviewer, type SparrowInterviewerEvaluationRequest } from "@/lib/api/evaluation"
 import type { JobRoundTemplate } from "@/lib/round-types"
 import type { RoundCandidateResponse, RoundCandidate } from "@/lib/round-candidate-types"
 import { Button } from "@/components/ui/button"
@@ -14,6 +14,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Mail, Phone, MapPin, Calendar, Clock, ChevronDown } from "lucide-react"
 import { CandidateEvaluationPanel } from "./candidate-evaluation-panel"
 
@@ -129,6 +130,16 @@ export function InterviewRoundContent({
   const [showRoundIdModal, setShowRoundIdModal] = useState(false)
   const [sparrowRoundId, setSparrowRoundId] = useState<string>('')
   const [tempRoundId, setTempRoundId] = useState<string>('')
+  
+  // Bulk evaluation state
+  const [isBulkEvaluating, setIsBulkEvaluating] = useState(false)
+  const [bulkEvaluationProgress, setBulkEvaluationProgress] = useState({ completed: 0, total: 0 })
+  const [bulkEvaluationError, setBulkEvaluationError] = useState<string | null>(null)
+  
+  // Bulk status update state
+  const [selectedBulkStatus, setSelectedBulkStatus] = useState<RoundStatus | ''>('')
+  const [isBulkStatusUpdate, setIsBulkStatusUpdate] = useState(false)
+  const [bulkStatusError, setBulkStatusError] = useState<string | null>(null)
 
   // Local storage key for round ID settings - using specific round template ID for uniqueness
   const getRoundIdStorageKey = () => {
@@ -167,12 +178,200 @@ export function InterviewRoundContent({
 
   const handleSaveRoundId = () => {
     saveSparrowRoundId(tempRoundId.trim())
+    setBulkEvaluationError(null)
+    setBulkStatusError(null)
     setShowRoundIdModal(false)
   }
 
   const handleCancelRoundId = () => {
     setTempRoundId('')
+    setBulkEvaluationError(null)
+    setBulkStatusError(null)
+    setSelectedBulkStatus('')
     setShowRoundIdModal(false)
+  }
+
+  // Get candidates without evaluations
+  const getCandidatesWithoutEvaluations = () => {
+    return localCandidates.filter(candidate => !candidate.candidate_rounds?.[0]?.is_evaluation)
+  }
+
+  // Handle bulk evaluation for all candidates without evaluations (with batch parallel processing)
+  const handleBulkEvaluation = async () => {
+    if (!sparrowRoundId || sparrowRoundId.trim() === '') {
+      setBulkEvaluationError('Please configure the Sparrow Interviewer Round ID before bulk evaluation')
+      return
+    }
+
+    const candidatesWithoutEvaluation = getCandidatesWithoutEvaluations()
+    if (candidatesWithoutEvaluation.length === 0) {
+      setBulkEvaluationError('No candidates found without evaluations')
+      return
+    }
+
+    setIsBulkEvaluating(true)
+    setBulkEvaluationError(null)
+    setBulkEvaluationProgress({ completed: 0, total: candidatesWithoutEvaluation.length })
+
+    const BATCH_SIZE = 33 // Process 18 candidates in parallel
+    const results = []
+    let completed = 0
+
+    // Split candidates into batches
+    const batches = []
+    for (let i = 0; i < candidatesWithoutEvaluation.length; i += BATCH_SIZE) {
+      batches.push(candidatesWithoutEvaluation.slice(i, i + BATCH_SIZE))
+    }
+
+    console.log(`Processing ${candidatesWithoutEvaluation.length} candidates in ${batches.length} batches of up to ${BATCH_SIZE}`)
+
+    // Process each batch in parallel
+    for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+      const batch = batches[batchIndex]
+      
+      try {
+        // Process current batch in parallel
+        const batchPromises = batch.map(async (candidate) => {
+          try {
+            if (!candidate.candidate_rounds?.[0]?.id || !candidate.job_opening_id) {
+              return { 
+                candidate: candidate.id, 
+                success: false, 
+                error: 'Missing required candidate information' 
+              }
+            }
+
+            const request: SparrowInterviewerEvaluationRequest = {
+              email: candidate.email,
+              job_round_template_id: sparrowRoundId,
+              candidate_round_id: candidate.candidate_rounds[0].id,
+              job_opening_id: candidate.job_opening_id
+            }
+
+            const result = await evaluateInterviewCandidateFromSparrowInterviewer(request)
+            
+            if (result.success) {
+              // Update candidate with evaluation
+              const updatedCandidate: RoundCandidate = {
+                ...candidate,
+                candidate_rounds: candidate.candidate_rounds.map(round => ({
+                  ...round,
+                  is_evaluation: true,
+                  evaluations: [{
+                    id: result.result_id || `eval-${Date.now()}`,
+                    candidate_round_id: round.id,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                    evaluation_result: {
+                      evaluation_summary: result.evaluation_summary || '',
+                      competency_evaluation: result.competency_evaluation || {
+                        competency_scores: [],
+                        overall_percentage_score: 0
+                      },
+                      overall_percentage_score: result.competency_evaluation?.overall_percentage_score || 0,
+                      interviewer_evaluation_summary: result.interviewer_evaluation_summary || '',
+                      transcript_text: result.file_metadata?.transcript_text || ''
+                    }
+                  }]
+                }))
+              }
+
+              // Update local candidates list
+              setLocalCandidates(prev => 
+                prev.map(c => c.id === candidate.id ? updatedCandidate : c)
+              )
+
+              return { candidate: candidate.id, success: true, updatedCandidate }
+            } else {
+              return { candidate: candidate.id, success: false, error: result.error_message }
+            }
+          } catch (error) {
+            console.error(`Error evaluating candidate ${candidate.id}:`, error)
+            return { 
+              candidate: candidate.id, 
+              success: false, 
+              error: error instanceof Error ? error.message : 'Unknown error' 
+            }
+          }
+        })
+
+        // Wait for all promises in the batch to complete
+        const batchResults = await Promise.all(batchPromises)
+        results.push(...batchResults)
+
+        // Update progress
+        completed += batch.length
+        setBulkEvaluationProgress({ completed, total: candidatesWithoutEvaluation.length })
+
+        // Add delay between batches to avoid overwhelming the server
+        if (batchIndex < batches.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000)) // 1 second delay between batches
+        }
+
+      } catch (error) {
+        console.error(`Failed to process batch ${batchIndex + 1}:`, error)
+        // Continue with next batch instead of failing entirely
+        completed += batch.length
+        setBulkEvaluationProgress({ completed, total: candidatesWithoutEvaluation.length })
+      }
+    }
+
+    setIsBulkEvaluating(false)
+    
+    // Show summary
+    const successful = results.filter(r => r.success).length
+    const failed = results.filter(r => !r.success).length
+    
+    if (failed === 0) {
+      setBulkEvaluationError(null)
+    } else {
+      setBulkEvaluationError(`Bulk evaluation completed: ${successful} successful, ${failed} failed`)
+    }
+  }
+
+  // Handle bulk status update for all candidates
+  const handleBulkStatusUpdate = async () => {
+    if (!selectedBulkStatus) {
+      setBulkStatusError('Please select a status to apply to all candidates')
+      return
+    }
+
+    if (localCandidates.length === 0) {
+      setBulkStatusError('No candidates found to update')
+      return
+    }
+
+    setIsBulkStatusUpdate(true)
+    setBulkStatusError(null)
+
+    try {
+      // Update all candidates locally first for immediate UI feedback
+      const updatedCandidates = localCandidates.map(candidate => ({
+        ...candidate,
+        candidate_rounds: candidate.candidate_rounds.map(round => ({
+          ...round,
+          status: selectedBulkStatus
+        }))
+      }))
+
+      setLocalCandidates(updatedCandidates)
+
+      // Update currentStatusById for consistency
+      const statusUpdates: Record<string, RoundStatus> = {}
+      localCandidates.forEach(candidate => {
+        statusUpdates[candidate.id] = selectedBulkStatus as RoundStatus
+      })
+      setCurrentStatusById(prev => ({ ...prev, ...statusUpdates }))
+
+      setBulkStatusError(`Successfully updated status to "${selectedBulkStatus}" for all ${localCandidates.length} candidates`)
+      setSelectedBulkStatus('')
+      
+    } catch (error) {
+      console.error('Error updating bulk status:', error)
+      setBulkStatusError('Failed to update candidate statuses')
+    } finally {
+      setIsBulkStatusUpdate(false)
+    }
   }
 
 
@@ -717,7 +916,19 @@ export function InterviewRoundContent({
       </div>
 
       {/* Sparrow Interviewer Round ID Settings Modal */}
-      <Dialog open={showRoundIdModal} onOpenChange={setShowRoundIdModal}>
+      <Dialog 
+        open={showRoundIdModal} 
+        onOpenChange={(open) => {
+          if (!isBulkEvaluating && !isBulkStatusUpdate) {
+            setShowRoundIdModal(open)
+            if (!open) {
+              setBulkEvaluationError(null)
+              setBulkStatusError(null)
+              setSelectedBulkStatus('')
+            }
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Sparrow Interviewer Settings - {currentRound?.round_name || 'Current Round'}</DialogTitle>
@@ -736,17 +947,157 @@ export function InterviewRoundContent({
                 onChange={(e) => setTempRoundId(e.target.value)}
                 placeholder="Enter Sparrow Interviewer round ID"
                 className="col-span-3"
+                disabled={isBulkEvaluating || isBulkStatusUpdate}
               />
             </div>
             <div className="text-sm text-gray-500 col-span-4">
               This round ID will be used instead of the job_round_template_id when making API calls to Sparrow Interviewer for this specific round ({currentRound?.round_name || 'Current Round'}). Each round can have its own unique round ID.
             </div>
+
+            {/* Bulk Evaluation Section */}
+            <div className="col-span-4 mt-6 pt-6 border-t border-gray-200">
+              <h4 className="text-sm font-semibold text-gray-900 mb-3">Bulk Evaluation</h4>
+              
+              {/* Candidates without evaluation count */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-sm font-medium text-blue-900">
+                      Candidates without evaluation: {getCandidatesWithoutEvaluations().length}
+                    </span>
+                    <p className="text-xs text-blue-700 mt-1">
+                      Only candidates without existing evaluations will be processed
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bulk evaluation button */}
+              <Button
+                onClick={handleBulkEvaluation}
+                disabled={isBulkEvaluating || !sparrowRoundId || sparrowRoundId.trim() === '' || getCandidatesWithoutEvaluations().length === 0}
+                className="w-full mb-4"
+                style={{
+                  backgroundColor: "#10B981",
+                  color: "#FFFFFF"
+                }}
+              >
+                {isBulkEvaluating ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Evaluating ({bulkEvaluationProgress.completed}/{bulkEvaluationProgress.total})
+                  </>
+                ) : (
+                  <>
+                    <Users className="w-4 h-4 mr-2" />
+                    Evaluate All via Sparrow Interviewer
+                  </>
+                )}
+              </Button>
+
+              {/* Progress display */}
+              {isBulkEvaluating && (
+                <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
+                  <div 
+                    className="bg-green-600 h-2 rounded-full transition-all duration-300" 
+                    style={{ 
+                      width: `${(bulkEvaluationProgress.completed / bulkEvaluationProgress.total) * 100}%` 
+                    }}
+                  ></div>
+                </div>
+              )}
+
+              {/* Error/success messages */}
+              {bulkEvaluationError && (
+                <div className={`text-xs p-3 rounded border ${
+                  bulkEvaluationError.includes('successful') 
+                    ? 'text-green-700 bg-green-50 border-green-200' 
+                    : 'text-red-700 bg-red-50 border-red-200'
+                }`}>
+                  {bulkEvaluationError}
+                </div>
+              )}
+            </div>
+
+            {/* Bulk Status Update Section */}
+            <div className="col-span-4 mt-6 pt-6 border-t border-gray-200">
+              <h4 className="text-sm font-semibold text-gray-900 mb-3">Bulk Status Update</h4>
+              
+              {/* Current candidates count */}
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-sm font-medium text-purple-900">
+                      Total candidates: {localCandidates.length}
+                    </span>
+                    <p className="text-xs text-purple-700 mt-1">
+                      Update status for all candidates in this round
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Status selection and update button */}
+              <div className="space-y-3">
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <Select value={selectedBulkStatus} onValueChange={(value) => setSelectedBulkStatus(value as RoundStatus | '')}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select status for all candidates" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="action_pending">Action Pending</SelectItem>
+                        <SelectItem value="selected">Selected</SelectItem>
+                        <SelectItem value="rejected">Rejected</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button
+                    onClick={handleBulkStatusUpdate}
+                    disabled={isBulkStatusUpdate || !selectedBulkStatus || localCandidates.length === 0 || isBulkEvaluating}
+                    style={{
+                      backgroundColor: "#8B5CF6",
+                      color: "#FFFFFF"
+                    }}
+                  >
+                    {isBulkStatusUpdate ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Updating...
+                      </>
+                    ) : (
+                      'Update All'
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              {/* Status update messages */}
+              {bulkStatusError && (
+                <div className={`text-xs p-3 rounded border mt-3 ${
+                  bulkStatusError.includes('Successfully') 
+                    ? 'text-green-700 bg-green-50 border-green-200' 
+                    : 'text-red-700 bg-red-50 border-red-200'
+                }`}>
+                  {bulkStatusError}
+                </div>
+              )}
+            </div>
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={handleCancelRoundId}>
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={handleCancelRoundId}
+              disabled={isBulkEvaluating || isBulkStatusUpdate}
+            >
               Cancel
             </Button>
-            <Button type="button" onClick={handleSaveRoundId}>
+            <Button 
+              type="button" 
+              onClick={handleSaveRoundId}
+              disabled={isBulkEvaluating || isBulkStatusUpdate}
+            >
               Save
             </Button>
           </DialogFooter>

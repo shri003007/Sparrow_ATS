@@ -14,6 +14,9 @@ import { AssetManagementTable } from "./asset-management-table"
 import { AssetUploadModal } from "./asset-upload-modal"
 import { CompetencyEditModal } from "./competency-edit-modal"
 import { AssetEvaluationModal } from "./asset-evaluation-modal"
+import { QAPairsSection } from "./qa-pairs-section"
+import { AudioVisualSection } from "./audio-visual-section"
+import { getSparrowAssessmentData, type SparrowAssessmentResponse } from "@/lib/api/sparrow-assessment"
 
 type RoundStatus = 'selected' | 'rejected' | 'action_pending'
 
@@ -96,6 +99,8 @@ export function CandidateEvaluationPanel({
   const [showAssetEvaluationModal, setShowAssetEvaluationModal] = useState<boolean>(false)
   const [loadingSparrowEvaluation, setLoadingSparrowEvaluation] = useState<boolean>(false)
   const [sparrowError, setSparrowError] = useState<string | null>(null)
+  const [sparrowAssessmentData, setSparrowAssessmentData] = useState<SparrowAssessmentResponse | null>(null)
+  const [loadingSparrowAssessment, setLoadingSparrowAssessment] = useState<boolean>(false)
   
   // Get re-evaluation states from props for current candidate
   const currentCandidateId = candidate?.id || ''
@@ -137,7 +142,34 @@ export function CandidateEvaluationPanel({
     setSparrowError(null)
     setUploadingFile(false)
     setFileError(null)
+    setSparrowAssessmentData(null)
   }, [candidate?.id])
+
+  // Fetch sparrow assessment data if candidate has sparrow assessment
+  React.useEffect(() => {
+    const fetchSparrowAssessment = async () => {
+      if (!candidate?.email) return
+      
+      // Check if this is a sparrow assessment round (you may need to adjust this condition)
+      // For now, we'll try to fetch for all candidates in INTERVIEW rounds
+      if (roundType === 'INTERVIEW' && evaluation?.assessment_type === 'AUDIO_ASSESSMENT') {
+        setLoadingSparrowAssessment(true)
+        try {
+          // Try to fetch using a default assessment ID or one from the evaluation
+          const assessmentId = evaluation?.assessment_id || 'statistics-001' // fallback
+          const data = await getSparrowAssessmentData(candidate.email, assessmentId)
+          setSparrowAssessmentData(data)
+        } catch (error) {
+          console.error('Failed to fetch sparrow assessment data:', error)
+          // Don't show error to user as this might be expected for non-sparrow candidates
+        } finally {
+          setLoadingSparrowAssessment(false)
+        }
+      }
+    }
+
+    fetchSparrowAssessment()
+  }, [candidate?.email, roundType, evaluation?.assessment_type, evaluation?.assessment_id])
 
   if (!candidate) return null
 
@@ -828,6 +860,21 @@ export function CandidateEvaluationPanel({
                       })()}
                     </div>
                   </div>
+
+                  {/* Audio Visual Section - For Sparrow Assessment data */}
+                  {(sparrowAssessmentData?.data?.audio_url || sparrowAssessmentData?.data?.images) && (
+                    <AudioVisualSection 
+                      audioUrl={sparrowAssessmentData?.data?.audio_url}
+                      images={sparrowAssessmentData?.data?.images}
+                    />
+                  )}
+
+                  {/* QA Pairs Section - Only for rounds with qa_pairs data */}
+                  {evaluation.qa_pairs && (
+                    <QAPairsSection 
+                      qaPairs={evaluation.qa_pairs}
+                    />
+                  )}
 
                   {/* AI Evaluation Summary */}
                   {evaluation.evaluation_summary && (
