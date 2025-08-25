@@ -1115,6 +1115,7 @@ export function InterviewRoundContent({
         candidateReEvaluationStates={candidateReEvaluationStates}
         onReEvaluationStateChange={handleReEvaluationStateChange}
         sparrowRoundId={sparrowRoundId}
+        currentRoundName={currentRound?.round_name || ''}
         onCandidateUpdated={(updatedCandidate) => {
           setLocalCandidates(prev => 
             prev.map(candidate => 

@@ -671,6 +671,8 @@ export function RoundCandidatesTable({
         roundType={roundInfo?.round_type || 'GENERAL'}
         onStatusChange={handleStatusChange}
         isEvaluating={selectedCandidate ? evaluatingCandidates.has(selectedCandidate.id) : false}
+        sparrowRoundId=""
+        currentRoundName={roundInfo?.round_name || ''}
         onCandidateUpdated={(updatedCandidate) => {
           setLocalCandidates(prev => 
             prev.map(candidate => 

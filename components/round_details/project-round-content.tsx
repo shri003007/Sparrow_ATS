@@ -550,6 +550,7 @@ export function ProjectRoundContent({
         candidateReEvaluationStates={candidateReEvaluationStates}
         onReEvaluationStateChange={handleReEvaluationStateChange}
         sparrowRoundId=""
+        currentRoundName={currentRound?.round_name || ''}
         onCandidateUpdated={(updatedCandidate) => {
           setLocalCandidates(prev => 
             prev.map(candidate => 

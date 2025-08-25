@@ -76,6 +76,8 @@ interface CandidateEvaluationPanelProps {
   }) => void
   // Sparrow Interviewer round ID
   sparrowRoundId?: string
+  // Current round name for fallback mapping
+  currentRoundName?: string
 }
 
 export function CandidateEvaluationPanel({ 
@@ -88,7 +90,8 @@ export function CandidateEvaluationPanel({
   onCandidateUpdated = () => {},
   candidateReEvaluationStates = {},
   onReEvaluationStateChange = () => {},
-  sparrowRoundId = ''
+  sparrowRoundId = '',
+  currentRoundName = ''
 }: CandidateEvaluationPanelProps) {
   const [selectedCompetency, setSelectedCompetency] = useState<string>('')
   const [uploadingFile, setUploadingFile] = useState<boolean>(false)
@@ -145,6 +148,33 @@ export function CandidateEvaluationPanel({
     setSparrowAssessmentData(null)
   }, [candidate?.id])
 
+  // Fallback round ID mappings for common round names
+  const getRoundIdFallback = (roundName?: string): string | null => {
+    if (!roundName) return null
+    
+    const roundMappings: Record<string, string> = {
+      'Statistics': 'statistics-001',
+      'ML-Foundation': 'classical-ml-001', 
+      'LLM': 'llm-001',
+      'DEEP LEARNING': 'deep-learning-001'
+    }
+    
+    // Try exact match first
+    if (roundMappings[roundName]) {
+      return roundMappings[roundName]
+    }
+    
+    // Try case-insensitive match
+    const lowerRoundName = roundName.toLowerCase()
+    for (const [key, value] of Object.entries(roundMappings)) {
+      if (key.toLowerCase() === lowerRoundName) {
+        return value
+      }
+    }
+    
+    return null
+  }
+
   // Fetch sparrow assessment data if candidate has sparrow assessment
   React.useEffect(() => {
     const fetchSparrowAssessment = async () => {
@@ -155,8 +185,27 @@ export function CandidateEvaluationPanel({
       if (roundType === 'INTERVIEW' && evaluation?.assessment_type === 'AUDIO_ASSESSMENT') {
         setLoadingSparrowAssessment(true)
         try {
-          // Try to fetch using a default assessment ID or one from the evaluation
-          const assessmentId = evaluation?.assessment_id || 'statistics-001' // fallback
+          // Priority order for assessment ID:
+          // 1. sparrowRoundId from settings (if configured)
+          // 2. assessment_id from evaluation (if available)
+          // 3. Fallback based on round name mapping
+          let assessmentId = ''
+          
+          if (sparrowRoundId && sparrowRoundId.trim() !== '') {
+            assessmentId = sparrowRoundId
+          } else if (evaluation?.assessment_id) {
+            assessmentId = evaluation.assessment_id
+          } else {
+            // Try to get fallback based on round name
+            const fallbackId = getRoundIdFallback(currentRoundName)
+            if (fallbackId) {
+              assessmentId = fallbackId
+            } else {
+              console.warn('No sparrow round ID configured and no fallback available. Please configure round ID in settings.')
+              return
+            }
+          }
+          
           const data = await getSparrowAssessmentData(candidate.email, assessmentId)
           setSparrowAssessmentData(data)
         } catch (error) {
@@ -169,7 +218,7 @@ export function CandidateEvaluationPanel({
     }
 
     fetchSparrowAssessment()
-  }, [candidate?.email, roundType, evaluation?.assessment_type, evaluation?.assessment_id])
+  }, [candidate?.email, roundType, evaluation?.assessment_type, evaluation?.assessment_id, sparrowRoundId, currentRoundName])
 
   if (!candidate) return null
 
@@ -876,6 +925,26 @@ export function CandidateEvaluationPanel({
                     />
                   )}
 
+                  {/* Round ID Configuration Info for INTERVIEW rounds */}
+                  {roundType === 'INTERVIEW' && (
+                    <div className="w-full max-w-4xl mx-auto">
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                        <div className="text-sm text-blue-900">
+                          <strong>Sparrow Assessment ID:</strong> {
+                            sparrowRoundId && sparrowRoundId.trim() !== '' 
+                              ? `${sparrowRoundId} (configured)` 
+                              : (() => {
+                                  const fallbackId = getRoundIdFallback(currentRoundName)
+                                  return fallbackId 
+                                    ? `${fallbackId} (fallback for "${currentRoundName}")` 
+                                    : 'Not configured - please set in round settings'
+                                })()
+                          }
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* AI Evaluation Summary */}
                   {evaluation.evaluation_summary && (
                     <div className="w-full max-w-4xl mx-auto">
@@ -946,6 +1015,15 @@ export function CandidateEvaluationPanel({
                                 <p className="text-sm text-amber-700">
                                   Please configure the Sparrow Interviewer Round ID for this specific round in the round settings before using the Sparrow Interviewer evaluation option. Each round needs its own unique round ID.
                                 </p>
+                                {/* Show if using fallback */}
+                                {(() => {
+                                  const fallbackId = getRoundIdFallback(currentRoundName)
+                                  return fallbackId ? (
+                                    <p className="text-sm text-amber-600 mt-2 font-medium">
+                                      Currently using fallback ID: "{fallbackId}" for round "{currentRoundName}"
+                                    </p>
+                                  ) : null
+                                })()}
                               </div>
                             </div>
                           </div>
