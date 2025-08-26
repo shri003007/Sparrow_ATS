@@ -20,6 +20,8 @@ export const API_CONFIG = {
     // Job rounds management (BASE_URL)
     JOB_ROUND_TEMPLATES_GET: '/job-openings', // /{job_opening_id}/round-templates
     START_ROUNDS: '/job-openings', // /{job_opening_id}/start-rounds
+    // User management endpoints (BASE_URL)
+    USERS: '/users',
     // Candidate endpoints (CANDIDATES_BASE_URL)
     CANDIDATES_BY_JOB: '/candidates/by-job',
     CANDIDATE_CREATE: '/candidate/create',

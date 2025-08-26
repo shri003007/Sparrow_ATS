@@ -9,6 +9,7 @@ import { CandidatesApi } from "@/lib/api/candidates"
 import { CandidateTransformer } from "@/lib/transformers/candidate-transformer"
 import { JobRoundTemplatesApi, CandidateRoundsApi } from "@/lib/api/rounds"
 import { UnsavedChangesDialog } from "@/components/candidates/unsaved-changes-dialog"
+import { useAuth } from "@/contexts/auth-context"
 import type { JobOpeningListItem } from "@/lib/job-types"
 import type { CandidateDisplay, CandidateUIStatus } from "@/lib/candidate-types"
 import type { 
@@ -28,6 +29,7 @@ interface JobDetailsViewProps {
 }
 
 export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationCheck, onGoToRounds }: JobDetailsViewProps) {
+  const { apiUser } = useAuth()
   const [showImportFlow, setShowImportFlow] = useState(false)
   const [candidates, setCandidates] = useState<CandidateDisplay[]>([])
   const [candidatesCount, setCandidatesCount] = useState(0)
@@ -333,7 +335,7 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
         const bulkCreateRequest: BulkCandidateRoundsCreateRequest = {
           candidates: candidateRoundsData,
           job_round_template_id: firstRoundTemplate.id,
-          created_by: "6693120e-31e2-4727-92c0-3606885e7e9e" // TODO: Get from user context
+          created_by: apiUser?.id || "6693120e-31e2-4727-92c0-3606885e7e9e" // Use authenticated user ID with fallback
         }
 
         await CandidateRoundsApi.bulkCreateCandidateRounds(bulkCreateRequest)
@@ -507,7 +509,7 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
         const bulkCreateRequest: BulkCandidateRoundsCreateRequest = {
           candidates: candidateRoundsData,
           job_round_template_id: firstRoundTemplate.id,
-          created_by: "6693120e-31e2-4727-92c0-3606885e7e9e" // TODO: Get from user context
+          created_by: apiUser?.id || "6693120e-31e2-4727-92c0-3606885e7e9e" // Use authenticated user ID with fallback
         }
 
         const createResponse = await CandidateRoundsApi.bulkCreateCandidateRounds(bulkCreateRequest)

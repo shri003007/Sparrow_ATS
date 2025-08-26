@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { CustomFieldsApi } from '@/lib/api/custom-fields'
+import { useAuth } from '@/contexts/auth-context'
 import type { 
   CandidateCustomFieldDefinition, 
   CustomFieldDefinitionCreateRequest,
@@ -19,6 +20,7 @@ interface UseCustomFieldsResult {
 }
 
 export function useCustomFields(jobOpeningId?: string): UseCustomFieldsResult {
+  const { apiUser } = useAuth()
   const [customFields, setCustomFields] = useState<CandidateCustomFieldDefinition[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -55,6 +57,10 @@ export function useCustomFields(jobOpeningId?: string): UseCustomFieldsResult {
       throw new Error('Job opening ID is required')
     }
 
+    if (!apiUser?.id) {
+      throw new Error('User authentication required')
+    }
+
     setError(null)
 
     try {
@@ -63,20 +69,24 @@ export function useCustomFields(jobOpeningId?: string): UseCustomFieldsResult {
         job_opening_id: jobOpeningId
       }
 
-      const newField = await CustomFieldsApi.createCustomFieldDefinition(request)
+      const newField = await CustomFieldsApi.createCustomFieldDefinition(request, apiUser.id)
       setCustomFields(prev => [...prev, newField].sort((a, b) => a.display_order - b.display_order))
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to create custom field'
       setError(errorMessage)
       throw err
     }
-  }, [jobOpeningId])
+  }, [jobOpeningId, apiUser?.id])
 
   const createCustomFields = useCallback(async (
     fields: Omit<CustomFieldDefinitionCreateRequest, 'job_opening_id'>[]
   ) => {
     if (!jobOpeningId) {
       throw new Error('Job opening ID is required')
+    }
+
+    if (!apiUser?.id) {
+      throw new Error('User authentication required')
     }
 
     setError(null)
@@ -89,14 +99,14 @@ export function useCustomFields(jobOpeningId?: string): UseCustomFieldsResult {
 
 
 
-      const newFields = await CustomFieldsApi.createCustomFieldDefinitionsBatch(requests)
+      const newFields = await CustomFieldsApi.createCustomFieldDefinitionsBatch(requests, apiUser.id)
       setCustomFields(prev => [...prev, ...newFields].sort((a, b) => a.display_order - b.display_order))
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to create custom fields'
       setError(errorMessage)
       throw err
     }
-  }, [jobOpeningId])
+  }, [jobOpeningId, apiUser?.id])
 
   const updateCustomField = useCallback(async (
     fieldId: string, 

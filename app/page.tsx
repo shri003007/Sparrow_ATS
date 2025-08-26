@@ -32,7 +32,7 @@ type AppView = "job-listings" | "job-creation"
 type JobCreationView = "form" | "canvas"
 
 export default function ATSInterface() {
-  const { user, isLoading } = useAuth()
+  const { user, apiUser, isLoading } = useAuth()
   const router = useRouter()
   
   // All useState hooks must be declared before any conditional returns
@@ -146,12 +146,12 @@ export default function ATSInterface() {
     setShowAILoading(true)
 
     try {
-      // TODO: Get actual user ID from auth context
-      const mockUserId = "6693120e-31e2-4727-92c0-3606885e7e9e"
+      // Get actual user ID from auth context, fallback to mock if not available
+      const userId = apiUser?.id || "6693120e-31e2-4727-92c0-3606885e7e9e"
       
       const response = await AIJobGenerationApi.generateJobDescription({
         user_input: prompt,
-        created_by: mockUserId
+        created_by: userId
       })
 
       if (response.success && response.is_valid) {
@@ -225,9 +225,9 @@ export default function ATSInterface() {
         console.log('Job updated successfully:', response)
       } else if (!currentJobId) {
         // Create new job
-        // TODO: Get actual user ID from auth context
-        const mockUserId = "6693120e-31e2-4727-92c0-3606885e7e9e"
-        const createRequest = JobOpeningTransformer.transformFormToCreateRequest(data, mockUserId)
+        // Get actual user ID from auth context, fallback to mock if not available
+        const userId = apiUser?.id || "6693120e-31e2-4727-92c0-3606885e7e9e"
+        const createRequest = JobOpeningTransformer.transformFormToCreateRequest(data, userId)
         const response = await JobOpeningsApi.createJobOpening(createRequest)
         console.log('Job created successfully:', response)
         setCurrentJobId(response.job_opening.id)
