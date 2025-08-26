@@ -56,13 +56,14 @@ export class CustomFieldsApi {
    * Creates a new custom field definition for a job opening
    */
   static async createCustomFieldDefinition(
-    request: CustomFieldDefinitionCreateRequest
+    request: CustomFieldDefinitionCreateRequest,
+    userId: string
   ): Promise<CandidateCustomFieldDefinition> {
     try {
       // Add the required created_by field
       const requestWithCreatedBy = {
         ...request,
-        created_by: "6693120e-31e2-4727-92c0-3606885e7e9e"
+        created_by: userId
       }
 
       const response = await fetch(`${API_BASE_URL}/custom-field-definitions/create`, {
@@ -250,7 +251,8 @@ export class CustomFieldsApi {
    * Creates multiple custom field definitions in batch
    */
   static async createCustomFieldDefinitionsBatch(
-    requests: CustomFieldDefinitionCreateRequest[]
+    requests: CustomFieldDefinitionCreateRequest[],
+    userId: string
   ): Promise<CandidateCustomFieldDefinition[]> {
     const results: CandidateCustomFieldDefinition[] = []
     const errors: Error[] = []
@@ -258,7 +260,7 @@ export class CustomFieldsApi {
     for (const request of requests) {
       try {
 
-        const result = await this.createCustomFieldDefinition(request)
+        const result = await this.createCustomFieldDefinition(request, userId)
         results.push(result)
       } catch (error) {
         errors.push(error as Error)

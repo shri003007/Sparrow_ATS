@@ -11,9 +11,11 @@ import { auth, googleProvider } from '@/lib/firebase'
 import { useRouter, usePathname } from 'next/navigation'
 import { toast } from '@/hooks/use-toast'
 import { clarityService } from '@/lib/clarity'
+import { UsersApi, type User as ApiUser } from '@/lib/api/users'
 
 interface AuthContextType {
   user: User | null
+  apiUser: ApiUser | null
   isLoading: boolean
   logout: () => Promise<void>
   signInWithGoogle: () => Promise<void>
@@ -25,9 +27,42 @@ const ALLOWED_DOMAIN = 'surveysparrow.com'
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
+  const [apiUser, setApiUser] = useState<ApiUser | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
   const pathname = usePathname()
+
+  // Helper function to handle API user creation/verification
+  const handleApiUserSetup = async (firebaseUser: User): Promise<ApiUser | null> => {
+    try {
+      if (!firebaseUser.email) {
+        throw new Error('User email is required')
+      }
+
+      // Extract first and last name from display name
+      const displayName = firebaseUser.displayName || ''
+      const nameParts = displayName.split(' ')
+      const firstName = nameParts[0] || firebaseUser.email.split('@')[0]
+      const lastName = nameParts.slice(1).join(' ') || undefined
+
+      // Check if user exists in our system, create if not
+      const apiUser = await UsersApi.ensureUserExists(
+        firebaseUser.email,
+        firstName,
+        lastName
+      )
+
+      return apiUser
+    } catch (error) {
+      console.error('Error setting up API user:', error)
+      toast({
+        title: "User Setup Warning",
+        description: "There was an issue setting up your user profile. Some features may be limited.",
+        variant: "destructive"
+      })
+      return null
+    }
+  }
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -38,6 +73,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             await signOut(auth)
             localStorage.removeItem('auth-token')
             setUser(null)
+            setApiUser(null)
             router.replace('/login')
             toast({
               title: "Access Denied",
@@ -51,6 +87,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const token = await user.getIdToken()
           localStorage.setItem('auth-token', token)
           
+          // Set up API user (check existence and create if needed)
+          const apiUserData = await handleApiUserSetup(user)
+          setApiUser(apiUserData)
+          
           // Identify user in Clarity
           clarityService.identifyUser(user)
           
@@ -59,11 +99,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             router.replace('/')
             toast({
               title: "Welcome!",
-              description: "Successfully signed in!",
+              description: apiUserData ? 
+                `Successfully signed in as ${apiUserData.first_name}!` : 
+                "Successfully signed in!",
             })
           }
         } else {
           setUser(null)
+          setApiUser(null)
           localStorage.removeItem('auth-token')
           
           // Clear all user-specific localStorage data when user becomes null
@@ -101,6 +144,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const token = await result.user.getIdToken()
         localStorage.setItem('auth-token', token)
         
+        // Set up API user (check existence and create if needed)
+        const apiUserData = await handleApiUserSetup(result.user)
+        setApiUser(apiUserData)
+        
         // Identify user in Clarity
         clarityService.identifyUser(result.user)
         
@@ -132,6 +179,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       await signOut(auth)
       localStorage.removeItem('auth-token')
+      setApiUser(null)
       
       // Clear user identification in Clarity
       clarityService.identifyUser(null)
@@ -157,6 +205,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={{ 
       user, 
+      apiUser,
       isLoading, 
       logout,
       signInWithGoogle

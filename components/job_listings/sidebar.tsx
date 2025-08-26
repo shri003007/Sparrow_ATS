@@ -17,7 +17,7 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({ onCreateJob, onJobSelect, selectedJobId, mode = 'listing' }: AppSidebarProps) {
-  const { user, logout } = useAuth()
+  const { user, apiUser, logout } = useAuth()
   const [jobs, setJobs] = useState<JobOpeningListItem[]>([])
   const [loading, setLoading] = useState(true)
   const [showAllJobs, setShowAllJobs] = useState(false)
@@ -26,8 +26,13 @@ export function AppSidebar({ onCreateJob, onJobSelect, selectedJobId, mode = 'li
 
   useEffect(() => {
     const fetchJobs = async () => {
+      // Don't fetch if we don't have the API user yet
+      if (!apiUser?.id) {
+        return
+      }
+
       try {
-        const response = await JobOpeningsApi.getJobOpenings()
+        const response = await JobOpeningsApi.getJobOpenings(apiUser.id)
         // Sort by published_at desc (most recent first), then by updated_at desc
         const sortedJobs = response.job_openings.sort((a, b) => {
           const aDate = a.published_at || a.updated_at
@@ -48,7 +53,7 @@ export function AppSidebar({ onCreateJob, onJobSelect, selectedJobId, mode = 'li
     }
 
     fetchJobs()
-  }, [selectedJobId, onJobSelect, mode])
+  }, [apiUser?.id, selectedJobId, onJobSelect, mode])
 
   const navigationItems = [
     { icon: BarChart3, label: "Dashboard", href: "/dashboard", isActive: false },
@@ -103,9 +108,9 @@ export function AppSidebar({ onCreateJob, onJobSelect, selectedJobId, mode = 'li
               
               <div className="flex items-center gap-2">
                 <Avatar className="w-8 h-8">
-                  <AvatarImage src={user?.photoURL || ''} alt={user?.displayName || 'User'} />
+                  <AvatarImage src={user?.photoURL || ''} alt={apiUser?.first_name || user?.displayName || 'User'} />
                   <AvatarFallback className="text-white text-sm font-medium" style={{ backgroundColor: "#FF6B35" }}>
-                    {user?.displayName?.charAt(0) || user?.email?.charAt(0) || 'U'}
+                    {apiUser?.first_name?.charAt(0) || user?.displayName?.charAt(0) || user?.email?.charAt(0) || 'U'}
                   </AvatarFallback>
                 </Avatar>
                 <ChevronDown className="w-4 h-4" style={{ color: "#6B7280" }} />
@@ -114,8 +119,24 @@ export function AppSidebar({ onCreateJob, onJobSelect, selectedJobId, mode = 'li
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <div className="px-2 py-1.5">
-              <p className="text-sm font-medium">{user?.displayName || 'User'}</p>
+              <p className="text-sm font-medium">
+                {apiUser?.first_name && apiUser?.last_name 
+                  ? `${apiUser.first_name} ${apiUser.last_name}`
+                  : apiUser?.first_name || user?.displayName || 'User'}
+              </p>
               <p className="text-xs text-gray-500">{user?.email}</p>
+              {apiUser && (
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    {apiUser.role.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                  </span>
+                  {!apiUser.is_active && (
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                      Inactive
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
             <DropdownMenuSeparator />
             <DropdownMenuItem className="cursor-pointer">

@@ -11,11 +11,11 @@ export class JobOpeningsApi {
   private static baseUrl = API_CONFIG.BASE_URL
 
   /**
-   * Get all job openings
+   * Get job openings accessible by a specific user
    */
-  static async getJobOpenings(): Promise<JobOpeningsListResponse> {
+  static async getJobOpenings(userId: string): Promise<JobOpeningsListResponse> {
     try {
-      const url = `${this.baseUrl}${API_CONFIG.ENDPOINTS.JOB_OPENINGS}`
+      const url = `${this.baseUrl}${API_CONFIG.ENDPOINTS.JOB_OPENINGS}/user/${userId}`
       const response = await fetch(url, {
         method: 'GET',
         headers: {
