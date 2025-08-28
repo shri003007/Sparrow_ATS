@@ -148,31 +148,13 @@ export function CandidateEvaluationPanel({
     setSparrowAssessmentData(null)
   }, [candidate?.id])
 
-  // Fallback round ID mappings for common round names
-  const getRoundIdFallback = (roundName?: string): string | null => {
-    if (!roundName) return null
-    
-    const roundMappings: Record<string, string> = {
-      'Statistics': 'statistics-001',
-      'ML-Foundation': 'classical-ml-001', 
-      'LLM': 'llm-001',
-      'DEEP LEARNING': 'deep-learning-001'
-    }
-    
-    // Try exact match first
-    if (roundMappings[roundName]) {
-      return roundMappings[roundName]
-    }
-    
-    // Try case-insensitive match
-    const lowerRoundName = roundName.toLowerCase()
-    for (const [key, value] of Object.entries(roundMappings)) {
-      if (key.toLowerCase() === lowerRoundName) {
-        return value
-      }
-    }
-    
-    return null
+
+
+
+
+  // Check if assessment ID is available (simplified since it's now set at round level)
+  const hasAssessmentId = () => {
+    return sparrowRoundId && sparrowRoundId.trim() !== ''
   }
 
   // Fetch sparrow assessment data if candidate has sparrow assessment
@@ -180,33 +162,11 @@ export function CandidateEvaluationPanel({
     const fetchSparrowAssessment = async () => {
       if (!candidate?.email) return
       
-      // Check if this is a sparrow assessment round (you may need to adjust this condition)
-      // For now, we'll try to fetch for all candidates in INTERVIEW rounds
-      if (roundType === 'INTERVIEW' && evaluation?.assessment_type === 'AUDIO_ASSESSMENT') {
+      // Check if this is a sparrow assessment round and we have an assessment ID
+      if (roundType === 'INTERVIEW' && evaluation?.assessment_type === 'AUDIO_ASSESSMENT' && sparrowRoundId && sparrowRoundId.trim() !== '') {
         setLoadingSparrowAssessment(true)
         try {
-          // Priority order for assessment ID:
-          // 1. sparrowRoundId from settings (if configured)
-          // 2. assessment_id from evaluation (if available)
-          // 3. Fallback based on round name mapping
-          let assessmentId = ''
-          
-          if (sparrowRoundId && sparrowRoundId.trim() !== '') {
-            assessmentId = sparrowRoundId
-          } else if (evaluation?.assessment_id) {
-            assessmentId = evaluation.assessment_id
-          } else {
-            // Try to get fallback based on round name
-            const fallbackId = getRoundIdFallback(currentRoundName)
-            if (fallbackId) {
-              assessmentId = fallbackId
-            } else {
-              console.warn('No sparrow round ID configured and no fallback available. Please configure round ID in settings.')
-              return
-            }
-          }
-          
-          const data = await getSparrowAssessmentData(candidate.email, assessmentId)
+          const data = await getSparrowAssessmentData(candidate.email, sparrowRoundId)
           setSparrowAssessmentData(data)
         } catch (error) {
           console.error('Failed to fetch sparrow assessment data:', error)
@@ -218,7 +178,7 @@ export function CandidateEvaluationPanel({
     }
 
     fetchSparrowAssessment()
-  }, [candidate?.email, roundType, evaluation?.assessment_type, evaluation?.assessment_id, sparrowRoundId, currentRoundName])
+  }, [candidate?.email, roundType, evaluation?.assessment_type, sparrowRoundId])
 
   if (!candidate) return null
 
@@ -355,9 +315,8 @@ export function CandidateEvaluationPanel({
   }
 
   const handleSparrowInterviewerEvaluation = async (isReEvaluation = false) => {
-    // Check if sparrowRoundId is configured for this specific round
     if (!sparrowRoundId || sparrowRoundId.trim() === '') {
-      const errorMessage = 'Please configure the Sparrow Interviewer Round ID for this specific round in the round settings before evaluation. Each round needs its own unique round ID.'
+      const errorMessage = 'No sparrow assessment ID available. Please configure round ID in settings or check API mapping.'
       if (isReEvaluation) {
         setReEvaluationError(errorMessage)
       } else {
@@ -932,13 +891,8 @@ export function CandidateEvaluationPanel({
                         <div className="text-sm text-blue-900">
                           <strong>Sparrow Assessment ID:</strong> {
                             sparrowRoundId && sparrowRoundId.trim() !== '' 
-                              ? `${sparrowRoundId} (configured)` 
-                              : (() => {
-                                  const fallbackId = getRoundIdFallback(currentRoundName)
-                                  return fallbackId 
-                                    ? `${fallbackId} (fallback for "${currentRoundName}")` 
-                                    : 'Not configured - please set in round settings'
-                                })()
+                              ? sparrowRoundId
+                              : 'Not configured - please set in round settings'
                           }
                         </div>
                       </div>
@@ -1013,17 +967,8 @@ export function CandidateEvaluationPanel({
                               <div>
                                 <h4 className="text-sm font-semibold text-amber-800">Round-Specific Configuration Required</h4>
                                 <p className="text-sm text-amber-700">
-                                  Please configure the Sparrow Interviewer Round ID for this specific round in the round settings before using the Sparrow Interviewer evaluation option. Each round needs its own unique round ID.
+                                  Sparrow assessment ID is automatically configured for this round.
                                 </p>
-                                {/* Show if using fallback */}
-                                {(() => {
-                                  const fallbackId = getRoundIdFallback(currentRoundName)
-                                  return fallbackId ? (
-                                    <p className="text-sm text-amber-600 mt-2 font-medium">
-                                      Currently using fallback ID: "{fallbackId}" for round "{currentRoundName}"
-                                    </p>
-                                  ) : null
-                                })()}
                               </div>
                             </div>
                           </div>
@@ -1042,7 +987,7 @@ export function CandidateEvaluationPanel({
                               
                               <Button 
                                 onClick={() => handleSparrowInterviewerEvaluation(false)}
-                                disabled={loadingSparrowEvaluation || uploadingFile || !sparrowRoundId || sparrowRoundId.trim() === ''}
+                                disabled={loadingSparrowEvaluation || uploadingFile || !hasAssessmentId()}
                                 className="w-full"
                                 style={{
                                   backgroundColor: "#4F46E5",

@@ -5,6 +5,7 @@ import { Loader2, AlertCircle, Users, ArrowRight, Settings } from "lucide-react"
 import { RoundCandidatesApi } from "@/lib/api/round-candidates"
 import { CandidateRoundsApi, JobRoundTemplatesApi } from "@/lib/api/rounds"
 import { evaluateInterviewCandidateFromFile, evaluateInterviewCandidateFromSparrowInterviewer, type SparrowInterviewerEvaluationRequest } from "@/lib/api/evaluation"
+import { getSparrowAssessmentMapping } from "@/lib/api/sparrow-assessment-mapping"
 import type { JobRoundTemplate } from "@/lib/round-types"
 import type { RoundCandidateResponse, RoundCandidate } from "@/lib/round-candidate-types"
 import { Button } from "@/components/ui/button"
@@ -147,18 +148,49 @@ export function InterviewRoundContent({
     return `sparrow_round_id_${roundTemplateId}`
   }
 
-  // Load saved round ID from localStorage
+  // Load saved round ID from localStorage or fetch from API
   useEffect(() => {
-    if (currentRound?.id) {
+    const loadSparrowRoundId = async () => {
+      if (!currentRound?.id) return
+
       const storageKey = getRoundIdStorageKey()
       const savedRoundId = localStorage.getItem(storageKey)
+      
+      // Priority 1: Try to get from API mapping first
+      try {
+        const mappingResponse = await getSparrowAssessmentMapping(currentRound.id)
+        if (mappingResponse.mappings && mappingResponse.mappings.length > 0) {
+          const firstMapping = mappingResponse.mappings[0]
+          if (firstMapping.sparrow_assessment_id) {
+            console.log('Using sparrow assessment ID from API mapping:', firstMapping.sparrow_assessment_id)
+            setSparrowRoundId(firstMapping.sparrow_assessment_id)
+            return
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to fetch sparrow assessment mapping from API:', error)
+        // Continue to next priority level
+      }
+
+      // Priority 2: Use saved round ID from localStorage
       if (savedRoundId) {
+        console.log('Using sparrow assessment ID from localStorage:', savedRoundId)
         setSparrowRoundId(savedRoundId)
       } else {
-        // Reset to empty if no saved round ID for this specific round
-        setSparrowRoundId('')
+        // Priority 3: Try fallback based on round name
+        const fallbackId = getFallbackAssessmentId(currentRound.round_name)
+        if (fallbackId) {
+          console.log('Using sparrow assessment ID from fallback mapping:', fallbackId)
+          setSparrowRoundId(fallbackId)
+        } else {
+          // Reset to empty if no assessment ID available
+          console.log('No sparrow assessment ID available for round:', currentRound.round_name)
+          setSparrowRoundId('')
+        }
       }
     }
+
+    loadSparrowRoundId()
   }, [currentRound?.id])
 
   // Save round ID to localStorage
@@ -196,10 +228,44 @@ export function InterviewRoundContent({
     return localCandidates.filter(candidate => !candidate.candidate_rounds?.[0]?.is_evaluation)
   }
 
+  // Check if assessment ID is available (simplified since it's now set at round level)
+  const hasAssessmentId = () => {
+    return sparrowRoundId && sparrowRoundId.trim() !== ''
+  }
+
+
+
+  // Fallback round ID mappings for common round names (lowest priority)
+  const getFallbackAssessmentId = (roundName?: string): string | null => {
+    if (!roundName) return null
+    
+    const roundMappings: Record<string, string> = {
+      'Statistics': 'statistics-001',
+      'ML-Foundation': 'classical-ml-001', 
+      'LLM': 'llm-001',
+      'DEEP LEARNING': 'deep-learning-001'
+    }
+    
+    // Try exact match first
+    if (roundMappings[roundName]) {
+      return roundMappings[roundName]
+    }
+    
+    // Try case-insensitive match
+    const lowerRoundName = roundName.toLowerCase()
+    for (const [key, value] of Object.entries(roundMappings)) {
+      if (key.toLowerCase() === lowerRoundName) {
+        return value
+      }
+    }
+    
+    return null
+  }
+
   // Handle bulk evaluation for all candidates without evaluations (with batch parallel processing)
   const handleBulkEvaluation = async () => {
     if (!sparrowRoundId || sparrowRoundId.trim() === '') {
-      setBulkEvaluationError('Please configure the Sparrow Interviewer Round ID before bulk evaluation')
+      setBulkEvaluationError('No sparrow assessment ID available. Please configure round ID in settings, check API mapping, or ensure hardcoded fallbacks are available.')
       return
     }
 
@@ -975,7 +1041,7 @@ export function InterviewRoundContent({
               {/* Bulk evaluation button */}
               <Button
                 onClick={handleBulkEvaluation}
-                disabled={isBulkEvaluating || !sparrowRoundId || sparrowRoundId.trim() === '' || getCandidatesWithoutEvaluations().length === 0}
+                disabled={isBulkEvaluating || !hasAssessmentId() || getCandidatesWithoutEvaluations().length === 0}
                 className="w-full mb-4"
                 style={{
                   backgroundColor: "#10B981",
