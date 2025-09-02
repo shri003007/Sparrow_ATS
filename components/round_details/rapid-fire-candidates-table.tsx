@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Spinner } from "@/components/ui/spinner"
-import { Mail, MapPin, Calendar, Clock, ChevronDown, FileText, Filter, X, Search } from "lucide-react"
+import { Mail, ChevronDown, FileText, Filter, X, Search } from "lucide-react"
 import type { RoundCandidate, CustomFieldDefinition } from "@/lib/round-candidate-types"
 import { CandidateEvaluationPanel } from "./candidate-evaluation-panel"
 
@@ -56,8 +56,6 @@ interface RoundStatusDropdownProps {
 interface FilterState {
   searchTerm: string
   statusFilter: RoundStatus | 'all'
-  locationFilter: string
-  experienceFilter: string
   customFieldFilters: Record<string, string>
 }
 
@@ -114,8 +112,33 @@ export function RapidFireCandidatesTable({
   jobOpeningId,
   onStatusChange,
   currentStatusById,
-  onCandidateUpdated
-}: RapidFireCandidatesTableProps) {
+  onCandidateUpdated = () => {},
+  sparrowRoundId = '',
+  currentRoundName = 'Rapid Fire Round',
+  candidateReEvaluationStates = {},
+  onReEvaluationStateChange = () => {}
+}: {
+  candidates: RoundCandidate[]
+  customFieldDefinitions: CustomFieldDefinition[]
+  isLoading: boolean
+  roundInfo?: any
+  jobOpeningId?: string
+  onStatusChange: (candidateId: string, status: RoundStatus) => void
+  currentStatusById: Record<string, RoundStatus>
+  onCandidateUpdated?: (candidate: RoundCandidate) => void
+  sparrowRoundId?: string
+  currentRoundName?: string
+  candidateReEvaluationStates?: Record<string, {
+    isReEvaluating: boolean
+    reEvaluationError: string | null
+    showReEvaluationOptions: boolean
+  }>
+  onReEvaluationStateChange?: (candidateId: string, state: {
+    isReEvaluating?: boolean
+    reEvaluationError?: string | null
+    showReEvaluationOptions?: boolean
+  }) => void
+}) {
   const fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
   
   const [selectedCandidate, setSelectedCandidate] = useState<RoundCandidate | null>(null)
@@ -123,34 +146,10 @@ export function RapidFireCandidatesTable({
   const [filters, setFilters] = useState<FilterState>({
     searchTerm: '',
     statusFilter: 'all',
-    locationFilter: '',
-    experienceFilter: '',
     customFieldFilters: {}
   })
 
-  const formatSalary = (amount: number | null, currency: string) => {
-    if (!amount) return 'Not specified'
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: currency || 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount)
-  }
 
-  const formatExperience = (years: number | null, months: number | null) => {
-    if (!years && !months) return 'Not specified'
-    if (!months || months === 0) return `${years || 0}y`
-    if (!years || years === 0) return `${months}m`
-    return `${years}y ${months}m`
-  }
-
-  const formatAvailability = (days: number | null) => {
-    if (!days) return 'Not specified'
-    if (days === 0) return 'Immediately'
-    if (days === 1) return '1 day'
-    return `${days} days`
-  }
 
   const getInitials = (name: string) => {
     return name
@@ -175,12 +174,7 @@ export function RapidFireCandidatesTable({
     return customValue?.field_value || '-'
   }
 
-  // Get unique values for filter dropdowns
-  const uniqueLocations = useMemo(() => {
-    const locations = candidates.map(c => c.current_location).filter(Boolean)
-    return [...new Set(locations)].sort()
-  }, [candidates])
-
+  // Get unique values for custom field filters
   const uniqueCustomFieldValues = useMemo(() => {
     const valuesByField: Record<string, Set<string>> = {}
     
@@ -210,9 +204,8 @@ export function RapidFireCandidatesTable({
         const searchLower = filters.searchTerm.toLowerCase()
         const matchesName = candidate.name.toLowerCase().includes(searchLower)
         const matchesEmail = candidate.email.toLowerCase().includes(searchLower)
-        const matchesLocation = candidate.current_location.toLowerCase().includes(searchLower)
         
-        if (!matchesName && !matchesEmail && !matchesLocation) {
+        if (!matchesName && !matchesEmail) {
           return false
         }
       }
@@ -222,24 +215,6 @@ export function RapidFireCandidatesTable({
         const candidateStatus = getStatusForCandidate(candidate)
         if (candidateStatus !== filters.statusFilter) {
           return false
-        }
-      }
-
-      // Location filter
-      if (filters.locationFilter && candidate.current_location !== filters.locationFilter) {
-        return false
-      }
-
-      // Experience filter
-      if (filters.experienceFilter) {
-        const totalYears = (candidate.experience_years || 0) + (candidate.experience_months || 0) / 12
-        const filterValue = parseInt(filters.experienceFilter)
-        
-        if (filters.experienceFilter.includes('+')) {
-          if (totalYears < filterValue) return false
-        } else if (filters.experienceFilter.includes('-')) {
-          const range = filters.experienceFilter.split('-').map(n => parseInt(n))
-          if (totalYears < range[0] || totalYears > range[1]) return false
         }
       }
 
@@ -261,14 +236,11 @@ export function RapidFireCandidatesTable({
     setFilters({
       searchTerm: '',
       statusFilter: 'all',
-      locationFilter: '',
-      experienceFilter: '',
       customFieldFilters: {}
     })
   }
 
   const hasActiveFilters = filters.searchTerm || filters.statusFilter !== 'all' || 
-    filters.locationFilter || filters.experienceFilter || 
     Object.values(filters.customFieldFilters).some(Boolean)
 
   if (isLoading) {
@@ -342,7 +314,7 @@ export function RapidFireCandidatesTable({
 
         {/* Filter Controls */}
         {showFilters && (
-          <div className="grid grid-cols-4 gap-4 p-4 bg-white rounded-lg border">
+          <div className="grid grid-cols-3 gap-4 p-4 bg-white rounded-lg border">
             {/* Status Filter */}
             <div>
               <label className="text-xs font-medium text-gray-500 mb-1 block" style={{ fontFamily }}>
@@ -361,46 +333,8 @@ export function RapidFireCandidatesTable({
               </select>
             </div>
 
-            {/* Location Filter */}
-            <div>
-              <label className="text-xs font-medium text-gray-500 mb-1 block" style={{ fontFamily }}>
-                Location
-              </label>
-              <select
-                value={filters.locationFilter}
-                onChange={(e) => setFilters(prev => ({ ...prev, locationFilter: e.target.value }))}
-                className="w-full px-3 py-2 border rounded-md text-sm"
-                style={{ fontFamily }}
-              >
-                <option value="">All Locations</option>
-                {uniqueLocations.map(location => (
-                  <option key={location} value={location}>{location}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Experience Filter */}
-            <div>
-              <label className="text-xs font-medium text-gray-500 mb-1 block" style={{ fontFamily }}>
-                Experience
-              </label>
-              <select
-                value={filters.experienceFilter}
-                onChange={(e) => setFilters(prev => ({ ...prev, experienceFilter: e.target.value }))}
-                className="w-full px-3 py-2 border rounded-md text-sm"
-                style={{ fontFamily }}
-              >
-                <option value="">Any Experience</option>
-                <option value="0-1">0-1 years</option>
-                <option value="1-3">1-3 years</option>
-                <option value="3-5">3-5 years</option>
-                <option value="5-10">5-10 years</option>
-                <option value="10+">10+ years</option>
-              </select>
-            </div>
-
             {/* Custom Field Filters */}
-            {customFieldDefinitions.slice(0, 1).map(field => (
+            {customFieldDefinitions.slice(0, 2).map(field => (
               <div key={field.id}>
                 <label className="text-xs font-medium text-gray-500 mb-1 block" style={{ fontFamily }}>
                   {field.field_label}
@@ -433,31 +367,31 @@ export function RapidFireCandidatesTable({
         </div>
       </div>
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead style={{ fontFamily }}>Candidate</TableHead>
-            <TableHead style={{ fontFamily }}>Experience</TableHead>
-            <TableHead style={{ fontFamily }}>Current Salary</TableHead>
-            <TableHead style={{ fontFamily }}>Expected Salary</TableHead>
-            <TableHead style={{ fontFamily }}>Location</TableHead>
-            <TableHead style={{ fontFamily }}>Availability</TableHead>
-            {/* Custom Fields */}
-            {customFieldDefinitions.map((field) => (
-              <TableHead key={field.id} style={{ fontFamily }}>
-                {field.field_label}
-              </TableHead>
-            ))}
-            <TableHead style={{ fontFamily }}>Status</TableHead>
-            <TableHead style={{ fontFamily }}>Actions</TableHead>
-          </TableRow>
-        </TableHeader>
+      <div className="max-h-[600px] overflow-y-auto border rounded-lg">
+        <Table>
+          <TableHeader className="sticky top-0 bg-white z-10">
+            <TableRow>
+              <TableHead style={{ fontFamily }}>Candidate</TableHead>
+              <TableHead style={{ fontFamily }}>Status</TableHead>
+              <TableHead style={{ fontFamily }}>Score</TableHead>
+              {/* Custom Fields */}
+              {customFieldDefinitions.map((field) => (
+                <TableHead key={field.id} style={{ fontFamily }}>
+                  {field.field_label}
+                </TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
         <TableBody>
           {filteredCandidates.map((candidate) => {
             const candidateStatus = getStatusForCandidate(candidate)
             
             return (
-              <TableRow key={candidate.id} className="hover:bg-gray-50">
+              <TableRow 
+                key={candidate.id} 
+                className="hover:bg-gray-50 cursor-pointer"
+                onClick={() => setSelectedCandidate(candidate)}
+              >
                 <TableCell>
                   <div className="flex items-center gap-3">
                     <Avatar className="w-10 h-10">
@@ -481,49 +415,6 @@ export function RapidFireCandidatesTable({
                 </TableCell>
                 
                 <TableCell>
-                  <span className="text-sm text-gray-900" style={{ fontFamily }}>
-                    {formatExperience(candidate.experience_years, candidate.experience_months)}
-                  </span>
-                </TableCell>
-                
-                <TableCell>
-                  <span className="text-sm text-gray-900" style={{ fontFamily }}>
-                    {formatSalary(candidate.current_salary, candidate.current_salary_currency)}
-                  </span>
-                </TableCell>
-                
-                <TableCell>
-                  <span className="text-sm text-gray-900" style={{ fontFamily }}>
-                    {formatSalary(candidate.expected_salary, candidate.expected_salary_currency)}
-                  </span>
-                </TableCell>
-                
-                <TableCell>
-                  <div className="flex items-center gap-1 text-sm text-gray-900">
-                    <MapPin className="w-3 h-3 text-gray-400" />
-                    <span style={{ fontFamily }}>{candidate.current_location}</span>
-                  </div>
-                </TableCell>
-                
-                <TableCell>
-                  <div className="flex items-center gap-1 text-sm text-gray-900">
-                    <Clock className="w-3 h-3 text-gray-400" />
-                    <span style={{ fontFamily }}>
-                      {formatAvailability(candidate.available_to_join_days)}
-                    </span>
-                  </div>
-                </TableCell>
-
-                {/* Custom Fields */}
-                {customFieldDefinitions.map((field) => (
-                  <TableCell key={field.id}>
-                    <span className="text-sm text-gray-900" style={{ fontFamily }}>
-                      {getCustomFieldValue(candidate, field.id)}
-                    </span>
-                  </TableCell>
-                ))}
-                
-                <TableCell>
                   {onStatusChange ? (
                     <RoundStatusDropdown
                       currentStatus={candidateStatus}
@@ -542,31 +433,105 @@ export function RapidFireCandidatesTable({
                     </Badge>
                   )}
                 </TableCell>
-                
+
+                {/* Score Column */}
                 <TableCell>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setSelectedCandidate(candidate)}
-                    style={{ fontFamily }}
-                  >
-                    View Details
-                  </Button>
+                  <div className="flex items-center justify-center">
+                    {candidate.candidate_rounds?.[0]?.evaluations?.[0]?.evaluation_result ? (
+                      (() => {
+                        const evaluation = candidate.candidate_rounds[0].evaluations[0].evaluation_result
+                        const score = evaluation.overall_percentage_score
+                        
+                        if (score >= 0) {
+                          const roundedScore = Math.round(score)
+                          const getScoreConfig = (score: number) => {
+                            if (score >= 80) {
+                              return {
+                                bgColor: '#DCFCE7',
+                                textColor: '#16A34A',
+                                borderColor: '#22C55E20'
+                              }
+                            } else if (score >= 60) {
+                              return {
+                                bgColor: '#FEF3C7',
+                                textColor: '#D97706',
+                                borderColor: '#F59E0B20'
+                              }
+                            } else {
+                              return {
+                                bgColor: '#FEE2E2',
+                                textColor: '#DC2626',
+                                borderColor: '#EF444420'
+                              }
+                            }
+                          }
+                          
+                          const config = getScoreConfig(roundedScore)
+                          return (
+                            <div className="flex items-center gap-2">
+                              <div 
+                                className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold border-2"
+                                style={{ 
+                                  backgroundColor: config.bgColor,
+                                  color: config.textColor,
+                                  borderColor: config.borderColor
+                                }}
+                              >
+                                {roundedScore}
+                              </div>
+                            </div>
+                          )
+                        }
+                        
+                        return (
+                          <div className="flex items-center justify-center">
+                            <span className="text-sm text-gray-500" style={{ fontFamily }}>
+                              N/A
+                            </span>
+                          </div>
+                        )
+                      })()
+                    ) : (
+                      <div className="flex items-center justify-center">
+                        <span className="text-sm text-gray-500" style={{ fontFamily }}>
+                          N/A
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </TableCell>
+
+                {/* Custom Fields */}
+                {customFieldDefinitions.map((field) => (
+                  <TableCell 
+                    key={field.id}
+                    className="cursor-pointer hover:bg-gray-50"
+                    onClick={() => setSelectedCandidate(candidate)}
+                  >
+                    <span className="text-sm text-gray-900" style={{ fontFamily }}>
+                      {getCustomFieldValue(candidate, field.id)}
+                    </span>
+                  </TableCell>
+                ))}
               </TableRow>
             )
           })}
         </TableBody>
-      </Table>
+        </Table>
+      </div>
 
       {/* Candidate Evaluation Panel */}
       {selectedCandidate && (
         <CandidateEvaluationPanel
           candidate={selectedCandidate}
-          roundInfo={roundInfo}
+          isOpen={true}
           onClose={() => setSelectedCandidate(null)}
+          roundType={roundInfo?.round_type || 'RAPID_FIRE'}
           onCandidateUpdated={onCandidateUpdated}
-          jobOpeningId={jobOpeningId}
+          sparrowRoundId={sparrowRoundId}
+          currentRoundName={currentRoundName}
+          candidateReEvaluationStates={candidateReEvaluationStates}
+          onReEvaluationStateChange={onReEvaluationStateChange}
         />
       )}
     </>

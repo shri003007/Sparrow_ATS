@@ -113,8 +113,33 @@ export function GamesArenaCandidatesTable({
   jobOpeningId,
   onStatusChange,
   currentStatusById,
-  onCandidateUpdated
-}: GamesArenaCandidatesTableProps) {
+  onCandidateUpdated = () => {},
+  sparrowRoundId = '',
+  currentRoundName = 'Games Arena Round',
+  candidateReEvaluationStates = {},
+  onReEvaluationStateChange = () => {}
+}: {
+  candidates: RoundCandidate[]
+  customFieldDefinitions: CustomFieldDefinition[]
+  isLoading: boolean
+  roundInfo?: any
+  jobOpeningId?: string
+  onStatusChange: (candidateId: string, status: RoundStatus) => void
+  currentStatusById: Record<string, RoundStatus>
+  onCandidateUpdated?: (candidate: RoundCandidate) => void
+  sparrowRoundId?: string
+  currentRoundName?: string
+  candidateReEvaluationStates?: Record<string, {
+    isReEvaluating: boolean
+    reEvaluationError: string | null
+    showReEvaluationOptions: boolean
+  }>
+  onReEvaluationStateChange?: (candidateId: string, state: {
+    isReEvaluating?: boolean
+    reEvaluationError?: string | null
+    showReEvaluationOptions?: boolean
+  }) => void
+}) {
   const fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
   
   const [selectedCandidate, setSelectedCandidate] = useState<RoundCandidate | null>(null)
@@ -418,7 +443,7 @@ export function GamesArenaCandidatesTable({
                         const evaluation = candidate.candidate_rounds[0].evaluations[0].evaluation_result
                         const score = evaluation.overall_percentage_score
                         
-                        if (score > 0) {
+                        if (score >= 0) {
                           const roundedScore = Math.round(score)
                           const getScoreConfig = (score: number) => {
                             if (score >= 80) {
@@ -504,8 +529,10 @@ export function GamesArenaCandidatesTable({
           onClose={() => setSelectedCandidate(null)}
           roundType={roundInfo?.round_type || 'GAMES_ARENA'}
           onCandidateUpdated={onCandidateUpdated}
-          sparrowRoundId=""
-          currentRoundName={roundInfo?.round_name || 'Games Arena Round'}
+          sparrowRoundId={sparrowRoundId}
+          currentRoundName={currentRoundName}
+          candidateReEvaluationStates={candidateReEvaluationStates}
+          onReEvaluationStateChange={onReEvaluationStateChange}
         />
       )}
     </>

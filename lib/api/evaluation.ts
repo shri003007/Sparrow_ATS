@@ -133,6 +133,72 @@ export interface SparrowInterviewerEvaluationResponse {
   result_id: string
 }
 
+// Sales evaluation request interfaces
+export interface SalesEvaluationRequest {
+  email: string
+  sparrow_assessment_id: string
+  candidate_round_id: string
+  account_id?: string
+  brand_id?: string
+}
+
+// Sales evaluation response interfaces
+export interface SalesEvaluationResponse {
+  success: boolean
+  message?: string
+  error_message?: string
+  evaluation_type?: string
+  assessment_id?: string
+  candidate_round_id?: string
+  email?: string
+  questions_count?: number
+  cue_cards_count?: number
+  qa_pairs?: Array<{
+    question_number: number
+    question: string
+    answer: string
+  }>
+  grounding_results?: Array<{
+    question_number: number
+    question: string
+    answer: string
+    grounding_score: string
+  }>
+  comprehensive_evaluation?: string
+  rapid_fire_evaluation?: string
+  competency_evaluation?: {
+    competency_scores: Array<{
+      competency_name: string
+      questions: Array<{
+        question_id: string
+        question: string
+        score: number
+        explanation: string
+      }>
+      percentage_score: number
+    }>
+    overall_percentage_score: number
+  }
+  competency_evaluation_summary?: string
+  overall_percentage_score?: number
+  competencies_count?: number
+  competency_evaluation_success?: boolean
+  result_saved?: boolean
+  result_action?: string
+  evaluation_timestamp?: string
+  brand_id?: string
+  account_id?: string
+  transcript_text?: string
+  transcript_length?: number
+  qa_pairs_count?: number
+  grounding_evaluations_count?: number
+  questions_with_timing?: string
+  audio_size_bytes?: number
+  audio_mime_type?: string
+  questions_list?: string[]
+  processed_at?: string
+}
+
 interface BatchResumeEvaluationRequest {
   requests: ResumeEvaluationRequest[]
 }
@@ -162,6 +228,13 @@ const getSparrowInterviewerEvaluationApiUrl = (): string => {
     throw new Error('Sparrow Interviewer evaluation API URL not configured')
   }
   return API_CONFIG.CANDIDATE_EVALUATION_FROM_SPARROWINTERVIEWER_URL
+}
+
+const getSalesEvaluationApiUrl = (): string => {
+  if (!API_CONFIG.SALES_EVALUATION_FROM_SPARROWINTERVIEWER_URL) {
+    throw new Error('Sales evaluation API URL not configured')
+  }
+  return API_CONFIG.SALES_EVALUATION_FROM_SPARROWINTERVIEWER_URL
 }
 
 // Helper function to create error response
@@ -371,6 +444,73 @@ export async function evaluateInterviewCandidateFromSparrowInterviewer(
   }
   
   return data as SparrowInterviewerEvaluationResponse
+}
+
+// Sales evaluation functions
+export async function evaluateTripleStepSales(
+  request: SalesEvaluationRequest
+): Promise<SalesEvaluationResponse> {
+  const apiUrl = getSalesEvaluationApiUrl()
+  
+  const response = await fetch(`${apiUrl}/evaluate-triple-step`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ...request,
+      account_id: request.account_id || 'salesai',
+      brand_id: request.brand_id || 'surveysparrow'
+    }),
+  })
+  
+  const data = await response.json()
+  
+  // Check if the response indicates success in the data, not just HTTP status
+  if (!response.ok && !data?.success) {
+    throw new Error(data?.error_message || `Sales evaluation failed: ${response.status}`)
+  }
+  
+  return data as SalesEvaluationResponse
+}
+
+export async function evaluateRapidFireSales(
+  request: SalesEvaluationRequest
+): Promise<SalesEvaluationResponse> {
+  const apiUrl = getSalesEvaluationApiUrl()
+  
+  const response = await fetch(`${apiUrl}/evaluate-rapid-fire`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ...request,
+      account_id: request.account_id || 'salesai',
+      brand_id: request.brand_id || 'surveysparrow'
+    }),
+  })
+  
+  const data = await response.json()
+  
+  // Check if the response indicates success in the data, not just HTTP status
+  if (!response.ok && !data?.success) {
+    throw new Error(data?.error_message || `Sales evaluation failed: ${response.status}`)
+  }
+  
+  return data as SalesEvaluationResponse
+}
+
+// Generic sales evaluation function that routes to the correct endpoint based on round type
+export async function evaluateSalesCandidate(
+  request: SalesEvaluationRequest,
+  roundType: 'RAPID_FIRE' | 'TALK_ON_A_TOPIC' | 'GAMES_ARENA'
+): Promise<SalesEvaluationResponse> {
+  switch (roundType) {
+    case 'RAPID_FIRE':
+      return evaluateRapidFireSales(request)
+    case 'TALK_ON_A_TOPIC':
+    case 'GAMES_ARENA':
+      return evaluateTripleStepSales(request)
+    default:
+      throw new Error(`Unsupported sales round type: ${roundType}`)
+  }
 }
 
 // Batch resume evaluation with delay between batches

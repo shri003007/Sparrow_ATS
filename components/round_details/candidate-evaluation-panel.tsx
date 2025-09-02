@@ -9,7 +9,7 @@ import { EvaluationScoreChart } from "@/components/round_details/evaluation-scor
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer"
 import { Spinner } from "@/components/ui/spinner"
 import type { RoundCandidate } from "@/lib/round-candidate-types"
-import { evaluateInterviewCandidateFromFile, evaluateInterviewCandidateFromSparrowInterviewer, type InterviewEvaluationRequest, type SparrowInterviewerEvaluationRequest } from "@/lib/api/evaluation"
+import { evaluateInterviewCandidateFromFile, evaluateInterviewCandidateFromSparrowInterviewer, evaluateSalesCandidate, type InterviewEvaluationRequest, type SparrowInterviewerEvaluationRequest, type SalesEvaluationRequest } from "@/lib/api/evaluation"
 import { AssetManagementTable } from "./asset-management-table"
 import { AssetUploadModal } from "./asset-upload-modal"
 import { CompetencyEditModal } from "./competency-edit-modal"
@@ -105,6 +105,10 @@ export function CandidateEvaluationPanel({
   const [sparrowAssessmentData, setSparrowAssessmentData] = useState<SparrowAssessmentResponse | null>(null)
   const [loadingSparrowAssessment, setLoadingSparrowAssessment] = useState<boolean>(false)
   
+  // Sales evaluation states
+  const [loadingSalesEvaluation, setLoadingSalesEvaluation] = useState<boolean>(false)
+  const [salesError, setSalesError] = useState<string | null>(null)
+  
   // Get re-evaluation states from props for current candidate
   const currentCandidateId = candidate?.id || ''
   const currentReEvaluationState = candidateReEvaluationStates[currentCandidateId] || {
@@ -146,6 +150,8 @@ export function CandidateEvaluationPanel({
     setUploadingFile(false)
     setFileError(null)
     setSparrowAssessmentData(null)
+    setLoadingSalesEvaluation(false)
+    setSalesError(null)
   }, [candidate?.id])
 
 
@@ -407,6 +413,108 @@ export function CandidateEvaluationPanel({
     }
   }
 
+  // Sales evaluation handler
+  const handleSalesEvaluation = async (assessmentId: string, brandId: string = 'surveysparrow', isReEvaluation = false) => {
+    if (!assessmentId || assessmentId.trim() === '') {
+      const errorMessage = 'No assessment ID provided. Please configure assessment ID in round settings.'
+      if (isReEvaluation) {
+        setReEvaluationError(errorMessage)
+      } else {
+        setSalesError(errorMessage)
+      }
+      return
+    }
+
+    if (!candidate?.candidate_rounds?.[0]?.id) {
+      const errorMessage = 'Missing candidate information required for evaluation'
+      if (isReEvaluation) {
+        setReEvaluationError(errorMessage)
+      } else {
+        setSalesError(errorMessage)
+      }
+      return
+    }
+
+    try {
+      if (isReEvaluation) {
+        setIsReEvaluating(true)
+        setReEvaluationError(null)
+      } else {
+        setLoadingSalesEvaluation(true)
+        setSalesError(null)
+      }
+      
+      const request: SalesEvaluationRequest = {
+        email: candidate.email,
+        sparrow_assessment_id: assessmentId,
+        candidate_round_id: candidate.candidate_rounds[0].id,
+        account_id: 'salesai',
+        brand_id: brandId
+      }
+
+      const result = await evaluateSalesCandidate(
+        request, 
+        roundType as 'RAPID_FIRE' | 'TALK_ON_A_TOPIC' | 'GAMES_ARENA'
+      )
+      
+      if (result.success) {
+        // Create updated candidate with evaluation
+        const updatedCandidate: RoundCandidate = {
+          ...candidate,
+          candidate_rounds: candidate.candidate_rounds.map(round => ({
+            ...round,
+            is_evaluation: true,
+            evaluations: [{
+              id: `eval-${Date.now()}`,
+              candidate_round_id: round.id,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              evaluation_result: {
+                evaluation_summary: result.competency_evaluation_summary || '',
+                competency_evaluation: result.competency_evaluation || {
+                  competency_scores: [],
+                  overall_percentage_score: 0
+                },
+                overall_percentage_score: result.overall_percentage_score || 0,
+                comprehensive_evaluation: result.comprehensive_evaluation || '',
+                rapid_fire_evaluation: result.rapid_fire_evaluation || '',
+                transcript_text: result.transcript_text || '',
+                qa_pairs: result.qa_pairs || [],
+                grounding_results: result.grounding_results || []
+              }
+            }]
+          }))
+        }
+        
+        onCandidateUpdated(updatedCandidate)
+        
+        // Hide re-evaluation options after successful re-evaluation
+        if (isReEvaluation) {
+          setShowReEvaluationOptions(false)
+        }
+      } else {
+        if (isReEvaluation) {
+          setReEvaluationError(result.error_message || 'Sales evaluation failed')
+        } else {
+          setSalesError(result.error_message || 'Sales evaluation failed')
+        }
+      }
+    } catch (error) {
+      console.error('Sales evaluation error:', error)
+      if (isReEvaluation) {
+        setReEvaluationError(error instanceof Error ? error.message : 'Sales evaluation failed')
+      } else {
+        setSalesError(error instanceof Error ? error.message : 'Sales evaluation failed')
+      }
+    } finally {
+      if (isReEvaluation) {
+        setIsReEvaluating(false)
+      } else {
+        setLoadingSalesEvaluation(false)
+      }
+    }
+  }
+
   const getScoreColor = (score: number) => {
     if (score >= 80) return "#10b981" // green-500
     if (score >= 60) return "#f59e0b" // amber-500
@@ -538,6 +646,15 @@ export function CandidateEvaluationPanel({
                       Re-evaluate Interview
                     </DropdownMenuItem>
                   )}
+                  {(roundType === 'RAPID_FIRE' || roundType === 'TALK_ON_A_TOPIC' || roundType === 'GAMES_ARENA') && hasEvaluation && (
+                    <DropdownMenuItem
+                      onClick={() => setShowReEvaluationOptions(true)}
+                      className="flex items-center gap-2"
+                    >
+                      <Award className="w-4 h-4" />
+                      Re-evaluate Sales Assessment
+                    </DropdownMenuItem>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
 
@@ -665,6 +782,89 @@ export function CandidateEvaluationPanel({
                           {fileError && (
                             <div className="mt-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2 w-full">
                               {fileError}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    )}
+                    
+                    <div className="text-center mt-6">
+                      <Button
+                        onClick={() => setShowReEvaluationOptions(false)}
+                        variant="ghost"
+                        className="text-gray-500"
+                        disabled={isReEvaluating}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : showReEvaluationOptions && (roundType === 'RAPID_FIRE' || roundType === 'TALK_ON_A_TOPIC' || roundType === 'GAMES_ARENA') ? (
+                /* Re-evaluation Options for Sales rounds */
+                <div className="w-full max-w-2xl mx-auto space-y-6">
+                  <div className="bg-white border border-gray-100 rounded-2xl p-8 text-center">
+                    <h3 className="text-xl font-semibold text-gray-900 mb-2">Re-evaluate Sales Assessment</h3>
+                    <p className="text-gray-500 max-w-md mx-auto mb-6">
+                      {isReEvaluating 
+                        ? "Re-evaluation in progress. Please wait..." 
+                        : `Choose your preferred method to re-evaluate this candidate's ${roundType.replace('_', ' ').toLowerCase()} assessment.`
+                      }
+                    </p>
+                    
+                    {isReEvaluating ? (
+                      /* Loading State during Re-evaluation */
+                      <div className="flex flex-col items-center gap-4">
+                        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+                        <div className="text-sm text-gray-600">
+                          Processing re-evaluation request...
+                        </div>
+                        {reEvaluationError && (
+                          <div className="mt-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded px-4 py-2 max-w-md">
+                            {reEvaluationError}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                    
+                    <div className="grid grid-cols-1 gap-6">
+                      {/* Sales Evaluation Option */}
+                      <div className="border border-gray-300 rounded-lg p-6 hover:border-blue-400 transition-colors bg-gradient-to-br from-blue-50 to-indigo-50">
+                        <div className="flex flex-col items-center text-center">
+                          <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-3">
+                            <Award className="w-6 h-6 text-blue-600" />
+                          </div>
+                          <h4 className="text-sm font-semibold text-gray-900 mb-2">Sparrow Sales Assessment</h4>
+                          <p className="text-xs text-gray-600 mb-4 leading-relaxed">
+                            Automatically fetch updated evaluation results from Sparrow Sales Assessment platform.
+                          </p>
+                          
+                          <Button 
+                            onClick={() => handleSalesEvaluation(sparrowRoundId || '', 'surveysparrow', true)}
+                            disabled={isReEvaluating || !sparrowRoundId || sparrowRoundId.trim() === ''}
+                            className="w-full"
+                            style={{
+                              backgroundColor: "#4F46E5",
+                              color: "#FFFFFF"
+                            }}
+                          >
+                            {isReEvaluating ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Re-evaluating...
+                              </>
+                            ) : (
+                              <>
+                                <Award className="w-4 h-4 mr-2" />
+                                Re-evaluate Assessment
+                              </>
+                            )}
+                          </Button>
+                          
+                          {reEvaluationError && (
+                            <div className="mt-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2 w-full">
+                              {reEvaluationError}
                             </div>
                           )}
                         </div>
@@ -877,12 +1077,7 @@ export function CandidateEvaluationPanel({
                     />
                   )}
 
-                  {/* QA Pairs Section - Only for rounds with qa_pairs data */}
-                  {evaluation.qa_pairs && (
-                    <QAPairsSection 
-                      qaPairs={evaluation.qa_pairs}
-                    />
-                  )}
+
 
                   {/* Round ID Configuration Info for INTERVIEW rounds */}
                   {roundType === 'INTERVIEW' && (
@@ -894,6 +1089,61 @@ export function CandidateEvaluationPanel({
                               ? sparrowRoundId
                               : 'Not configured - please set in round settings'
                           }
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Comprehensive Evaluation - For Sales rounds */}
+                  {(roundType === 'RAPID_FIRE' || roundType === 'TALK_ON_A_TOPIC' || roundType === 'GAMES_ARENA') && (
+                    (() => {
+                      // For RAPID_FIRE, use rapid_fire_evaluation key, for others use comprehensive_evaluation
+                      const evaluationContent = roundType === 'RAPID_FIRE' 
+                        ? evaluation.rapid_fire_evaluation 
+                        : evaluation.comprehensive_evaluation;
+                      
+                      if (!evaluationContent) return null;
+                      
+                      return (
+                        <div className="w-full max-w-4xl mx-auto">
+                          <div className="bg-white border border-gray-100 rounded-2xl">
+                            <div className="p-6 border-b border-gray-100">
+                              <div className="flex items-center gap-3">
+                                <FileText className="w-5 h-5 text-blue-600" />
+                                <h3 className="text-lg font-bold text-gray-900">Evaluation</h3>
+                              </div>
+                            </div>
+                            <div className="p-6">
+                              <MarkdownRenderer 
+                                content={evaluationContent.replace(/\\n/g, '\n')}
+                                className="prose prose-sm max-w-none"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()
+                  )}
+
+                  {/* Sales Transcript - For Sales rounds and only if transcript_text exists */}
+                  {(roundType === 'RAPID_FIRE' || roundType === 'TALK_ON_A_TOPIC' || roundType === 'GAMES_ARENA') && evaluation.transcript_text && (
+                    <div className="w-full max-w-4xl mx-auto">
+                      <div className="bg-white border border-gray-100 rounded-2xl">
+                        <div className="p-6 border-b border-gray-100">
+                          <div className="flex items-center gap-3">
+                            <MessageSquare className="w-5 h-5 text-green-600" />
+                            <h3 className="text-lg font-bold text-gray-900">Transcript</h3>
+                          </div>
+                        </div>
+                        <div className="p-6">
+                          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                            <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap font-mono">
+                              {evaluation.transcript_text}
+                            </p>
+                          </div>
+                          <div className="mt-3 text-xs text-gray-500">
+                            Transcript from sales assessment recording
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1073,6 +1323,83 @@ export function CandidateEvaluationPanel({
                           <p className="text-xs text-gray-400 mt-1">
                             File uploads support: PDF, TXT • Maximum file size: 10MB
                           </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Evaluation Options for Sales rounds */}
+                    {(roundType === 'RAPID_FIRE' || roundType === 'TALK_ON_A_TOPIC' || roundType === 'GAMES_ARENA') && (
+                      <div className="max-w-2xl mx-auto space-y-6">
+                        {/* Warning banner when sparrowRoundId is not configured */}
+                        {(!sparrowRoundId || sparrowRoundId.trim() === '') && (
+                          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                            <div className="flex items-center gap-3">
+                              <AlertCircle className="w-5 h-5 text-amber-600" />
+                              <div>
+                                <h4 className="text-sm font-semibold text-amber-800">Round-Specific Configuration Required</h4>
+                                <p className="text-sm text-amber-700">
+                                  Sales assessment ID is automatically configured for this round.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        <div className="grid grid-cols-1 gap-6">
+                          {/* Sales Evaluation Option */}
+                          <div className="border border-gray-300 rounded-lg p-6 hover:border-blue-400 transition-colors bg-gradient-to-br from-blue-50 to-indigo-50">
+                            <div className="flex flex-col items-center text-center">
+                              <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-3">
+                                <Award className="w-6 h-6 text-blue-600" />
+                              </div>
+                              <h4 className="text-sm font-semibold text-gray-900 mb-2">Sparrow Sales Assessment</h4>
+                              <p className="text-xs text-gray-600 mb-4 leading-relaxed">
+                                Automatically fetch evaluation results from Sparrow Sales Assessment platform for {roundType.replace('_', ' ').toLowerCase()} rounds.
+                              </p>
+                              
+                              <Button 
+                                onClick={() => handleSalesEvaluation(sparrowRoundId || '', 'surveysparrow')}
+                                disabled={loadingSalesEvaluation || !sparrowRoundId || sparrowRoundId.trim() === ''}
+                                className="w-full"
+                                style={{
+                                  backgroundColor: "#4F46E5",
+                                  color: "#FFFFFF"
+                                }}
+                              >
+                                {loadingSalesEvaluation ? (
+                                  <>
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                    Evaluating...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Award className="w-4 h-4 mr-2" />
+                                    Get Evaluation
+                                  </>
+                                )}
+                              </Button>
+                              
+                              {salesError && (
+                                <div className="mt-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2 w-full">
+                                  {salesError}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Sales Assessment ID Configuration Info */}
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                          <div className="text-sm text-blue-900">
+                            <strong>Sales Assessment ID:</strong> {
+                              sparrowRoundId && sparrowRoundId.trim() !== '' 
+                                ? sparrowRoundId
+                                : 'Not configured - please set in round settings'
+                            }
+                          </div>
+                        </div>
+                        
+                        <div className="text-xs text-gray-500 text-center">
+                          Sales evaluation powered by AI analysis of candidate responses
                         </div>
                       </div>
                     )}
