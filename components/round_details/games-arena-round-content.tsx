@@ -69,32 +69,61 @@ export function GamesArenaRoundContent({
   // Ref to track if data is currently being fetched to prevent duplicate calls
   const isLoadingRef = useRef(false)
   const currentRoundIdRef = useRef<string | null>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
+  const requestIdRef = useRef<number>(0)
+  const isFirstRenderRef = useRef(true)
 
   // Fetch round candidates data when current round changes
   useEffect(() => {
     const fetchRoundData = async () => {
       if (!currentRound?.id) return
       
-      // Prevent duplicate calls
+      // Generate unique request ID
+      const currentRequestId = ++requestIdRef.current
+      
+      // Prevent duplicate calls for the same round
       if (isLoadingRef.current && currentRoundIdRef.current === currentRound.id) {
         return
       }
       
+      // Only cancel previous request if this is NOT the first render and we're switching rounds
+      if (abortControllerRef.current && !isFirstRenderRef.current && currentRoundIdRef.current !== currentRound.id) {
+        abortControllerRef.current.abort()
+      }
+      
+      // Mark that we've passed the first render
+      isFirstRenderRef.current = false
+      
+      // Create new abort controller for this request
+      const abortController = new AbortController()
+      abortControllerRef.current = abortController
+      
       isLoadingRef.current = true
       currentRoundIdRef.current = currentRound.id
 
+      // Clear previous data immediately to show loader
+      setRoundData(null)
+      setAssessmentMapping(null)
       setIsLoading(true)
       setError(null)
 
       try {
         // Fetch both round data and assessment mapping in parallel
         const [roundResponse, mappingResponse] = await Promise.all([
-          RoundCandidatesApi.getCandidatesByRoundTemplate(currentRound.id),
-          getSparrowAssessmentMapping(currentRound.id).catch(error => {
-            console.error('Failed to fetch assessment mapping:', error)
+          RoundCandidatesApi.getCandidatesByRoundTemplate(currentRound.id, abortController.signal),
+          getSparrowAssessmentMapping(currentRound.id, abortController.signal).catch(error => {
+            // Don't log abort errors as they're expected during navigation
+            if (error.name !== 'AbortError') {
+              console.error('Failed to fetch assessment mapping:', error)
+            }
             return null // Return null on error, don't fail the entire request
           })
         ])
+        
+        // Check if request was aborted before updating state
+        if (abortController.signal.aborted) {
+          return
+        }
         
         setRoundData(roundResponse)
         
@@ -124,16 +153,29 @@ export function GamesArenaRoundContent({
         setOriginalStatusById(initialOriginal)
         setCurrentStatusById(initialCurrent)
         setPendingChanges({})
-      } catch (error) {
-        console.error('Error fetching round candidates:', error)
-        setError('Failed to load round candidates')
+      } catch (error: any) {
+        // Don't show error for aborted requests (happens during navigation)
+        if (error.name !== 'AbortError') {
+          console.error('Error fetching round candidates:', error)
+          setError('Failed to load round candidates')
+        }
       } finally {
-        setIsLoading(false)
-        isLoadingRef.current = false
+        // Always set loading to false since we're handling request ordering properly
+        // The abort signal check in the try block already handles stale requests
+        if (!abortController.signal.aborted) {
+          setIsLoading(false)
+          isLoadingRef.current = false
+        }
       }
     }
 
     fetchRoundData()
+    
+    // Cleanup function - only abort on unmount, not on round changes
+    return () => {
+      // We handle round switching inside fetchRoundData, so cleanup only aborts on unmount
+      // This prevents the first render from being cancelled
+    }
   }, [currentRound?.id])
 
   const handleStatusChange = (candidateId: string, newStatus: RoundStatus) => {

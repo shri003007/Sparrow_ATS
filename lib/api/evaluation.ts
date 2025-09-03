@@ -68,6 +68,7 @@ export interface InterviewEvaluationResponse {
   interviewer_evaluation_summary?: string
   overall_percentage_score?: number | null
   transcript_text?: string
+  qa_pairs?: string
   success: boolean
   error_message: string | null
   file_stored?: boolean
@@ -127,6 +128,7 @@ export interface SparrowInterviewerEvaluationResponse {
     transcript_text?: string
     transcript_length: number
     questions_count: number
+    qa_pairs?: string
   } | null
   result_saved: boolean
   result_action: string
@@ -497,6 +499,45 @@ export async function evaluateRapidFireSales(
   return data as SalesEvaluationResponse
 }
 
+export async function evaluateGamesArenaSales(
+  request: SalesEvaluationRequest
+): Promise<SalesEvaluationResponse> {
+  const apiUrl = getSalesEvaluationApiUrl()
+  
+  const response = await fetch(`${apiUrl}/games-arena`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: request.email,
+      sparrow_assessment_id: request.sparrow_assessment_id,
+      candidate_round_id: request.candidate_round_id
+    }),
+  })
+  
+  const data = await response.json()
+  
+  // Check if the response indicates success in the data, not just HTTP status
+  if (!response.ok && !data?.success) {
+    throw new Error(data?.error_message || `Games Arena evaluation failed: ${response.status}`)
+  }
+  
+  // Transform the Games Arena response to match SalesEvaluationResponse format
+  return {
+    success: data.success,
+    error_message: data.error_message,
+    overall_percentage_score: data.data?.overall_percentage_score || 0,
+    competency_evaluation: data.data?.competency_evaluation || {
+      competency_scores: [],
+      overall_percentage_score: 0
+    },
+    competency_evaluation_summary: data.data?.competency_evaluation_summary || '',
+    comprehensive_evaluation: data.data?.overall_evaluation || '',
+    transcript_text: '', // Games Arena doesn't provide transcript
+    qa_pairs: [],
+    grounding_results: []
+  } as SalesEvaluationResponse
+}
+
 // Generic sales evaluation function that routes to the correct endpoint based on round type
 export async function evaluateSalesCandidate(
   request: SalesEvaluationRequest,
@@ -506,8 +547,9 @@ export async function evaluateSalesCandidate(
     case 'RAPID_FIRE':
       return evaluateRapidFireSales(request)
     case 'TALK_ON_A_TOPIC':
-    case 'GAMES_ARENA':
       return evaluateTripleStepSales(request)
+    case 'GAMES_ARENA':
+      return evaluateGamesArenaSales(request)
     default:
       throw new Error(`Unsupported sales round type: ${roundType}`)
   }

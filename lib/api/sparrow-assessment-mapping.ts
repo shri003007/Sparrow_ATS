@@ -21,14 +21,16 @@ export interface SparrowAssessmentMappingResponse {
  * Fetch sparrow assessment mapping for a job round template
  */
 export async function getSparrowAssessmentMapping(
-  jobRoundTemplateId: string
+  jobRoundTemplateId: string,
+  signal?: AbortSignal
 ): Promise<SparrowAssessmentMappingResponse> {
   try {
     const response = await fetch(`${API_CONFIG.CANDIDATES_BASE_URL}/sparrow-assessment-mapping/job-round-template/${jobRoundTemplateId}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-      }
+      },
+      signal,
     })
 
     if (!response.ok) {
@@ -37,8 +39,11 @@ export async function getSparrowAssessmentMapping(
 
     const data = await response.json()
     return data
-  } catch (error) {
-    console.error('Error fetching sparrow assessment mapping:', error)
+  } catch (error: any) {
+    // Don't log AbortErrors as they're expected during navigation
+    if (error.name !== 'AbortError') {
+      console.error('Error fetching sparrow assessment mapping:', error)
+    }
     throw error
   }
 }

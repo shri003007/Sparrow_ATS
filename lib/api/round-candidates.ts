@@ -5,7 +5,7 @@ export class RoundCandidatesApi {
   /**
    * Get candidates by job round template ID
    */
-  static async getCandidatesByRoundTemplate(jobRoundTemplateId: string): Promise<RoundCandidateResponse> {
+  static async getCandidatesByRoundTemplate(jobRoundTemplateId: string, signal?: AbortSignal): Promise<RoundCandidateResponse> {
     try {
       const url = `${API_CONFIG.CANDIDATES_BASE_URL}/candidates/by-job-round-template/${jobRoundTemplateId}`
       
@@ -14,6 +14,7 @@ export class RoundCandidatesApi {
         headers: {
           'Content-Type': 'application/json',
         },
+        signal,
       })
 
       if (!response.ok) {
@@ -22,8 +23,11 @@ export class RoundCandidatesApi {
 
       const data = await response.json()
       return data as RoundCandidateResponse
-    } catch (error) {
-      console.error('Error fetching round candidates:', error)
+    } catch (error: any) {
+      // Don't log AbortErrors as they're expected during navigation
+      if (error.name !== 'AbortError') {
+        console.error('Error fetching round candidates:', error)
+      }
       throw error
     }
   }

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Loader2, AlertCircle, Users, ArrowRight, Settings } from "lucide-react"
 import { RoundCandidatesApi } from "@/lib/api/round-candidates"
 import { CandidateRoundsApi, JobRoundTemplatesApi } from "@/lib/api/rounds"
@@ -441,16 +441,37 @@ export function InterviewRoundContent({
   }
 
 
+  // Ref for request cancellation
+  const abortControllerRef = useRef<AbortController | null>(null)
+
   // Fetch round candidates data when current round changes
   useEffect(() => {
     const fetchRoundData = async () => {
       if (!currentRound?.id) return
 
+      // Cancel any ongoing request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+      
+      // Create new abort controller for this request
+      const abortController = new AbortController()
+      abortControllerRef.current = abortController
+
+      // Clear previous data immediately to show loader
+      setRoundData(null)
+      setLocalCandidates([])
       setIsLoading(true)
       setError(null)
 
       try {
-        const response = await RoundCandidatesApi.getCandidatesByRoundTemplate(currentRound.id)
+        const response = await RoundCandidatesApi.getCandidatesByRoundTemplate(currentRound.id, abortController.signal)
+        
+        // Check if request was aborted before updating state
+        if (abortController.signal.aborted) {
+          return
+        }
+        
         setRoundData(response)
         setLocalCandidates(response.candidates || [])
         const initialOriginal: Record<string, RoundStatus> = {}
@@ -463,15 +484,40 @@ export function InterviewRoundContent({
         setOriginalStatusById(initialOriginal)
         setCurrentStatusById(initialCurrent)
         setPendingChanges({})
-      } catch (error) {
-        console.error('Error fetching round data:', error)
-        setError(error instanceof Error ? error.message : 'Failed to load round data')
+      } catch (error: any) {
+        // Don't show error for aborted requests (happens during navigation)
+        if (error.name !== 'AbortError') {
+          console.error('Error fetching round data:', error)
+          setError(error instanceof Error ? error.message : 'Failed to load round data')
+        }
       } finally {
-        setIsLoading(false)
+        // Only set loading to false if request wasn't aborted
+        if (!abortController.signal.aborted) {
+          setIsLoading(false)
+        }
       }
     }
 
-    fetchRoundData()
+    // Wrap the fetchRoundData call in try-catch to handle any AbortErrors
+    const safeFetchRoundData = async () => {
+      try {
+        await fetchRoundData()
+      } catch (error: any) {
+        // Silently ignore AbortErrors that bubble up
+        if (error.name !== 'AbortError') {
+          console.error('Unexpected error in fetchRoundData:', error)
+        }
+      }
+    }
+
+    safeFetchRoundData()
+    
+    // Cleanup function to cancel ongoing requests when component unmounts or round changes
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+    }
   }, [currentRound?.id])
 
   const handleRefresh = () => {

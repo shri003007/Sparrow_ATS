@@ -35,16 +35,36 @@ export function ScreeningRoundContent({
   const [currentStatusById, setCurrentStatusById] = useState<Record<string, RoundStatus>>({})
   const [pendingChanges, setPendingChanges] = useState<Record<string, RoundStatus>>({})
 
+  // Ref for request cancellation
+  const abortControllerRef = useRef<AbortController | null>(null)
+
   // Fetch round candidates data when current round changes
   useEffect(() => {
     const fetchRoundData = async () => {
       if (!currentRound?.id) return
 
+      // Cancel any ongoing request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+      
+      // Create new abort controller for this request
+      const abortController = new AbortController()
+      abortControllerRef.current = abortController
+
+      // Clear previous data immediately to show loader
+      setRoundData(null)
       setIsLoading(true)
       setError(null)
 
       try {
-        const response = await RoundCandidatesApi.getCandidatesByRoundTemplate(currentRound.id)
+        const response = await RoundCandidatesApi.getCandidatesByRoundTemplate(currentRound.id, abortController.signal)
+        
+        // Check if request was aborted before updating state
+        if (abortController.signal.aborted) {
+          return
+        }
+        
         setRoundData(response)
         // Initialize status maps from API response
         const initialOriginal: Record<string, RoundStatus> = {}
@@ -57,15 +77,28 @@ export function ScreeningRoundContent({
         setOriginalStatusById(initialOriginal)
         setCurrentStatusById(initialCurrent)
         setPendingChanges({})
-      } catch (error) {
-        console.error('Error fetching round data:', error)
-        setError(error instanceof Error ? error.message : 'Failed to load round data')
+      } catch (error: any) {
+        // Don't show error for aborted requests (happens during navigation)
+        if (error.name !== 'AbortError') {
+          console.error('Error fetching round data:', error)
+          setError(error instanceof Error ? error.message : 'Failed to load round data')
+        }
       } finally {
-        setIsLoading(false)
+        // Only set loading to false if request wasn't aborted
+        if (!abortController.signal.aborted) {
+          setIsLoading(false)
+        }
       }
     }
 
     fetchRoundData()
+    
+    // Cleanup function to cancel ongoing requests when component unmounts or round changes
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+    }
   }, [currentRound?.id])
 
   const handleRefresh = () => {

@@ -254,7 +254,8 @@ export function CandidateEvaluationPanel({
                 },
                 overall_percentage_score: result.competency_evaluation?.overall_percentage_score || 0,
                 interviewer_evaluation_summary: result.interviewer_evaluation_summary || '',
-                transcript_text: result.transcript_text || ''
+                transcript_text: result.transcript_text || '',
+                qa_pairs: result.qa_pairs || ''
               }
             }]
           }))
@@ -378,7 +379,8 @@ export function CandidateEvaluationPanel({
                 },
                 overall_percentage_score: result.overall_percentage_score || 0,
                 interviewer_evaluation_summary: result.interviewer_evaluation_summary || '',
-                transcript_text: result.file_metadata?.transcript_text || ''
+                transcript_text: result.file_metadata?.transcript_text || '',
+                qa_pairs: result.file_metadata?.qa_pairs || ''
               }
             }]
           }))
@@ -1149,24 +1151,9 @@ export function CandidateEvaluationPanel({
                     </div>
                   )}
 
-                  {/* AI Evaluation Summary */}
-                  {evaluation.evaluation_summary && (
-                    <div className="w-full max-w-4xl mx-auto">
-                      <div className="bg-white border border-gray-100 rounded-2xl">
-                        <div className="p-6 border-b border-gray-100">
-                          <div className="flex items-center gap-3">
-                            <FileText className="w-5 h-5 text-blue-600" />
-                            <h3 className="text-lg font-bold text-gray-900">AI Evaluation Summary</h3>
-                          </div>
-                        </div>
-                        <div className="p-6">
-                          <MarkdownRenderer 
-                            content={evaluation.evaluation_summary.replace(/\\n/g, '\n')}
-                            className="prose prose-sm max-w-none"
-                          />
-                        </div>
-                      </div>
-                    </div>
+                  {/* Interview Q&A Section - Only for INTERVIEW rounds and only if qa_pairs exists */}
+                  {roundType === 'INTERVIEW' && evaluation.qa_pairs && (
+                    <QAPairsSection qaPairs={evaluation.qa_pairs} />
                   )}
 
                   {/* Interview Transcript - Only for INTERVIEW rounds and only if transcript_text exists */}
@@ -1188,6 +1175,26 @@ export function CandidateEvaluationPanel({
                           <div className="mt-3 text-xs text-gray-500">
                             Transcript generated from interview audio recording
                           </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* AI Evaluation Summary - Moved to the end for all rounds */}
+                  {evaluation.evaluation_summary && (
+                    <div className="w-full max-w-4xl mx-auto">
+                      <div className="bg-white border border-gray-100 rounded-2xl">
+                        <div className="p-6 border-b border-gray-100">
+                          <div className="flex items-center gap-3">
+                            <FileText className="w-5 h-5 text-blue-600" />
+                            <h3 className="text-lg font-bold text-gray-900">AI Evaluation Summary</h3>
+                          </div>
+                        </div>
+                        <div className="p-6">
+                          <MarkdownRenderer 
+                            content={evaluation.evaluation_summary.replace(/\\n/g, '\n')}
+                            className="prose prose-sm max-w-none"
+                          />
                         </div>
                       </div>
                     </div>
