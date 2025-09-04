@@ -74,7 +74,7 @@ export function JobListingsApp({ onCreateJob }: JobListingsAppProps) {
   }
 
   return (
-    <div className="flex h-screen bg-white">
+    <div className="flex h-screen bg-white" style={{ gap: 0 }}>
       <AppSidebar
         onCreateJob={handleCreateJob}
         onJobSelect={handleJobSelect}

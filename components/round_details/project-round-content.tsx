@@ -7,10 +7,7 @@ import { CandidateRoundsApi, JobRoundTemplatesApi } from "@/lib/api/rounds"
 import type { JobRoundTemplate } from "@/lib/round-types"
 import type { RoundCandidateResponse, RoundCandidate } from "@/lib/round-candidate-types"
 import { Button } from "@/components/ui/button"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Mail, Phone, MapPin } from "lucide-react"
+import { ModernProjectCandidatesTable } from "./modern-project-candidates-table"
 import { CandidateEvaluationPanel } from "./candidate-evaluation-panel"
 
 type RoundStatus = 'selected' | 'rejected' | 'action_pending'
@@ -41,49 +38,6 @@ interface ProjectRoundContentProps {
   createdBy: string
 }
 
-function RoundStatusDropdown({ currentStatus, candidateId, onStatusChange }: {
-  currentStatus: RoundStatus
-  candidateId: string
-  onStatusChange: (candidateId: string, newStatus: RoundStatus) => void
-}) {
-  const fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
-  const statusConfig = ROUND_STATUS_CONFIG[currentStatus]
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button 
-          variant="outline" 
-          className="flex items-center gap-2 h-8 px-3 text-xs"
-          style={{
-            backgroundColor: statusConfig.bgColor,
-            borderColor: statusConfig.color,
-            color: statusConfig.color,
-            fontFamily
-          }}
-        >
-          {statusConfig.label}
-          <ChevronDown className="w-3 h-3" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        {Object.entries(ROUND_STATUS_CONFIG).map(([status, config]) => (
-          <DropdownMenuItem
-            key={status}
-            onClick={() => onStatusChange(candidateId, status as RoundStatus)}
-            className="flex items-center gap-2"
-          >
-            <div 
-              className="w-2 h-2 rounded-full" 
-              style={{ backgroundColor: config.color }}
-            />
-            {config.label}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
 
 export function ProjectRoundContent({ 
   currentRound, 
@@ -98,8 +52,6 @@ export function ProjectRoundContent({
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [localCandidates, setLocalCandidates] = useState<RoundCandidate[]>([])
-  const [selectedCandidate, setSelectedCandidate] = useState<RoundCandidate | null>(null)
-  const [isPanelOpen, setIsPanelOpen] = useState(false)
   const [isProgressingCandidates, setIsProgressingCandidates] = useState(false)
   const [originalStatusById, setOriginalStatusById] = useState<Record<string, RoundStatus>>({})
   const [currentStatusById, setCurrentStatusById] = useState<Record<string, RoundStatus>>({})
@@ -202,16 +154,6 @@ export function ProjectRoundContent({
     // Update status tracking (same pattern as INTERVIEW and SCREENING rounds)
     setCurrentStatusById(prev => ({ ...prev, [candidateId]: newStatus }))
     
-    // Update selected candidate if it's currently open in the panel
-    if (selectedCandidate && selectedCandidate.id === candidateId) {
-      const updatedCandidate = { ...selectedCandidate }
-      if (updatedCandidate.candidate_rounds && updatedCandidate.candidate_rounds.length > 0) {
-        updatedCandidate.candidate_rounds[0].status = newStatus
-      } else {
-        updatedCandidate.round_status = newStatus
-      }
-      setSelectedCandidate(updatedCandidate)
-    }
   }
 
   // Handle re-evaluation state changes
@@ -229,22 +171,6 @@ export function ProjectRoundContent({
     }))
   }
 
-  const getCandidateRoundStatus = (candidate: RoundCandidate): RoundStatus => {
-    if (candidate.candidate_rounds && candidate.candidate_rounds.length > 0) {
-      return candidate.candidate_rounds[0].status as RoundStatus
-    }
-    return candidate.round_status as RoundStatus
-  }
-
-  const openEvaluationPanel = (candidate: RoundCandidate) => {
-    setSelectedCandidate(candidate)
-    setIsPanelOpen(true)
-  }
-
-  const closeEvaluationPanel = () => {
-    setSelectedCandidate(null)
-    setIsPanelOpen(false)
-  }
 
   const handleProgressToNextRound = async () => {
     if (!currentRound?.id || !roundData) return
@@ -432,171 +358,32 @@ export function ProjectRoundContent({
           </div>
         </div>
 
-        {/* Project-specific candidates table */}
+        {/* Modern Project Candidates Table */}
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
           <div className="max-h-[calc(100vh-300px)] overflow-y-auto">
-            {localCandidates.length === 0 ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="text-center">
-                  <div className="text-gray-500 mb-4" style={{ fontFamily }}>
-                    No candidates found for this round
-                  </div>
-                  {roundData?.template_info && (
-                    <div className="text-sm text-gray-400" style={{ fontFamily }}>
-                      {roundData.template_info.round_name} • Round {roundData.template_info.order_index}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table className="min-w-full">
-                  <TableHeader className="sticky top-0 bg-white z-10">
-                    <TableRow>
-                      <TableHead style={{ fontFamily }}>Candidate</TableHead>
-                      <TableHead style={{ fontFamily }}>Contact</TableHead>
-                      <TableHead style={{ fontFamily }}>Status</TableHead>
-                      <TableHead style={{ fontFamily }}>Score</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                {localCandidates.map((candidate) => (
-                  <TableRow key={candidate.id}>
-                    {/* Candidate Info */}
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <Avatar className="w-10 h-10">
-                          <AvatarFallback style={{ fontFamily }}>
-                            {candidate.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <button
-                            className="font-medium text-blue-600 hover:text-blue-800 hover:underline text-left transition-colors"
-                            style={{ fontFamily }}
-                            onClick={() => openEvaluationPanel(candidate)}
-                          >
-                            {candidate.name}
-                          </button>
-                          <div className="text-sm text-gray-500 flex items-center gap-1" style={{ fontFamily }}>
-                            <Calendar className="w-3 h-3" />
-                            {new Date(candidate.created_at).toLocaleDateString()}
-                          </div>
-                        </div>
-                      </div>
-                    </TableCell>
-
-                    {/* Contact */}
-                    <TableCell>
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-1 text-sm text-gray-600" style={{ fontFamily }}>
-                          <Mail className="w-3 h-3" />
-                          {candidate.email}
-                        </div>
-                        <div className="flex items-center gap-1 text-sm text-gray-600" style={{ fontFamily }}>
-                          <Phone className="w-3 h-3" />
-                          {candidate.mobile_phone}
-                        </div>
-                        {candidate.current_location && (
-                          <div className="flex items-center gap-1 text-sm text-gray-600" style={{ fontFamily }}>
-                            <MapPin className="w-3 h-3" />
-                            {candidate.current_location}
-                          </div>
-                        )}
-                      </div>
-                    </TableCell>
-
-                    {/* Status */}
-                    <TableCell>
-                      <RoundStatusDropdown
-                        currentStatus={getCandidateRoundStatus(candidate)}
-                        candidateId={candidate.id}
-                        onStatusChange={handleStatusChange}
-                      />
-                    </TableCell>
-
-                    {/* Project Score */}
-                    <TableCell>
-                      {(() => {
-                        const hasEvaluation = candidate.candidate_rounds?.[0]?.is_evaluation
-                        const evaluation = candidate.candidate_rounds?.[0]?.evaluations?.[0]?.evaluation_result
-                        
-                        if (hasEvaluation && evaluation?.overall_percentage_score !== undefined) {
-                          const score = evaluation.overall_percentage_score
-                          const getScoreColor = (score: number) => {
-                            if (score >= 80) return "#10b981" // green-500
-                            if (score >= 60) return "#f59e0b" // amber-500
-                            return "#ef4444" // red-500
-                          }
-                          
-                          return (
-                            <div className="flex items-center justify-center">
-                              <div className="w-10 h-10 rounded-full flex items-center justify-center border-2" style={{
-                                backgroundColor: `${getScoreColor(score)}20`,
-                                borderColor: getScoreColor(score)
-                              }}>
-                                <span className="text-sm font-medium" style={{
-                                  fontFamily,
-                                  color: getScoreColor(score)
-                                }}>
-                                  {score}
-                                </span>
-                              </div>
-                              <span className="text-xs text-gray-400 ml-2" style={{ fontFamily }}>
-                                %
-                              </span>
-                            </div>
-                          )
-                        } else {
-                          return (
-                            <div className="flex items-center justify-center">
-                              <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center border-2 border-gray-200">
-                                <span className="text-sm font-medium text-gray-400" style={{ fontFamily }}>
-                                  -
-                                </span>
-                              </div>
-                              <span className="text-xs text-gray-400 ml-2" style={{ fontFamily }}>
-                                %
-                              </span>
-                            </div>
-                          )
-                        }
-                      })()}
-                    </TableCell>
-                  </TableRow>
-                ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
+            <ModernProjectCandidatesTable
+              candidates={localCandidates}
+              customFieldDefinitions={roundData?.custom_field_definitions || []}
+              isLoading={isLoading}
+              roundInfo={roundData?.template_info}
+              jobOpeningId={roundData?.candidates?.[0]?.job_opening_id}
+              onStatusChange={handleStatusChange}
+              onCandidateUpdated={(updatedCandidate) => {
+                setLocalCandidates(prev => 
+                  prev.map(candidate => 
+                    candidate.id === updatedCandidate.id ? updatedCandidate : candidate
+                  )
+                )
+              }}
+              sparrowRoundId=""
+              currentRoundName={currentRound?.round_name || 'Project Round'}
+              candidateReEvaluationStates={candidateReEvaluationStates}
+              onReEvaluationStateChange={handleReEvaluationStateChange}
+            />
           </div>
         </div>
       </div>
 
-      {/* Project-specific Evaluation Panel */}
-      <CandidateEvaluationPanel
-        candidate={selectedCandidate}
-        isOpen={isPanelOpen}
-        onClose={closeEvaluationPanel}
-        roundType="PROJECT"
-        onStatusChange={handleStatusChange}
-        isEvaluating={false}
-        candidateReEvaluationStates={candidateReEvaluationStates}
-        onReEvaluationStateChange={handleReEvaluationStateChange}
-        sparrowRoundId=""
-        currentRoundName={currentRound?.round_name || ''}
-        onCandidateUpdated={(updatedCandidate) => {
-          setLocalCandidates(prev => 
-            prev.map(candidate => 
-              candidate.id === updatedCandidate.id ? updatedCandidate : candidate
-            )
-          )
-          // Update selected candidate if it's the one that was updated
-          if (selectedCandidate && selectedCandidate.id === updatedCandidate.id) {
-            setSelectedCandidate(updatedCandidate)
-          }
-        }}
-      />
     </div>
   )
 }

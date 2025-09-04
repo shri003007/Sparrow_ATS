@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Settings, Plus, Users, Calendar, DollarSign, Clock, MapPin, Play, Loader2, Eye } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { CSVImportFlow } from "@/components/candidates/csv-import-flow"
-import { CandidatesTable } from "@/components/candidates/candidates-table"
+import { ModernCandidatesTable } from "@/components/candidates/modern-candidates-table"
 import { CandidatesApi } from "@/lib/api/candidates"
 import { CandidateTransformer } from "@/lib/transformers/candidate-transformer"
 import { JobRoundTemplatesApi, CandidateRoundsApi } from "@/lib/api/rounds"
@@ -846,7 +846,7 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
             </div>
           </div>
         ) : (
-          <CandidatesTable 
+          <ModernCandidatesTable 
             candidates={candidates} 
             onStatusChange={handleStatusChange} 
           />

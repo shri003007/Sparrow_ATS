@@ -1,13 +1,16 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Search, BarChart3, Users, Briefcase, CreditCard, Plus, ChevronDown, LogOut, User } from "lucide-react"
+import { useState, useEffect, useRef } from "react"
+import { Search, BarChart3, Users, Briefcase, CreditCard, Plus, ChevronDown, ChevronLeft, ChevronRight, LogOut, User, EllipsisVertical } from "lucide-react"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { JobOpeningsApi } from "@/lib/api/job-openings"
 import type { JobOpeningListItem } from "@/lib/job-types"
 import { useAuth } from "@/contexts/auth-context"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { SurveySparrowIcon } from "@/utils/icons"
+import RocketIcon from "@/components/ui/rocket-icon"
 
 interface AppSidebarProps {
   onCreateJob?: () => void
@@ -21,8 +24,69 @@ export function AppSidebar({ onCreateJob, onJobSelect, selectedJobId, mode = 'li
   const [jobs, setJobs] = useState<JobOpeningListItem[]>([])
   const [loading, setLoading] = useState(true)
   const [showAllJobs, setShowAllJobs] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [isOpen, setIsOpen] = useState(false) // Start collapsed
+  const [showText, setShowText] = useState(false)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const collapseTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+
+  const triggerSidebarOpen = () => {
+    if (isOpen) {
+      // Show text immediately when opening
+      setShowText(true);
+    } else {
+      // Hide text immediately when closing
+      setShowText(false);
+    }
+  };
+
+  useEffect(() => {
+    triggerSidebarOpen();
+  }, [isOpen]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (collapseTimeoutRef.current) {
+        clearTimeout(collapseTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Auto-expand on mouse enter
+  const handleMouseEnter = () => {
+    // Clear any pending collapse timeout
+    if (collapseTimeoutRef.current) {
+      clearTimeout(collapseTimeoutRef.current);
+      collapseTimeoutRef.current = null;
+    }
+    setIsOpen(true);
+  };
+
+  // Auto-collapse on mouse leave with delay
+  const handleMouseLeave = () => {
+    // Set a timeout to collapse after a delay
+    collapseTimeoutRef.current = setTimeout(() => {
+      setIsOpen(false);
+      collapseTimeoutRef.current = null;
+    }, 300); // 300ms delay before collapsing
+  };
+
+  // Auto-focus search when expanding via search icon
+  const handleSearchIconClick = () => {
+    // Clear any pending collapse timeout
+    if (collapseTimeoutRef.current) {
+      clearTimeout(collapseTimeoutRef.current);
+      collapseTimeoutRef.current = null;
+    }
+    setIsOpen(true);
+    // Focus the search input after the sidebar opens
+    setTimeout(() => {
+      searchInputRef.current?.focus();
+    }, 100);
+  };
 
   useEffect(() => {
     const fetchJobs = async () => {
@@ -55,114 +119,99 @@ export function AppSidebar({ onCreateJob, onJobSelect, selectedJobId, mode = 'li
     fetchJobs()
   }, [apiUser?.id, selectedJobId, onJobSelect, mode])
 
+  // Keyboard shortcut handler for Command+K
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
+        event.preventDefault()
+        searchInputRef.current?.focus()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [])
+
   const navigationItems = [
-    { icon: BarChart3, label: "Dashboard", href: "/dashboard", isActive: false },
-    { icon: Briefcase, label: "All roles", href: "/roles", isActive: true, hasSubmenu: true },
-    { icon: Users, label: "All candidates", href: "/candidates", isActive: false },
-    { icon: BarChart3, label: "Analytics", href: "/analytics", isActive: false },
-    { icon: CreditCard, label: "Billing", href: "/billing", isActive: false },
+    { icon: RocketIcon, label: "All roles", href: "/roles", isActive: true, hasSubmenu: true },
+    // { icon: BarChart3, label: "Dashboard", href: "/dashboard", isActive: false },
+    
+    // { icon: Users, label: "All candidates", href: "/candidates", isActive: false },
+    // { icon: BarChart3, label: "Analytics", href: "/analytics", isActive: false },
+    // { icon: CreditCard, label: "Billing", href: "/billing", isActive: false },
   ]
 
+  // Filter jobs based on search query
+  const filteredJobs = jobs.filter(job =>
+    job.posting_title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    job.custom_job_description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    job.employment_type?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    job.minimum_experience?.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
+  // Reset showAllJobs when search query changes
+  useEffect(() => {
+    if (searchQuery) {
+      setShowAllJobs(false)
+    }
+  }, [searchQuery])
+
   // Show first 3 jobs by default, or all when expanded
-  const displayedJobs = showAllJobs ? jobs : jobs.slice(0, 3)
-  const hasMoreJobs = jobs.length > 3
+  const displayedJobs = showAllJobs ? filteredJobs : filteredJobs.slice(0, 3)
+  const hasMoreJobs = filteredJobs.length > 3
 
   return (
-    <div
-      className="w-80 bg-white border-r flex flex-col h-screen"
-      style={{
-        borderColor: "#E5E7EB",
-        backgroundColor: "#FAFAFA",
-        fontFamily,
-      }}
-    >
+    <TooltipProvider>
+      <div
+        className={`${isOpen ? 'w-80' : 'w-18'} bg-white border-r flex flex-col h-screen relative transition-all duration-300 ease-in-out group`}
+        style={{
+          borderColor: "#E2E8F0",
+          backgroundColor: "#f8f8f8",
+          fontFamily,
+          minWidth: isOpen ? '320px' : '72px',
+        }}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+      >
       {/* Brand Header */}
-      <div className="p-4 border-b" style={{ borderColor: "#F3F4F6" }}>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              className="w-full flex items-center justify-between p-3 rounded-full hover:bg-gray-50 transition-colors h-auto"
-              style={{ backgroundColor: "#F3F4F6" }}
-            >
-              <div className="flex items-center gap-3">
-                {/* Logo */}
-                <div className="w-6 h-6 rounded flex items-center justify-center" style={{ backgroundColor: "#5BA4A4" }}>
-              <span className="text-white text-sm font-bold">✱</span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span
-                    className="font-medium"
-                    style={{
-                      fontSize: "14px",
-                      fontWeight: 700,
-                      color: "#111827",
-                      fontFamily,
-                    }}
-                  >
-                    SparrowATS
-                  </span>
-                </div>
-              </div>
-              
-              <div className="flex items-center gap-2">
-                <Avatar className="w-8 h-8">
-                  <AvatarImage src={user?.photoURL || ''} alt={apiUser?.first_name || user?.displayName || 'User'} />
-                  <AvatarFallback className="text-white text-sm font-medium" style={{ backgroundColor: "#FF6B35" }}>
-                    {apiUser?.first_name?.charAt(0) || user?.displayName?.charAt(0) || user?.email?.charAt(0) || 'U'}
-                  </AvatarFallback>
-                </Avatar>
-                <ChevronDown className="w-4 h-4" style={{ color: "#6B7280" }} />
-              </div>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <div className="px-2 py-1.5">
-              <p className="text-sm font-medium">
-                {apiUser?.first_name && apiUser?.last_name 
-                  ? `${apiUser.first_name} ${apiUser.last_name}`
-                  : apiUser?.first_name || user?.displayName || 'User'}
-              </p>
-              <p className="text-xs text-gray-500">{user?.email}</p>
-              {apiUser && (
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                    {apiUser.role.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                  </span>
-                  {!apiUser.is_active && (
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                      Inactive
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="cursor-pointer">
-              <User className="w-4 h-4 mr-2" />
-              Profile
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem 
-              className="cursor-pointer text-red-600 focus:text-red-600"
-              onClick={() => logout()}
-            >
-              <LogOut className="w-4 h-4 mr-2" />
-              Logout
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+      <div className={`p-4 cursor-pointer ${!isOpen ? 'flex justify-center' : ''}`} onClick={() => window.location.href = '/dashboard'}>
+        <div className={`flex items-center ${isOpen ? 'gap-2' : 'justify-center'}`}>
+          <SurveySparrowIcon style={{ width: '30px', height: '30px' }} />
+          {showText && (
+          <span
+              className={`font-bold transition-all duration-300 ${isOpen ? 'opacity-100' : 'opacity-0'}`}
+            style={{
+              fontSize: "18px",
+              fontWeight: 600,
+              color: "#2D3748",
+              fontFamily,
+                overflow: 'hidden',
+                marginLeft: isOpen ? '8px' : 0,
+            }}
+          >
+            SparrowATS
+          </span>
+          )}
+        </div>
       </div>
 
-      {/* Global Search */}
-      <div className="p-4">
+      {/* Main Content */}
+      <div className="flex flex-col justify-between h-full">
+        <div className="flex-1">
+          {/* Global Search - Show input when expanded, icon when collapsed */}
+          {showText ? (
+                  <div className="px-4 py-3">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4" style={{ color: "#9CA3AF" }} />
           <input
+            ref={searchInputRef}
             type="text"
-            placeholder="Search anything"
-            className="w-full pl-10 pr-12 py-2.5 rounded-lg border text-sm"
+            placeholder="Search jobs..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+                              className="w-full pl-10 pr-12 py-2.5 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
             style={{
               backgroundColor: "#F3F4F6",
               borderColor: "#E5E7EB",
@@ -185,51 +234,242 @@ export function AppSidebar({ onCreateJob, onJobSelect, selectedJobId, mode = 'li
           </div>
         </div>
       </div>
+          ) : (
+            <div className="px-4 py-1 flex justify-center">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-10 h-10 p-0 rounded-lg hover:bg-green-50 transition-colors"
+                onClick={handleSearchIconClick}
+                title="Search jobs"
+              >
+                <Search className="w-5 h-5" style={{ color: "#6A6A6A" }} />
+              </Button>
+            </div>
+          )}
 
-      {/* Navigation */}
-      <div className="flex-1 px-4">
-        <div className="mb-6">
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider" style={{ color: "#6B7280", fontFamily }}>
-            NAVIGATE
-          </h3>
-
-          <nav className="space-y-1">
+                {/* Navigation */}
+          <div className={`px-3 mt-2 ${!isOpen ? 'flex flex-col items-center' : ''}`}>
             {navigationItems.map((item) => (
-              <div key={item.label}>
+              <SidebarItem 
+                key={item.label} 
+                sidebar={item} 
+                isOpen={showText}
+                jobs={filteredJobs}
+                loading={loading}
+                selectedJobId={selectedJobId || null}
+                onJobSelect={onJobSelect}
+                onCreateJob={onCreateJob}
+                displayedJobs={displayedJobs}
+                hasMoreJobs={hasMoreJobs}
+                showAllJobs={showAllJobs}
+                setShowAllJobs={setShowAllJobs}
+                searchQuery={searchQuery}
+                mode={mode}
+                fontFamily={fontFamily}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Bottom Account Section */}
+        <div className="p-3 border-t" style={{ borderColor: "#E2E8F0" }}>
+          <div className={`flex items-center ${isOpen ? 'justify-between' : 'justify-center'}`}>
+            <div className={`flex items-center ${isOpen ? 'gap-3' : 'justify-center'}`}>
+              <LogoutWrapper showDropdown={!isOpen}>
+                <Avatar className="w-8 h-8 cursor-pointer">
+                  <AvatarImage src={user?.photoURL || ''} alt={apiUser?.first_name || user?.displayName || 'User'} />
+                  <AvatarFallback className="text-white text-sm font-medium" style={{ backgroundColor: "#8B5A3C" }}>
+                    {apiUser?.first_name?.charAt(0) || user?.displayName?.charAt(0) || user?.email?.charAt(0) || 'U'}
+                  </AvatarFallback>
+                </Avatar>
+              </LogoutWrapper>
+              {showText && (
                 <div
-                  className={`flex items-center justify-between w-full px-3 py-2.5 rounded-lg cursor-pointer transition-colors ${
-                    item.isActive ? "bg-gray-100" : "hover:bg-gray-50"
-                  }`}
+                  className={`text-sm transition-all duration-300 ${isOpen ? 'opacity-100' : 'opacity-0'}`}
+                  style={{
+                    color: "#374151",
+                    fontFamily,
+                    overflow: 'hidden',
+                  }}
                 >
-                  <div className="flex items-center gap-3">
-                    <item.icon className="w-4 h-4" style={{ color: "#6B7280" }} />
-                    <span
-                      className="text-sm"
-                      style={{
-                        color: "#374151",
-                        fontSize: "14px",
-                        fontWeight: 400,
-                        fontFamily,
-                      }}
-                    >
-                      {item.label}
-                    </span>
-                  </div>
-                  {item.hasSubmenu && (
-                    <Plus
-                      className="w-4 h-4 cursor-pointer hover:text-gray-600 transition-colors"
-                      style={{ color: "#9CA3AF" }}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onCreateJob?.()
-                      }}
-                    />
-                  )}
+                  {(apiUser?.first_name && apiUser?.last_name 
+                    ? `${apiUser.first_name} ${apiUser.last_name}`
+                    : apiUser?.first_name || user?.displayName || 'User')?.slice(0, 16)}
+                </div>
+              )}
+            </div>
+            {showText && (
+              <LogoutWrapper showDropdown>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                >
+                  <EllipsisVertical className="w-4 h-4" />
+                </Button>
+              </LogoutWrapper>
+            )}
+          </div>
+        </div>
+      </div>
+
+      </div>
+    </TooltipProvider>
+  )
+}
+
+const LogoutWrapper = ({
+  children,
+  showDropdown
+}: {
+  children: React.ReactNode;
+  showDropdown?: boolean;
+}) => {
+  const { logout } = useAuth()
+
+  const handleUserLogout = async () => {
+    try {
+      await logout()
+    } catch (error) {
+      console.error('Logout error:', error)
+    }
+  };
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
+      {showDropdown && (
+        <DropdownMenuContent
+          align="start"
+          sideOffset={8}
+          className="w-32"
+        >
+          <DropdownMenuItem className="cursor-pointer">
+            <User className="w-4 h-4 mr-2" />
+            Settings
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => handleUserLogout()}
+            className="cursor-pointer text-red-600 focus:text-red-600"
+          >
+            <LogOut className="w-4 h-4 mr-2" />
+            Logout
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      )}
+    </DropdownMenu>
+  );
+};
+
+const SidebarItem = ({
+  sidebar,
+  isOpen,
+  jobs,
+  loading,
+  selectedJobId,
+  onJobSelect,
+  onCreateJob,
+  displayedJobs,
+  hasMoreJobs,
+  showAllJobs,
+  setShowAllJobs,
+  searchQuery,
+  mode,
+  fontFamily
+}: {
+  isOpen: boolean;
+  sidebar: any;
+  jobs: JobOpeningListItem[];
+  loading: boolean;
+  selectedJobId: string | null;
+  onJobSelect?: (job: JobOpeningListItem) => void;
+  onCreateJob?: () => void;
+  displayedJobs: JobOpeningListItem[];
+  hasMoreJobs: boolean;
+  showAllJobs: boolean;
+  setShowAllJobs: (show: boolean) => void;
+  searchQuery: string;
+  mode: string;
+  fontFamily: string;
+}) => {
+  const [hoverState, setHoverState] = useState(false);
+
+  const hasSubOptions = sidebar.hasSubmenu;
+  // Don't highlight "All roles" - we'll highlight individual jobs instead
+  const activeSidebarId = null;
+
+  const getSidebarIcon = (IconComponent: any) => {
+    // Always use default gray color for navigation items
+    const iconColor = "#6A6A6A";
+    
+    if (IconComponent === RocketIcon) {
+      return <RocketIcon size={20} color={iconColor} />;
+    }
+    return <IconComponent className="w-5 h-5" style={{ color: iconColor }} />;
+  };
+
+  return (
+    <div className="flex flex-col">
+      <div
+        className={`flex items-center ${isOpen ? 'justify-between' : 'justify-center'} m-1 px-3 py-2 rounded-lg transition-colors hover:bg-gray-50`}
+      >
+        <div 
+          className={`flex items-center ${isOpen ? 'flex-1' : 'justify-center'}`}
+          onMouseEnter={() => setHoverState(true)}
+          onMouseLeave={() => setHoverState(false)}
+        >
+          {!isOpen ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div>{getSidebarIcon(sidebar.icon)}</div>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                <p>{sidebar.label}</p>
+              </TooltipContent>
+            </Tooltip>
+          ) : (
+            <>
+              {getSidebarIcon(sidebar.icon)}
+                                  <span
+                className="text-sm font-medium ml-3 transition-all duration-300"
+                style={{
+                  color: "#374151",
+                  fontFamily,
+                  overflow: 'hidden',
+                }}
+              >
+                {sidebar.label}
+              </span>
+            </>
+          )}
+        </div>
+        {hasSubOptions && isOpen && (
+          <div
+            className="ml-2 p-1.5 rounded-md cursor-pointer transition-all duration-200 hover:bg-teal-100 hover:scale-105"
+            style={{ 
+              backgroundColor: "#5BA4A4",
+              boxShadow: "0 2px 4px rgba(91, 164, 164, 0.2)"
+            }}
+            onClick={(e) => {
+              e.stopPropagation()
+              onCreateJob?.()
+            }}
+            title="Create new job"
+          >
+            <Plus
+              className="w-4 h-4"
+              style={{ color: "white" }}
+            />
+          </div>
+        )}
                 </div>
 
-                {/* Job Roles Submenu */}
-                {item.label === "All roles" && (
-                  <div className="ml-7 mt-1 space-y-1">
+      {/* Job Roles Submenu - Only show when expanded */}
+      {hasSubOptions && isOpen && (
+        <div className="flex flex-col gap-1 transition-all duration-300 overflow-hidden max-h-96">
+          {sidebar.label === "All roles" && (
+            <div className="ml-10 mr-2 space-y-1">
                     {loading ? (
                       <div
                         className="flex items-center px-3 py-2 text-sm"
@@ -241,7 +481,7 @@ export function AppSidebar({ onCreateJob, onJobSelect, selectedJobId, mode = 'li
                       >
                         Loading jobs...
                       </div>
-                    ) : jobs.length === 0 ? (
+              ) : jobs.length === 0 ? (
                       <div
                         className="flex items-center px-3 py-2 text-sm"
                         style={{
@@ -250,27 +490,30 @@ export function AppSidebar({ onCreateJob, onJobSelect, selectedJobId, mode = 'li
                           fontFamily,
                         }}
                       >
-                        No jobs found
+                        {searchQuery ? `No jobs found matching "${searchQuery}"` : "No jobs found"}
                       </div>
                     ) : (
                       <>
                         {displayedJobs.map((job) => (
                           <div
                             key={job.id}
-                            className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer text-sm transition-colors ${
-                              selectedJobId === job.id ? "text-white" : "hover:bg-gray-50"
-                            }`}
-                            style={{
-                              backgroundColor: selectedJobId === job.id ? "#111827" : "transparent",
-                              fontSize: "14px",
-                              fontFamily,
-                            }}
+                                                  className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer text-sm transition-colors ${
+                        selectedJobId === job.id ? "" : "hover:bg-teal-50"
+                      }`}
+                      style={{
+                        backgroundColor: selectedJobId === job.id ? "rgba(91, 164, 164, 0.1)" : "transparent",
+                        color: selectedJobId === job.id ? "#5BA4A4" : "#374151",
+                        fontSize: "14px",
+                        fontFamily,
+                        fontWeight: selectedJobId === job.id ? "500" : "400",
+                      }}
                             onClick={() => mode === 'listing' ? onJobSelect?.(job) : undefined}
                           >
                             <div
                               className="w-2 h-2 rounded-full border"
                               style={{
-                                borderColor: selectedJobId === job.id ? "#FFFFFF" : "#9CA3AF",
+                                borderColor: selectedJobId === job.id ? "#5BA4A4" : "#9CA3AF",
+                                backgroundColor: selectedJobId === job.id ? "#5BA4A4" : "transparent",
                               }}
                             />
                             <span className="truncate">{job.posting_title}</span>
@@ -286,21 +529,18 @@ export function AppSidebar({ onCreateJob, onJobSelect, selectedJobId, mode = 'li
                             }}
                             onClick={() => setShowAllJobs(!showAllJobs)}
                           >
-                            {showAllJobs ? 'Show less' : `See all ${jobs.length} jobs`}
+                      {showAllJobs ? 'Show less' : `See all ${jobs.length} jobs${searchQuery ? ` matching "${searchQuery}"` : ''}`}
                           </div>
                         )}
                       </>
                     )}
                   </div>
-                )}
-              </div>
-            ))}
-          </nav>
-        </div>
-      </div>
+                  )}
+                </div>
+              )}
     </div>
-  )
-}
+  );
+};
 
 // Alias for backward compatibility
 export { AppSidebar as JobListingSidebar }

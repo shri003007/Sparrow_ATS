@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Loader2, AlertCircle, Users, ArrowRight } from "lucide-react"
-import { RoundCandidatesTable } from "./round-candidates-table"
+import { ModernScreeningCandidatesTable } from "./modern-screening-candidates-table"
 import { RoundCandidatesApi } from "@/lib/api/round-candidates"
 import { CandidateRoundsApi, JobRoundTemplatesApi } from "@/lib/api/rounds"
 import type { JobRoundTemplate } from "@/lib/round-types"
@@ -334,10 +334,10 @@ export function ScreeningRoundContent({
           </div>
         </div>
 
-        {/* Candidates Table with proper scrolling */}
+        {/* Modern Screening Candidates Table */}
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
           <div className="max-h-[calc(100vh-300px)] overflow-y-auto">
-            <RoundCandidatesTable
+            <ModernScreeningCandidatesTable
               candidates={roundData?.candidates || []}
               customFieldDefinitions={roundData?.custom_field_definitions || []}
               isLoading={isLoading}

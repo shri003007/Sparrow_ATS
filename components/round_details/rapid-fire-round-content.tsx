@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { Loader2, AlertCircle, Users, ArrowRight, Settings } from "lucide-react"
-import { RapidFireCandidatesTable } from "./rapid-fire-candidates-table"
+import { ModernRapidFireCandidatesTable } from "./modern-rapid-fire-candidates-table"
 import { RoundCandidatesApi } from "@/lib/api/round-candidates"
 import { CandidateRoundsApi, JobRoundTemplatesApi } from "@/lib/api/rounds"
 import type { JobRoundTemplate } from "@/lib/round-types"
@@ -566,14 +566,13 @@ export function RapidFireRoundContent({
       <div className="flex-1 p-8">
         <div className="bg-white border border-gray-200 rounded-xl">
           <div className="max-h-[calc(100vh-300px)] overflow-y-auto">
-            <RapidFireCandidatesTable
+            <ModernRapidFireCandidatesTable
               candidates={roundData?.candidates || []}
               customFieldDefinitions={roundData?.custom_field_definitions || []}
               isLoading={isLoading}
               roundInfo={roundData?.template_info}
               jobOpeningId={roundData?.candidates?.[0]?.job_opening_id}
               onStatusChange={handleStatusChange}
-              currentStatusById={currentStatusById}
               onCandidateUpdated={(updatedCandidate) => {
                 // Update the candidate in the local state
                 if (roundData?.candidates) {

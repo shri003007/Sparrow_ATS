@@ -120,7 +120,7 @@ export function RoundDetailsView({ job, onBackToCandidates }: RoundDetailsViewPr
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-gray-50 min-w-0 overflow-hidden">
+    <div className="flex-1 flex flex-col bg-gray-50 min-w-0 overflow-hidden" style={{ marginLeft: 0 }}>
       {/* Loading State */}
       {isLoadingRounds ? (
         <div className="flex-1 flex items-center justify-center">
