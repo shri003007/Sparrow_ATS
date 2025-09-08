@@ -39,17 +39,17 @@ interface CompetencyEvaluation {
 
 const ROUND_STATUS_CONFIG = {
   selected: {
-    label: 'Selected',
+    label: 'Hire',
     color: '#10B981',
     bgColor: '#DCFCE7'
   },
   rejected: {
-    label: 'Rejected', 
+    label: 'Reject', 
     color: '#EF4444',
     bgColor: '#FEE2E2'
   },
   action_pending: {
-    label: 'Action Pending',
+    label: 'On Hold',
     color: '#F59E0B', 
     bgColor: '#FEF3C7'
   }

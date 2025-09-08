@@ -280,7 +280,7 @@ export function ModernInterviewCandidatesTable({
                   minWidth: "220px",
                   position: "sticky",
                   left: 0,
-                  zIndex: 100
+                  zIndex: 12
                 }}
               >
                 <div className="flex items-center gap-2">

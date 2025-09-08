@@ -136,6 +136,10 @@ export function ModernGamesArenaCandidatesTable({
   }
 
   const getCandidateRoundStatus = (candidate: RoundCandidate): RoundStatus => {
+    // Get status from candidate_rounds[0].status (API source) with fallback to round_status
+    if (candidate.candidate_rounds && candidate.candidate_rounds.length > 0) {
+      return candidate.candidate_rounds[0].status as RoundStatus || 'action_pending'
+    }
     return candidate.round_status as RoundStatus || 'action_pending'
   }
 
@@ -167,6 +171,34 @@ export function ModernGamesArenaCandidatesTable({
   }
 
   const handleStatusChange = (candidateId: string, status: RoundStatus) => {
+    // Update local candidates state immediately for UI responsiveness
+    setLocalCandidates(prevCandidates => 
+      prevCandidates.map(candidate => {
+        if (candidate.id === candidateId) {
+          const updatedCandidate = { ...candidate }
+          if (updatedCandidate.candidate_rounds && updatedCandidate.candidate_rounds.length > 0) {
+            updatedCandidate.candidate_rounds[0].status = status
+          } else {
+            updatedCandidate.round_status = status
+          }
+          return updatedCandidate
+        }
+        return candidate
+      })
+    )
+    
+    // Update selected candidate if it's currently open in panel
+    if (selectedCandidate && selectedCandidate.id === candidateId) {
+      const updatedCandidate = { ...selectedCandidate }
+      if (updatedCandidate.candidate_rounds && updatedCandidate.candidate_rounds.length > 0) {
+        updatedCandidate.candidate_rounds[0].status = status
+      } else {
+        updatedCandidate.round_status = status
+      }
+      setSelectedCandidate(updatedCandidate)
+    }
+
+    // Notify parent component
     onStatusChange(candidateId, status)
   }
 
@@ -208,7 +240,10 @@ export function ModernGamesArenaCandidatesTable({
           <thead
             style={{
               backgroundColor: "#f6f7f8",
-              borderRadius: "8px"
+              borderRadius: "8px",
+              position: "sticky",
+              top: 0,
+              zIndex: 11
             }}
           >
             <tr>
@@ -229,7 +264,7 @@ export function ModernGamesArenaCandidatesTable({
                   minWidth: "220px",
                   position: "sticky",
                   left: 0,
-                  zIndex: 100
+                  zIndex: 12
                 }}
               >
                 <div className="flex items-center gap-2">
@@ -553,6 +588,7 @@ export function ModernGamesArenaCandidatesTable({
           isOpen={isPanelOpen}
           onClose={closeEvaluationPanel}
           roundType={roundInfo?.round_type || 'GAMES_ARENA'}
+          onStatusChange={handleStatusChange}
           onCandidateUpdated={(updatedCandidate) => {
             setLocalCandidates(prev =>
               prev.map(candidate =>

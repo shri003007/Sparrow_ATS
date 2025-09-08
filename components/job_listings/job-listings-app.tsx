@@ -15,6 +15,7 @@ type JobView = 'candidates' | 'rounds'
 export function JobListingsApp({ onCreateJob }: JobListingsAppProps) {
   const [selectedJob, setSelectedJob] = useState<JobOpeningListItem | null>(null)
   const [currentView, setCurrentView] = useState<JobView>('candidates')
+  const [isLoadingJobs, setIsLoadingJobs] = useState(true)
   const navigationCheckRef = useRef<((callback: () => void) => void) | null>(null)
 
   const handleJobSelect = (job: JobOpeningListItem) => {
@@ -30,6 +31,10 @@ export function JobListingsApp({ onCreateJob }: JobListingsAppProps) {
       // Set view based on has_rounds_started flag
       setCurrentView(job.has_rounds_started ? 'rounds' : 'candidates')
     }
+  }
+
+  const handleJobsLoaded = () => {
+    setIsLoadingJobs(false)
   }
 
   const handleNavigationCheck = (hasUnsavedChanges: boolean, checkFunction: (callback: () => void) => void) => {
@@ -80,6 +85,7 @@ export function JobListingsApp({ onCreateJob }: JobListingsAppProps) {
         onJobSelect={handleJobSelect}
         selectedJobId={selectedJob?.id || null}
         mode="listing"
+        onJobsLoaded={handleJobsLoaded}
       />
       {currentView === 'candidates' ? (
         <JobDetailsView
@@ -88,6 +94,7 @@ export function JobListingsApp({ onCreateJob }: JobListingsAppProps) {
           onAddCandidates={handleAddCandidates}
           onNavigationCheck={handleNavigationCheck}
           onGoToRounds={handleGoToRounds}
+          isLoadingJobs={isLoadingJobs}
         />
       ) : (
         <RoundDetailsView

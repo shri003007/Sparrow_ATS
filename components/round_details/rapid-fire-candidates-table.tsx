@@ -26,7 +26,7 @@ const ROUND_STATUS_CONFIG = {
     bgColor: '#FEE2E2'
   },
   action_pending: {
-    label: 'Action Pending',
+    label: 'On Hold',
     color: '#F59E0B', 
     bgColor: '#FEF3C7'
   }
@@ -327,7 +327,7 @@ export function RapidFireCandidatesTable({
                 style={{ fontFamily }}
               >
                 <option value="all">All Statuses</option>
-                <option value="action_pending">Action Pending</option>
+                <option value="action_pending">On Hold</option>
                 <option value="selected">Selected</option>
                 <option value="rejected">Rejected</option>
               </select>

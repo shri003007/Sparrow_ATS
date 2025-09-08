@@ -28,6 +28,8 @@ export function RoundDetailsView({ job, onBackToCandidates }: RoundDetailsViewPr
 
   // Fetch round templates when component mounts or job changes
   useEffect(() => {
+    const abortController = new AbortController()
+    
     const fetchRoundTemplates = async () => {
       if (!job?.id) return
 
@@ -36,6 +38,12 @@ export function RoundDetailsView({ job, onBackToCandidates }: RoundDetailsViewPr
 
       try {
         const response = await JobRoundTemplatesApi.getJobRoundTemplates(job.id)
+        
+        // Check if request was cancelled
+        if (abortController.signal.aborted) {
+          return
+        }
+        
         const sortedRounds = response.job_round_templates.sort((a, b) => a.order_index - b.order_index)
         setRounds(sortedRounds)
         
@@ -55,14 +63,25 @@ export function RoundDetailsView({ job, onBackToCandidates }: RoundDetailsViewPr
         
         setCurrentStepIndex(Math.max(0, initialStepIndex))
       } catch (error) {
+        // Don't show errors for cancelled requests
+        if (abortController.signal.aborted) {
+          return
+        }
         console.error('Error fetching round templates:', error)
         setRoundsError(error instanceof Error ? error.message : 'Failed to load round details')
       } finally {
-        setIsLoadingRounds(false)
+        if (!abortController.signal.aborted) {
+          setIsLoadingRounds(false)
+        }
       }
     }
 
     fetchRoundTemplates()
+    
+    // Cleanup function to cancel request when job changes or component unmounts
+    return () => {
+      abortController.abort()
+    }
   }, [job?.id])
 
   // Update current round when step index changes

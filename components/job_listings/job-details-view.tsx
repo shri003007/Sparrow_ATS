@@ -26,9 +26,10 @@ interface JobDetailsViewProps {
   onAddCandidates?: () => void
   onNavigationCheck?: (hasUnsavedChanges: boolean, checkFunction: (callback: () => void) => void) => void
   onGoToRounds?: () => void
+  isLoadingJobs?: boolean
 }
 
-export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationCheck, onGoToRounds }: JobDetailsViewProps) {
+export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationCheck, onGoToRounds, isLoadingJobs = false }: JobDetailsViewProps) {
   const { apiUser } = useAuth()
   const [showImportFlow, setShowImportFlow] = useState(false)
   const [candidates, setCandidates] = useState<CandidateDisplay[]>([])
@@ -63,8 +64,15 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
 
   // Fetch candidates when job changes
   useEffect(() => {
+    const abortController = new AbortController()
+    
     if (job?.id) {
-      fetchCandidates(job.id)
+      fetchCandidates(job.id, abortController.signal)
+    }
+    
+    // Cleanup function to cancel request when job changes or component unmounts
+    return () => {
+      abortController.abort()
     }
   }, [job?.id])
 
@@ -95,10 +103,16 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
     }
   }, [hasUnsavedChanges, pendingStatusChanges])
 
-  const fetchCandidates = async (jobId: string) => {
+  const fetchCandidates = async (jobId: string, abortSignal?: AbortSignal) => {
     setIsLoadingCandidates(true)
     try {
       const response = await CandidatesApi.getCandidatesByJob(jobId)
+      
+      // Check if request was cancelled
+      if (abortSignal?.aborted) {
+        return
+      }
+      
       const displayCandidates = CandidateTransformer.transformApiListToDisplay(response.candidates)
       setCandidates(displayCandidates)
       setCandidatesCount(response.candidate_count)
@@ -119,12 +133,18 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
         originalState: Object.keys(originalState).length
       })
     } catch (error) {
+      // Don't show errors for cancelled requests
+      if (abortSignal?.aborted) {
+        return
+      }
       console.error('Failed to fetch candidates:', error)
       setCandidates([])
       setCandidatesCount(0)
       setOriginalCandidatesState({})
     } finally {
-      setIsLoadingCandidates(false)
+      if (!abortSignal?.aborted) {
+        setIsLoadingCandidates(false)
+      }
     }
   }
 
@@ -593,6 +613,17 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
   }
 
   if (!job) {
+    if (isLoadingJobs) {
+      return (
+        <div className="flex-1 flex items-center justify-center bg-white">
+          <div className="text-center">
+            <div className="w-8 h-8 mx-auto mb-4 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+            <p className="text-gray-500" style={{ fontFamily }}>Loading jobs...</p>
+          </div>
+        </div>
+      )
+    }
+    
     return (
       <div className="flex-1 flex items-center justify-center bg-white">
         <div className="text-center">

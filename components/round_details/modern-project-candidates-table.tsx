@@ -208,7 +208,10 @@ export function ModernProjectCandidatesTable({
           <thead
             style={{
               backgroundColor: "#f6f7f8",
-              borderRadius: "8px"
+              borderRadius: "8px",
+              position: "sticky",
+              top: 0,
+              zIndex: 11
             }}
           >
             <tr>
@@ -229,7 +232,7 @@ export function ModernProjectCandidatesTable({
                   minWidth: "220px",
                   position: "sticky",
                   left: 0,
-                  zIndex: 100
+                  zIndex: 12
                 }}
               >
                 <div className="flex items-center gap-2">

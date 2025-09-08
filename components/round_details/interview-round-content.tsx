@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Mail, Phone, MapPin, Calendar, Clock, ChevronDown } from "lucide-react"
 import { CandidateEvaluationPanel } from "./candidate-evaluation-panel"
 import { ModernInterviewCandidatesTable } from "./modern-interview-candidates-table"
+import { RoundSettingsModal } from "./round-settings-modal"
 
 type RoundStatus = 'selected' | 'rejected' | 'action_pending'
 
@@ -34,7 +35,7 @@ const ROUND_STATUS_CONFIG = {
     bgColor: '#FEE2E2'
   },
   action_pending: {
-    label: 'Action Pending',
+    label: 'On Hold',
     color: '#F59E0B', 
     bgColor: '#FEF3C7'
   }
@@ -870,194 +871,34 @@ export function InterviewRoundContent({
         </div>
       </div>
 
-      {/* Sparrow Interviewer Round ID Settings Modal */}
-      <Dialog 
-        open={showRoundIdModal} 
-        onOpenChange={(open) => {
-          if (!isBulkEvaluating && !isBulkStatusUpdate) {
-            setShowRoundIdModal(open)
-            if (!open) {
+      {/* Round Settings Modal */}
+      <RoundSettingsModal
+        isOpen={showRoundIdModal}
+        onClose={() => {
+          setShowRoundIdModal(false)
               setBulkEvaluationError(null)
               setBulkStatusError(null)
               setSelectedBulkStatus('')
-            }
-          }
         }}
-      >
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Sparrow Interviewer Settings - {currentRound?.round_name || 'Current Round'}</DialogTitle>
-            <DialogDescription>
-              Configure the round ID that will be sent to Sparrow Interviewer for all candidates in this specific round ({currentRound?.round_name || 'Current Round'}).
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="round-id" className="text-right">
-                Round ID
-              </Label>
-              <Input
-                id="round-id"
-                value={tempRoundId}
-                onChange={(e) => setTempRoundId(e.target.value)}
-                placeholder="Enter Sparrow Interviewer round ID"
-                className="col-span-3"
-                disabled={isBulkEvaluating || isBulkStatusUpdate}
-              />
-            </div>
-            <div className="text-sm text-gray-500 col-span-4">
-              This round ID will be used instead of the job_round_template_id when making API calls to Sparrow Interviewer for this specific round ({currentRound?.round_name || 'Current Round'}). Each round can have its own unique round ID.
-            </div>
-
-            {/* Bulk Evaluation Section */}
-            <div className="col-span-4 mt-6 pt-6 border-t border-gray-200">
-              <h4 className="text-sm font-semibold text-gray-900 mb-3">Bulk Evaluation</h4>
-              
-              {/* Candidates without evaluation count */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-sm font-medium text-blue-900">
-                      Candidates without evaluation: {getCandidatesWithoutEvaluations().length}
-                    </span>
-                    <p className="text-xs text-blue-700 mt-1">
-                      Only candidates without existing evaluations will be processed
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Bulk evaluation button */}
-              <Button
-                onClick={handleBulkEvaluation}
-                disabled={isBulkEvaluating || !hasAssessmentId() || getCandidatesWithoutEvaluations().length === 0}
-                className="w-full mb-4"
-                style={{
-                  backgroundColor: "#10B981",
-                  color: "#FFFFFF"
-                }}
-              >
-                {isBulkEvaluating ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Evaluating ({bulkEvaluationProgress.completed}/{bulkEvaluationProgress.total})
-                  </>
-                ) : (
-                  <>
-                    <Users className="w-4 h-4 mr-2" />
-                    Evaluate All via Sparrow Interviewer
-                  </>
-                )}
-              </Button>
-
-              {/* Progress display */}
-              {isBulkEvaluating && (
-                <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
-                  <div 
-                    className="bg-green-600 h-2 rounded-full transition-all duration-300" 
-                    style={{ 
-                      width: `${(bulkEvaluationProgress.completed / bulkEvaluationProgress.total) * 100}%` 
-                    }}
-                  ></div>
-                </div>
-              )}
-
-              {/* Error/success messages */}
-              {bulkEvaluationError && (
-                <div className={`text-xs p-3 rounded border ${
-                  bulkEvaluationError.includes('successful') 
-                    ? 'text-green-700 bg-green-50 border-green-200' 
-                    : 'text-red-700 bg-red-50 border-red-200'
-                }`}>
-                  {bulkEvaluationError}
-                </div>
-              )}
-            </div>
-
-            {/* Bulk Status Update Section */}
-            <div className="col-span-4 mt-6 pt-6 border-t border-gray-200">
-              <h4 className="text-sm font-semibold text-gray-900 mb-3">Bulk Status Update</h4>
-              
-              {/* Current candidates count */}
-              <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-sm font-medium text-purple-900">
-                      Total candidates: {localCandidates.length}
-                    </span>
-                    <p className="text-xs text-purple-700 mt-1">
-                      Update status for all candidates in this round
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Status selection and update button */}
-              <div className="space-y-3">
-                <div className="flex gap-3">
-                  <div className="flex-1">
-                    <Select value={selectedBulkStatus} onValueChange={(value) => setSelectedBulkStatus(value as RoundStatus | '')}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select status for all candidates" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="action_pending">Action Pending</SelectItem>
-                        <SelectItem value="selected">Selected</SelectItem>
-                        <SelectItem value="rejected">Rejected</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Button
-                    onClick={handleBulkStatusUpdate}
-                    disabled={isBulkStatusUpdate || !selectedBulkStatus || localCandidates.length === 0 || isBulkEvaluating}
-                    style={{
-                      backgroundColor: "#8B5CF6",
-                      color: "#FFFFFF"
-                    }}
-                  >
-                    {isBulkStatusUpdate ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Updating...
-                      </>
-                    ) : (
-                      'Update All'
-                    )}
-                  </Button>
-                </div>
-              </div>
-
-              {/* Status update messages */}
-              {bulkStatusError && (
-                <div className={`text-xs p-3 rounded border mt-3 ${
-                  bulkStatusError.includes('Successfully') 
-                    ? 'text-green-700 bg-green-50 border-green-200' 
-                    : 'text-red-700 bg-red-50 border-red-200'
-                }`}>
-                  {bulkStatusError}
-                </div>
-              )}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button 
-              type="button" 
-              variant="outline" 
-              onClick={handleCancelRoundId}
-              disabled={isBulkEvaluating || isBulkStatusUpdate}
-            >
-              Cancel
-            </Button>
-            <Button 
-              type="button" 
-              onClick={handleSaveRoundId}
-              disabled={isBulkEvaluating || isBulkStatusUpdate}
-            >
-              Save
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        roundType="INTERVIEW"
+        roundName={currentRound?.round_name || 'Current Round'}
+        primaryId={tempRoundId}
+        setPrimaryId={setTempRoundId}
+        candidatesCount={localCandidates.length}
+        candidatesWithoutEvaluations={getCandidatesWithoutEvaluations().length}
+        isBulkEvaluating={isBulkEvaluating}
+        bulkEvaluationProgress={bulkEvaluationProgress}
+        bulkEvaluationError={bulkEvaluationError}
+        onBulkEvaluation={handleBulkEvaluation}
+        selectedBulkStatus={selectedBulkStatus}
+        setSelectedBulkStatus={setSelectedBulkStatus}
+        isBulkStatusUpdate={isBulkStatusUpdate}
+        bulkStatusError={bulkStatusError}
+        onBulkStatusUpdate={handleBulkStatusUpdate}
+        onSave={handleSaveRoundId}
+        onCancel={handleCancelRoundId}
+        hasValidConfiguration={() => Boolean(hasAssessmentId())}
+      />
 
     </div>
   )

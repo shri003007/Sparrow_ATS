@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { Loader2, AlertCircle, Users, ArrowRight, Settings } from "lucide-react"
 import { ModernRapidFireCandidatesTable } from "./modern-rapid-fire-candidates-table"
+import { RoundSettingsModal } from "./round-settings-modal"
 import { RoundCandidatesApi } from "@/lib/api/round-candidates"
 import { CandidateRoundsApi, JobRoundTemplatesApi } from "@/lib/api/rounds"
 import type { JobRoundTemplate } from "@/lib/round-types"
@@ -202,43 +203,6 @@ export function RapidFireRoundContent({
     }
   }
 
-  const handleSaveChanges = async () => {
-    if (!currentRound?.id || Object.keys(pendingChanges).length === 0) return
-
-    setIsProgressingCandidates(true)
-    setError(null)
-
-    try {
-      const candidateUpdates = Object.entries(pendingChanges).map(([candidateId, status]) => ({
-        candidate_id: candidateId,
-        status
-      }))
-
-      const response = await CandidateRoundsApi.updateCandidateRoundStatus({
-        job_round_template_id: currentRound.id,
-        candidate_updates: candidateUpdates
-      })
-
-      console.log('Candidate status update response:', response)
-
-      // Update original status to match current status for successful updates
-      setOriginalStatusById(prev => ({
-        ...prev,
-        ...currentStatusById
-      }))
-      setPendingChanges({})
-
-      // Refresh the data to get updated counts
-      const refreshResponse = await RoundCandidatesApi.getCandidatesByRoundTemplate(currentRound.id)
-      setRoundData(refreshResponse)
-
-    } catch (error) {
-      console.error('Error updating candidate statuses:', error)
-      setError('Failed to update candidate statuses')
-    } finally {
-      setIsProgressingCandidates(false)
-    }
-  }
 
   const handleProgressToNextRound = async () => {
     if (!currentRound?.id || !roundData) return
@@ -385,28 +349,27 @@ export function RapidFireRoundContent({
     setBulkStatusError(null)
 
     try {
-      const candidateUpdates = roundData.candidates.map(candidate => ({
-        candidate_id: candidate.id,
-        status: selectedBulkStatus as RoundStatus
+      // Update local state immediately for UI responsiveness (same as INTERVIEW round)
+      const updatedCandidates = roundData.candidates.map(candidate => ({
+        ...candidate,
+        candidate_rounds: candidate.candidate_rounds.map(round => ({
+          ...round,
+          status: selectedBulkStatus as RoundStatus
+        }))
       }))
-
-      await CandidateRoundsApi.updateCandidateRoundStatus({
-        job_round_template_id: currentRound.id,
-        candidate_updates: candidateUpdates
-      })
-
-      // Refresh data
-      const refreshResponse = await RoundCandidatesApi.getCandidatesByRoundTemplate(currentRound.id)
-      setRoundData(refreshResponse)
-
-      // Update local state
-      const newStatusById: Record<string, RoundStatus> = {}
+      
+      // Update roundData immediately for UI feedback
+      setRoundData(prev => prev ? { ...prev, candidates: updatedCandidates } : null)
+      
+      // Update currentStatusById for consistency (same as INTERVIEW round)
+      const statusUpdates: Record<string, RoundStatus> = {}
       roundData.candidates.forEach(candidate => {
-        newStatusById[candidate.id] = selectedBulkStatus as RoundStatus
+        statusUpdates[candidate.id] = selectedBulkStatus as RoundStatus
       })
-      setOriginalStatusById(newStatusById)
-      setCurrentStatusById(newStatusById)
-      setPendingChanges({})
+      setCurrentStatusById(prev => ({ ...prev, ...statusUpdates }))
+
+      setBulkStatusError(`Successfully updated status to "${selectedBulkStatus}" for all ${roundData.candidates.length} candidates`)
+      setSelectedBulkStatus('')
 
     } catch (error) {
       setBulkStatusError(error instanceof Error ? error.message : 'Bulk status update failed')
@@ -505,30 +468,7 @@ export function RapidFireRoundContent({
         </div>
 
         {/* Action Buttons */}
-        {hasChanges && (
-          <div className="mt-4 flex items-center gap-3">
-            <Button
-              onClick={handleSaveChanges}
-              disabled={isProgressingCandidates}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
-              style={{ fontFamily }}
-            >
-              {isProgressingCandidates ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                'Save Changes'
-              )}
-            </Button>
-            <div className="text-sm text-blue-600" style={{ fontFamily }}>
-              {Object.keys(pendingChanges).length} unsaved change(s)
-            </div>
-          </div>
-        )}
-
-        {!isLastRound && !hasChanges && (
+        {!isLastRound && (
           <div className="mt-4">
             <div className="flex flex-col items-end gap-2">
               <div className="text-sm text-gray-600" style={{ fontFamily }}>
@@ -592,164 +532,39 @@ export function RapidFireRoundContent({
       </div>
 
       {/* Settings Modal */}
-      <Dialog 
-        open={showSettingsModal} 
-        onOpenChange={(open) => {
-          if (!isBulkEvaluating && !isBulkStatusUpdate) {
-            setShowSettingsModal(open)
-            if (!open) {
-              setBulkEvaluationError(null)
-              setBulkStatusError(null)
-              setSelectedBulkStatus('')
-            }
-          }
+      <RoundSettingsModal
+        isOpen={showSettingsModal}
+        onClose={() => {
+          setShowSettingsModal(false)
+          setBulkEvaluationError(null)
+          setBulkStatusError(null)
+          setSelectedBulkStatus('')
         }}
-      >
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Sales Assessment Settings - {currentRound?.round_name || 'Rapid Fire Round'}</DialogTitle>
-            <DialogDescription>
-              Configure sales assessment settings and manage bulk operations for all candidates in this round.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-6 py-4">
-            {/* Assessment Configuration */}
-            <div className="space-y-4">
-              <h4 className="text-sm font-medium text-gray-900">Assessment Configuration</h4>
-              <div className="grid gap-4">
-                <div>
-                  <Label htmlFor="assessment-id">Sales Assessment ID</Label>
-                  <Input
-                    id="assessment-id"
-                    value={tempAssessmentId}
-                    onChange={(e) => setTempAssessmentId(e.target.value)}
-                    placeholder="e.g., ice-breaker-001, TS-triple-step"
-                    className="mt-1"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    The assessment ID used for Sparrow Sales Assessment API calls
-                  </p>
-                </div>
-                <div>
-                  <Label htmlFor="brand-id">Brand ID</Label>
-                  <Select value={tempBrandId} onValueChange={setTempBrandId}>
-                    <SelectTrigger className="mt-1">
-                      <SelectValue placeholder="Select brand" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="surveysparrow">SurveySparrow</SelectItem>
-                      <SelectItem value="thrivesparrow">ThriveSparrow</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    The brand identifier for the assessment
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Bulk Operations */}
-            <div className="space-y-4">
-              <h4 className="text-sm font-medium text-gray-900">Bulk Operations</h4>
-              
-              {/* Bulk Evaluation */}
-              <div className="border border-gray-200 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <h5 className="text-sm font-medium">Bulk Evaluation</h5>
-                  {isBulkEvaluating && (
-                    <div className="text-xs text-blue-600">
-                      {bulkEvaluationProgress.completed} / {bulkEvaluationProgress.total}
-                    </div>
-                  )}
-                </div>
-                <p className="text-xs text-gray-500 mb-3">
-                  Evaluate all candidates who don't have evaluations yet
-                </p>
-                <Button 
-                  onClick={handleBulkEvaluation}
-                  disabled={isBulkEvaluating || isBulkStatusUpdate || !tempAssessmentId.trim()}
-                  className="w-full"
-                  size="sm"
-                >
-                  {isBulkEvaluating ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Evaluating...
-                    </>
-                  ) : (
-                    'Bulk Evaluate'
-                  )}
-                </Button>
-                {bulkEvaluationError && (
-                  <div className="mt-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">
-                    {bulkEvaluationError}
-                  </div>
-                )}
-              </div>
-
-              {/* Bulk Status Update */}
-              <div className="border border-gray-200 rounded-lg p-4">
-                <h5 className="text-sm font-medium mb-2">Bulk Status Update</h5>
-                <p className="text-xs text-gray-500 mb-3">
-                  Set the same status for all candidates in this round
-                </p>
-                <div className="space-y-3">
-                  <Select value={selectedBulkStatus} onValueChange={(value) => setSelectedBulkStatus(value as RoundStatus)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select status for all candidates" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="selected">Selected</SelectItem>
-                      <SelectItem value="rejected">Rejected</SelectItem>
-                      <SelectItem value="action_pending">Action Pending</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Button 
-                    onClick={handleBulkStatusUpdate}
-                    disabled={isBulkStatusUpdate || isBulkEvaluating || !selectedBulkStatus}
-                    className="w-full"
-                    size="sm"
-                    variant="outline"
-                  >
-                    {isBulkStatusUpdate ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Updating...
-                      </>
-                    ) : (
-                      'Update All Statuses'
-                    )}
-                  </Button>
-                </div>
-                {bulkStatusError && (
-                  <div className="mt-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">
-                    {bulkStatusError}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={() => setShowSettingsModal(false)}
-              disabled={isBulkEvaluating || isBulkStatusUpdate}
-            >
-              Cancel
-            </Button>
-            <Button 
-              onClick={() => {
-                setSparrowAssessmentId(tempAssessmentId)
-                setBrandId(tempBrandId)
-                setShowSettingsModal(false)
-              }}
-              disabled={isBulkEvaluating || isBulkStatusUpdate}
-            >
-              Save Settings
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        roundType="RAPID_FIRE"
+        roundName={currentRound?.round_name || 'Rapid Fire Round'}
+        primaryId={tempAssessmentId}
+        setPrimaryId={setTempAssessmentId}
+        secondaryId={tempBrandId}
+        setSecondaryId={setTempBrandId}
+        candidatesCount={(roundData?.candidates || []).length}
+        candidatesWithoutEvaluations={(roundData?.candidates || []).filter(candidate => !candidate.candidate_rounds?.[0]?.is_evaluation).length}
+        isBulkEvaluating={isBulkEvaluating}
+        bulkEvaluationProgress={bulkEvaluationProgress}
+        bulkEvaluationError={bulkEvaluationError}
+        onBulkEvaluation={handleBulkEvaluation}
+        selectedBulkStatus={selectedBulkStatus}
+        setSelectedBulkStatus={setSelectedBulkStatus}
+        isBulkStatusUpdate={isBulkStatusUpdate}
+        bulkStatusError={bulkStatusError}
+        onBulkStatusUpdate={handleBulkStatusUpdate}
+        onSave={() => {
+          setSparrowAssessmentId(tempAssessmentId)
+          setBrandId(tempBrandId)
+          setShowSettingsModal(false)
+        }}
+        onCancel={() => setShowSettingsModal(false)}
+        hasValidConfiguration={() => tempAssessmentId.trim() !== ''}
+      />
     </div>
   )
 }

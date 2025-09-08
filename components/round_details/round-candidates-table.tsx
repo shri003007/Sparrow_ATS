@@ -26,7 +26,7 @@ const ROUND_STATUS_CONFIG = {
     bgColor: '#FEE2E2'
   },
   action_pending: {
-    label: 'Action Pending',
+    label: 'On Hold',
     color: '#F59E0B', 
     bgColor: '#FEF3C7'
   }
