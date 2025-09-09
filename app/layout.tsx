@@ -7,7 +7,12 @@ import { Toaster } from '@/components/ui/toaster'
 
 export const metadata: Metadata = {
   title: 'SparrowATS - Recruitment Management',
-  description: 'Modern recruitment and applicant tracking system',
+  description: 'Modern recruitment and applicant tracking system powered by SparrowAI',
+  keywords: 'recruitment, ATS, applicant tracking, hiring, jobs, candidates, SparrowAI',
+  authors: [{ name: 'SparrowAI' }],
+  creator: 'SparrowAI',
+  publisher: 'SparrowAI',
+  applicationName: 'SparrowATS',
 }
 
 export default function RootLayout({

@@ -104,6 +104,7 @@ export function CandidateEvaluationPanel({
   const [sparrowError, setSparrowError] = useState<string | null>(null)
   const [sparrowAssessmentData, setSparrowAssessmentData] = useState<SparrowAssessmentResponse | null>(null)
   const [loadingSparrowAssessment, setLoadingSparrowAssessment] = useState<boolean>(false)
+  const [fetchedKey, setFetchedKey] = useState<string | null>(null)
   
   // Sales evaluation states
   const [loadingSalesEvaluation, setLoadingSalesEvaluation] = useState<boolean>(false)
@@ -163,17 +164,35 @@ export function CandidateEvaluationPanel({
     return sparrowRoundId && sparrowRoundId.trim() !== ''
   }
 
+  // Reset sparrow assessment data when candidate changes
+  React.useEffect(() => {
+    setSparrowAssessmentData(null)
+    setFetchedKey(null)
+  }, [candidate?.id])
+
   // Fetch sparrow assessment data if candidate has sparrow assessment
   React.useEffect(() => {
     const fetchSparrowAssessment = async () => {
       if (!candidate?.email) return
       
       // Check if this is a sparrow assessment round and we have an assessment ID
-      if (roundType === 'INTERVIEW' && evaluation?.assessment_type === 'AUDIO_ASSESSMENT' && sparrowRoundId && sparrowRoundId.trim() !== '') {
+      const eligibleRoundTypes = ['INTERVIEW', 'RAPID_FIRE', 'GAMES_ARENA', 'TALK_ON_A_TOPIC']
+      
+      // Fetch sparrow assessment data if we have an assessment ID for eligible round types
+      // We'll try to fetch regardless of evaluation status since the data might be available
+      if (eligibleRoundTypes.includes(roundType) && sparrowRoundId && sparrowRoundId.trim() !== '') {
+        const currentKey = `${candidate.email}-${sparrowRoundId}`
+        
+        // Prevent duplicate calls by checking if we've already fetched this combination
+        if (fetchedKey === currentKey) {
+          return // Already fetched this candidate/assessment combination
+        }
+        
         setLoadingSparrowAssessment(true)
         try {
           const data = await getSparrowAssessmentData(candidate.email, sparrowRoundId)
           setSparrowAssessmentData(data)
+          setFetchedKey(currentKey) // Mark this combination as fetched
         } catch (error) {
           console.error('Failed to fetch sparrow assessment data:', error)
           // Don't show error to user as this might be expected for non-sparrow candidates
@@ -184,7 +203,7 @@ export function CandidateEvaluationPanel({
     }
 
     fetchSparrowAssessment()
-  }, [candidate?.email, roundType, evaluation?.assessment_type, sparrowRoundId])
+  }, [candidate?.email, roundType, sparrowRoundId])
 
   if (!candidate) return null
 
@@ -1081,8 +1100,8 @@ export function CandidateEvaluationPanel({
 
 
 
-                  {/* Round ID Configuration Info for INTERVIEW rounds */}
-                  {roundType === 'INTERVIEW' && (
+                  {/* Round ID Configuration Info for eligible sparrow assessment rounds */}
+                  {['INTERVIEW', 'RAPID_FIRE', 'GAMES_ARENA', 'TALK_ON_A_TOPIC'].includes(roundType) && (
                     <div className="w-full max-w-4xl mx-auto">
                       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
                         <div className="text-sm text-blue-900">
@@ -1213,8 +1232,8 @@ export function CandidateEvaluationPanel({
                       This candidate has not been evaluated yet for this round.
                     </p>
                     
-                    {/* Evaluation Options for INTERVIEW rounds */}
-                    {roundType === 'INTERVIEW' && (
+                    {/* Evaluation Options for eligible sparrow assessment rounds */}
+                    {['INTERVIEW', 'RAPID_FIRE', 'GAMES_ARENA', 'TALK_ON_A_TOPIC'].includes(roundType) && (
                       <div className="max-w-2xl mx-auto space-y-6">
                         {/* Warning banner when sparrowRoundId is not configured */}
                         {(!sparrowRoundId || sparrowRoundId.trim() === '') && (
