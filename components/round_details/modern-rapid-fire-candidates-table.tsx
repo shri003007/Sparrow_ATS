@@ -20,7 +20,9 @@ import {
   MapPin,
   ThumbsUp,
   ThumbsDown,
-  Clock3
+  Clock3,
+  Check,
+  X
 } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import type { RoundCandidate, CustomFieldDefinition } from "@/lib/round-candidate-types"
@@ -354,6 +356,23 @@ export function ModernRapidFireCandidatesTable({
                   verticalAlign: "center",
                   fontFamily,
                   textAlign: "left",
+                  minWidth: "120px"
+                }}
+              >
+                Evaluation
+              </th>
+              <th
+                style={{
+                  background: "#f6f7f8",
+                  borderBottom: "none",
+                  height: "48px",
+                  fontSize: "12px",
+                  color: "#6B7280",
+                  padding: "8px 16px",
+                  fontWeight: "500",
+                  verticalAlign: "center",
+                  fontFamily,
+                  textAlign: "left",
                   minWidth: "140px"
                 }}
               >
@@ -499,6 +518,27 @@ export function ModernRapidFireCandidatesTable({
                         ))}
                       </DropdownMenuContent>
                     </DropdownMenu>
+                  </td>
+
+                  {/* Evaluation Status */}
+                  <td style={{ minWidth: "120px", padding: "12px" }}>
+                    <div className="flex items-center">
+                      {candidate.candidate_rounds?.[0]?.is_evaluation ? (
+                        <div className="flex items-center gap-2">
+                          <Check className="w-4 h-4 text-green-600" />
+                          <span className="text-xs text-green-600 font-medium" style={{ fontFamily }}>
+                            Evaluated
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <X className="w-4 h-4 text-gray-400" />
+                          <span className="text-xs text-gray-400" style={{ fontFamily }}>
+                            Pending
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </td>
 
                   {/* Contact */}
