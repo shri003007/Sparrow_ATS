@@ -282,6 +282,11 @@ export function RapidFireRoundContent({
       return
     }
 
+    if (!brandId || brandId.trim() === '') {
+      setBulkEvaluationError('Brand ID not configured. Please ensure the sparrow assessment mapping is properly set up.')
+      return
+    }
+
     const candidatesWithoutEvaluation = roundData.candidates.filter(
       candidate => !candidate.candidate_rounds?.[0]?.is_evaluation
     )
@@ -295,46 +300,96 @@ export function RapidFireRoundContent({
     setBulkEvaluationError(null)
     setBulkEvaluationProgress({ completed: 0, total: candidatesWithoutEvaluation.length })
 
-    try {
-      for (let i = 0; i < candidatesWithoutEvaluation.length; i++) {
-        const candidate = candidatesWithoutEvaluation[i]
-        
-        if (!candidate.candidate_rounds?.[0]?.id) {
-          console.warn(`Skipping candidate ${candidate.email} - missing candidate_round_id`)
-          continue
+    const BATCH_SIZE = 20 // Process 20 candidates in parallel
+    const results = []
+    let completed = 0
+
+    // Split candidates into batches
+    const batches = []
+    for (let i = 0; i < candidatesWithoutEvaluation.length; i += BATCH_SIZE) {
+      batches.push(candidatesWithoutEvaluation.slice(i, i + BATCH_SIZE))
+    }
+
+    console.log(`Processing ${candidatesWithoutEvaluation.length} candidates in ${batches.length} batches of up to ${BATCH_SIZE}`)
+    console.log(`Using brand_id: ${brandId} (from filter_column in sparrow assessment mapping)`)
+
+    // Process each batch in parallel
+    for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+      const batch = batches[batchIndex]
+      
+      try {
+        // Process current batch in parallel
+        const batchPromises = batch.map(async (candidate) => {
+          try {
+            if (!candidate.candidate_rounds?.[0]?.id) {
+              return { 
+                candidate: candidate.id, 
+                success: false, 
+                error: 'Missing candidate_round_id' 
+              }
+            }
+
+            const request: SalesEvaluationRequest = {
+              email: candidate.email,
+              sparrow_assessment_id: sparrowAssessmentId,
+              candidate_round_id: candidate.candidate_rounds[0].id,
+              account_id: 'salesai',
+              brand_id: brandId
+            }
+
+            const result = await evaluateSalesCandidate(request, 'RAPID_FIRE')
+            return { candidate: candidate.id, success: result.success, error: result.error_message }
+          } catch (error) {
+            console.error(`Error evaluating candidate ${candidate.id}:`, error)
+            return { 
+              candidate: candidate.id, 
+              success: false, 
+              error: error instanceof Error ? error.message : 'Unknown error' 
+            }
+          }
+        })
+
+        // Wait for all promises in the batch to complete
+        const batchResults = await Promise.all(batchPromises)
+        results.push(...batchResults)
+
+        // Update progress
+        completed += batch.length
+        setBulkEvaluationProgress({ completed, total: candidatesWithoutEvaluation.length })
+
+        // Add delay between batches to avoid overwhelming the server
+        if (batchIndex < batches.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000)) // 1 second delay between batches
         }
 
-        try {
-          const request: SalesEvaluationRequest = {
-            email: candidate.email,
-            sparrow_assessment_id: sparrowAssessmentId,
-            candidate_round_id: candidate.candidate_rounds[0].id,
-            account_id: 'salesai',
-            brand_id: brandId
-          }
-
-          await evaluateSalesCandidate(request, 'RAPID_FIRE')
-          setBulkEvaluationProgress({ completed: i + 1, total: candidatesWithoutEvaluation.length })
-          
-          // Add delay between requests to avoid overwhelming the API
-          if (i < candidatesWithoutEvaluation.length - 1) {
-            await new Promise(resolve => setTimeout(resolve, 1000))
-          }
-        } catch (candidateError) {
-          console.error(`Error evaluating candidate ${candidate.email}:`, candidateError)
-          // Continue with next candidate instead of stopping
-        }
+      } catch (error) {
+        console.error(`Failed to process batch ${batchIndex + 1}:`, error)
+        // Continue with next batch instead of failing entirely
+        completed += batch.length
+        setBulkEvaluationProgress({ completed, total: candidatesWithoutEvaluation.length })
       }
+    }
 
-      // Refresh data after bulk evaluation
-      if (currentRound?.id) {
+    setIsBulkEvaluating(false)
+    
+    // Show summary
+    const successful = results.filter(r => r.success).length
+    const failed = results.filter(r => !r.success).length
+    
+    if (failed === 0) {
+      setBulkEvaluationError(null)
+    } else {
+      setBulkEvaluationError(`Bulk evaluation completed with ${failed} failures out of ${results.length} candidates`)
+    }
+
+    // Refresh data after bulk evaluation
+    if (currentRound?.id) {
+      try {
         const refreshResponse = await RoundCandidatesApi.getCandidatesByRoundTemplate(currentRound.id)
         setRoundData(refreshResponse)
+      } catch (refreshError) {
+        console.error('Error refreshing data:', refreshError)
       }
-    } catch (error) {
-      setBulkEvaluationError(error instanceof Error ? error.message : 'Bulk evaluation failed')
-    } finally {
-      setIsBulkEvaluating(false)
     }
   }
 

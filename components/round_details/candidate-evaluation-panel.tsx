@@ -17,6 +17,7 @@ import { AssetEvaluationModal } from "./asset-evaluation-modal"
 import { QAPairsSection } from "./qa-pairs-section"
 import { AudioVisualSection } from "./audio-visual-section"
 import { getSparrowAssessmentData, type SparrowAssessmentResponse } from "@/lib/api/sparrow-assessment"
+import { getSparrowAssessmentMapping, type SparrowAssessmentMappingResponse } from "@/lib/api/sparrow-assessment-mapping"
 
 type RoundStatus = 'selected' | 'rejected' | 'action_pending'
 
@@ -106,6 +107,10 @@ export function CandidateEvaluationPanel({
   const [loadingSparrowAssessment, setLoadingSparrowAssessment] = useState<boolean>(false)
   const [fetchedKey, setFetchedKey] = useState<string | null>(null)
   
+  // Sparrow assessment mapping states
+  const [assessmentMapping, setAssessmentMapping] = useState<SparrowAssessmentMappingResponse | null>(null)
+  const [brandId, setBrandId] = useState<string>('surveysparrow')
+  
   // Sales evaluation states
   const [loadingSalesEvaluation, setLoadingSalesEvaluation] = useState<boolean>(false)
   const [salesError, setSalesError] = useState<string | null>(null)
@@ -169,6 +174,38 @@ export function CandidateEvaluationPanel({
     setSparrowAssessmentData(null)
     setFetchedKey(null)
   }, [candidate?.id])
+
+  // Fetch sparrow assessment mapping to get brand_id from filter_column
+  React.useEffect(() => {
+    const fetchAssessmentMapping = async () => {
+      if (!sparrowRoundId || sparrowRoundId.trim() === '') {
+        setAssessmentMapping(null)
+        setBrandId('surveysparrow') // Reset to default
+        return
+      }
+
+      try {
+        const mappingResponse = await getSparrowAssessmentMapping(sparrowRoundId)
+        setAssessmentMapping(mappingResponse)
+        
+        // Extract brand_id from filter_column
+        if (mappingResponse && mappingResponse.mappings && mappingResponse.mappings.length > 0) {
+          const firstMapping = mappingResponse.mappings[0]
+          const extractedBrandId = firstMapping.filter_column || 'surveysparrow'
+          setBrandId(extractedBrandId)
+          console.log(`Candidate panel: Using brand_id: ${extractedBrandId} (from filter_column in sparrow assessment mapping)`)
+        } else {
+          setBrandId('surveysparrow') // Fallback to default
+        }
+      } catch (error) {
+        console.error('Failed to fetch assessment mapping for candidate panel:', error)
+        setAssessmentMapping(null)
+        setBrandId('surveysparrow') // Fallback to default
+      }
+    }
+
+    fetchAssessmentMapping()
+  }, [sparrowRoundId])
 
   // Fetch sparrow assessment data if candidate has sparrow assessment
   React.useEffect(() => {
@@ -862,7 +899,7 @@ export function CandidateEvaluationPanel({
                           </p>
                           
                           <Button 
-                            onClick={() => handleSalesEvaluation(sparrowRoundId || '', 'surveysparrow', true)}
+                            onClick={() => handleSalesEvaluation(sparrowRoundId || '', brandId, true)}
                             disabled={isReEvaluating || !sparrowRoundId || sparrowRoundId.trim() === ''}
                             className="w-full"
                             style={{
@@ -951,66 +988,71 @@ export function CandidateEvaluationPanel({
                   {/* Show existing evaluation only when not re-evaluating */}
                   {!isReEvaluating && (
                   <>
-                  {/* Overall Score Section */}
-                  <div className="w-full max-w-4xl mx-auto">
-                    <div className="bg-white border border-gray-100 rounded-2xl p-6">
-                      <div className="flex items-center justify-center mb-6">
-                        <div className="text-center">
-                          <div className="flex items-center justify-center mb-4">
-                            <div className="relative">
-                              <EvaluationScoreChart 
-                                score={evaluation.overall_percentage_score} 
-                                size="large"
-                              />
-                            </div>
-                          </div>
-                          <h3 className="text-lg font-bold text-gray-900 mb-2">Overall Assessment Score</h3>
-                          <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border ${getScoreBadgeColor(evaluation.overall_percentage_score)}`}>
-                            <Award className="w-4 h-4" />
-                            <span className="font-medium">{getScoreLabel(evaluation.overall_percentage_score)}</span>
-                            <span className="font-bold">{evaluation.overall_percentage_score}%</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Section Scores */}
-                  <div className="w-full max-w-4xl mx-auto">
-                    <div className="bg-white border border-gray-100 rounded-2xl">
-                      <div className="p-6 border-b border-gray-100">
-                        <h3 className="text-lg font-bold text-gray-900">Competency Breakdown</h3>
-                      </div>
-                      <div className="p-6">
-                        <div className="grid grid-cols-2 gap-6">
-                          {evaluation.competency_evaluation?.competency_scores?.map((competency: CompetencyScore) => (
-                            <div key={competency.competency_name} className="bg-gray-50 border border-gray-100 rounded-xl p-4 transition-all hover:shadow-sm">
-                              <div className="flex items-center justify-between mb-3">
-                                <h4 className="font-medium text-gray-900">{competency.competency_name}</h4>
-                                <span className={`font-bold text-sm ${getScoreTextColor(competency.percentage_score)}`}>
-                                  {competency.percentage_score}%
-                                </span>
-                              </div>
-                              <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
-                                <div 
-                                  className="h-2 rounded-full transition-all duration-1000 ease-out"
-                                  style={{ 
-                                    width: `${competency.percentage_score}%`,
-                                    backgroundColor: getScoreColor(competency.percentage_score)
-                                  }}
+                  {/* Overall Score Section - Hidden for sales rounds */}
+                  {!['RAPID_FIRE', 'GAMES_ARENA', 'TALK_ON_A_TOPIC'].includes(roundType) && (
+                    <div className="w-full max-w-4xl mx-auto">
+                      <div className="bg-white border border-gray-100 rounded-2xl p-6">
+                        <div className="flex items-center justify-center mb-6">
+                          <div className="text-center">
+                            <div className="flex items-center justify-center mb-4">
+                              <div className="relative">
+                                <EvaluationScoreChart 
+                                  score={evaluation.overall_percentage_score} 
+                                  size="large"
                                 />
                               </div>
-                              <div className="text-xs text-gray-600">
-                                {competency.questions?.length || 0} criteria evaluated
-                              </div>
                             </div>
-                          ))}
+                            <h3 className="text-lg font-bold text-gray-900 mb-2">Overall Assessment Score</h3>
+                            <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border ${getScoreBadgeColor(evaluation.overall_percentage_score)}`}>
+                              <Award className="w-4 h-4" />
+                              <span className="font-medium">{getScoreLabel(evaluation.overall_percentage_score)}</span>
+                              <span className="font-bold">{evaluation.overall_percentage_score}%</span>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
+                  )}
 
-                  {/* Detailed Evaluation */}
+                  {/* Section Scores - Hidden for sales rounds */}
+                  {!['RAPID_FIRE', 'GAMES_ARENA', 'TALK_ON_A_TOPIC'].includes(roundType) && (
+                    <div className="w-full max-w-4xl mx-auto">
+                      <div className="bg-white border border-gray-100 rounded-2xl">
+                        <div className="p-6 border-b border-gray-100">
+                          <h3 className="text-lg font-bold text-gray-900">Competency Breakdown</h3>
+                        </div>
+                        <div className="p-6">
+                          <div className="grid grid-cols-2 gap-6">
+                            {evaluation.competency_evaluation?.competency_scores?.map((competency: CompetencyScore) => (
+                              <div key={competency.competency_name} className="bg-gray-50 border border-gray-100 rounded-xl p-4 transition-all hover:shadow-sm">
+                                <div className="flex items-center justify-between mb-3">
+                                  <h4 className="font-medium text-gray-900">{competency.competency_name}</h4>
+                                  <span className={`font-bold text-sm ${getScoreTextColor(competency.percentage_score)}`}>
+                                    {competency.percentage_score}%
+                                  </span>
+                                </div>
+                                <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                                  <div 
+                                    className="h-2 rounded-full transition-all duration-1000 ease-out"
+                                    style={{ 
+                                      width: `${competency.percentage_score}%`,
+                                      backgroundColor: getScoreColor(competency.percentage_score)
+                                    }}
+                                  />
+                                </div>
+                                <div className="text-xs text-gray-600">
+                                  {competency.questions?.length || 0} criteria evaluated
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Detailed Evaluation - Show for all rounds, but hide scores for sales rounds */}
+                  {(
                   <div className="w-full max-w-4xl mx-auto">
                     <div className="bg-white border border-gray-100 rounded-2xl">
                       <div className="p-6 border-b border-gray-100">
@@ -1042,17 +1084,24 @@ export function CandidateEvaluationPanel({
                         return (
                           <div className="p-6">
                             <div className="flex items-center gap-4 mb-6">
-                              <div className="flex-shrink-0">
-                                <EvaluationScoreChart 
-                                  score={competency.percentage_score} 
-                                  size="small"
-                                />
-                              </div>
+                              {/* Hide score chart for sales rounds */}
+                              {!['RAPID_FIRE', 'GAMES_ARENA', 'TALK_ON_A_TOPIC'].includes(roundType) && (
+                                <div className="flex-shrink-0">
+                                  <EvaluationScoreChart 
+                                    score={competency.percentage_score} 
+                                    size="small"
+                                  />
+                                </div>
+                              )}
                               <div>
                                 <h4 className="font-bold text-gray-900 text-lg">{competency.competency_name}</h4>
                                 <div className="flex items-center gap-2 mt-1">
                                   <span className={`px-3 py-1 rounded-full text-sm font-medium ${getScoreBadgeColor(competency.percentage_score)}`}>
-                                    {competency.percentage_score}% • {getScoreLabel(competency.percentage_score)}
+                                    {/* Hide percentage for sales rounds, show only text label */}
+                                    {['RAPID_FIRE', 'GAMES_ARENA', 'TALK_ON_A_TOPIC'].includes(roundType) 
+                                      ? getScoreLabel(competency.percentage_score)
+                                      : `${competency.percentage_score}% • ${getScoreLabel(competency.percentage_score)}`
+                                    }
                                   </span>
                                   <span className="text-sm text-gray-500">
                                     {competency.questions?.length || 0} criteria
@@ -1089,6 +1138,7 @@ export function CandidateEvaluationPanel({
                       })()}
                     </div>
                   </div>
+                  )}
 
                   {/* Audio Visual Section - For Sparrow Assessment data */}
                   {(sparrowAssessmentData?.data?.audio_url || sparrowAssessmentData?.data?.images) && (
@@ -1232,8 +1282,8 @@ export function CandidateEvaluationPanel({
                       This candidate has not been evaluated yet for this round.
                     </p>
                     
-                    {/* Evaluation Options for eligible sparrow assessment rounds */}
-                    {['INTERVIEW', 'RAPID_FIRE', 'GAMES_ARENA', 'TALK_ON_A_TOPIC'].includes(roundType) && (
+                    {/* Evaluation Options for INTERVIEW rounds only */}
+                    {roundType === 'INTERVIEW' && (
                       <div className="max-w-2xl mx-auto space-y-6">
                         {/* Warning banner when sparrowRoundId is not configured */}
                         {(!sparrowRoundId || sparrowRoundId.trim() === '') && (
@@ -1383,7 +1433,7 @@ export function CandidateEvaluationPanel({
                               </p>
                               
                               <Button 
-                                onClick={() => handleSalesEvaluation(sparrowRoundId || '', 'surveysparrow')}
+                                onClick={() => handleSalesEvaluation(sparrowRoundId || '', brandId)}
                                 disabled={loadingSalesEvaluation || !sparrowRoundId || sparrowRoundId.trim() === ''}
                                 className="w-full"
                                 style={{

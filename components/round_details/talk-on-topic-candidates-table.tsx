@@ -435,70 +435,12 @@ export function TalkOnTopicCandidatesTable({
                   )}
                 </TableCell>
 
-                {/* Score Column */}
+                {/* Score Column - Hidden for sales rounds */}
                 <TableCell>
                   <div className="flex items-center justify-center">
-                    {candidate.candidate_rounds?.[0]?.evaluations?.[0]?.evaluation_result ? (
-                      (() => {
-                        const evaluation = candidate.candidate_rounds[0].evaluations[0].evaluation_result
-                        const score = evaluation.overall_percentage_score
-                        
-                        if (score >= 0) {
-                          const roundedScore = Math.round(score)
-                          const getScoreConfig = (score: number) => {
-                            if (score >= 80) {
-                              return {
-                                bgColor: '#DCFCE7',
-                                textColor: '#16A34A',
-                                borderColor: '#22C55E20'
-                              }
-                            } else if (score >= 60) {
-                              return {
-                                bgColor: '#FEF3C7',
-                                textColor: '#D97706',
-                                borderColor: '#F59E0B20'
-                              }
-                            } else {
-                              return {
-                                bgColor: '#FEE2E2',
-                                textColor: '#DC2626',
-                                borderColor: '#EF444420'
-                              }
-                            }
-                          }
-                          
-                          const config = getScoreConfig(roundedScore)
-                          return (
-                            <div className="flex items-center gap-2">
-                              <div 
-                                className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold border-2"
-                                style={{ 
-                                  backgroundColor: config.bgColor,
-                                  color: config.textColor,
-                                  borderColor: config.borderColor
-                                }}
-                              >
-                                {roundedScore}
-                              </div>
-                            </div>
-                          )
-                        }
-                        
-                        return (
-                          <div className="flex items-center justify-center">
-                            <span className="text-sm text-gray-500" style={{ fontFamily }}>
-                              N/A
-                            </span>
-                          </div>
-                        )
-                      })()
-                    ) : (
-                      <div className="flex items-center justify-center">
-                        <span className="text-sm text-gray-500" style={{ fontFamily }}>
-                          N/A
-                        </span>
-                      </div>
-                    )}
+                    <span className="text-sm text-gray-400" style={{ fontFamily }}>
+                      -
+                    </span>
                   </div>
                 </TableCell>
 
