@@ -187,7 +187,7 @@ export function CandidateEvaluationPanel({
       try {
         const mappingResponse = await getSparrowAssessmentMapping(sparrowRoundId)
         setAssessmentMapping(mappingResponse)
-        
+
         // Extract brand_id from filter_column
         if (mappingResponse && mappingResponse.mappings && mappingResponse.mappings.length > 0) {
           const firstMapping = mappingResponse.mappings[0]
@@ -198,7 +198,7 @@ export function CandidateEvaluationPanel({
           setBrandId('surveysparrow') // Fallback to default
         }
       } catch (error) {
-        console.error('Failed to fetch assessment mapping for candidate panel:', error)
+        console.warn('Failed to fetch sparrow assessment mapping, using default values:', error)
         setAssessmentMapping(null)
         setBrandId('surveysparrow') // Fallback to default
       }

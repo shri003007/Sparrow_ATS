@@ -9,6 +9,7 @@ import type { RoundCandidateResponse, RoundCandidate } from "@/lib/round-candida
 import { Button } from "@/components/ui/button"
 import { ModernProjectCandidatesTable } from "./modern-project-candidates-table"
 import { CandidateEvaluationPanel } from "./candidate-evaluation-panel"
+import { CompetencyMetricsModal } from "./competency-metrics-modal"
 
 type RoundStatus = 'selected' | 'rejected' | 'action_pending'
 
@@ -55,7 +56,10 @@ export function ProjectRoundContent({
   const [isProgressingCandidates, setIsProgressingCandidates] = useState(false)
   const [originalStatusById, setOriginalStatusById] = useState<Record<string, RoundStatus>>({})
   const [currentStatusById, setCurrentStatusById] = useState<Record<string, RoundStatus>>({})
-  
+
+  // Metrics modal state
+  const [showMetricsModal, setShowMetricsModal] = useState(false)
+
   // Re-evaluation states for all candidates
   const [candidateReEvaluationStates, setCandidateReEvaluationStates] = useState<Record<string, {
     isReEvaluating: boolean
@@ -322,6 +326,19 @@ export function ProjectRoundContent({
                   </div>
                 )}
 
+                {/* Radar Chart Button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowMetricsModal(true)}
+                  className="flex items-center gap-2"
+                  disabled={!roundData?.candidates?.some(c => c.candidate_rounds?.[0]?.is_evaluation)}
+                  style={{ fontFamily }}
+                >
+                  <Users className="w-4 h-4" />
+                  Radar Chart
+                </Button>
+
                 {/* Next Round Button */}
                 {nextRound && (
                   <div className="flex flex-col items-end gap-2">
@@ -382,6 +399,14 @@ export function ProjectRoundContent({
             />
           </div>
         </div>
+
+        {/* Competency Metrics Modal */}
+        <CompetencyMetricsModal
+          isOpen={showMetricsModal}
+          onClose={() => setShowMetricsModal(false)}
+          candidates={roundData?.candidates || []}
+          roundInfo={roundData?.template_info}
+        />
       </div>
 
     </div>

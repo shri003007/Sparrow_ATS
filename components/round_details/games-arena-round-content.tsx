@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { evaluateSalesCandidate, type SalesEvaluationRequest } from "@/lib/api/evaluation"
 import { getSparrowAssessmentMapping, type SparrowAssessmentMappingResponse } from "@/lib/api/sparrow-assessment-mapping"
+import { CompetencyMetricsModal } from "./competency-metrics-modal"
 import { useMultiJobContextSafe } from "@/components/all_views/multi-job-context"
 
 interface GamesArenaRoundContentProps {
@@ -68,6 +69,9 @@ export function GamesArenaRoundContent({
     reEvaluationError: string | null
     showReEvaluationOptions: boolean
   }>>({})
+
+  // Metrics modal state
+  const [showMetricsModal, setShowMetricsModal] = useState(false)
 
   // Ref to track if data is currently being fetched to prevent duplicate calls
   const isLoadingRef = useRef(false)
@@ -215,7 +219,7 @@ export function GamesArenaRoundContent({
         // Handle assessment mapping response
         if (mappingResponse) {
           setAssessmentMapping(mappingResponse)
-          
+
           // Auto-populate settings if mapping exists
           if (mappingResponse.mappings && mappingResponse.mappings.length > 0) {
             const firstMapping = mappingResponse.mappings[0]
@@ -224,6 +228,12 @@ export function GamesArenaRoundContent({
             setTempAssessmentId(firstMapping.sparrow_assessment_id)
             setTempBrandId(firstMapping.filter_column || 'surveysparrow')
           }
+        } else {
+          // If mapping fetch failed, set default values
+          console.warn('Sparrow assessment mapping not available, using default values')
+          setAssessmentMapping(null)
+          setBrandId('surveysparrow')
+          setTempBrandId('surveysparrow')
         }
         // Initialize status maps from API response
         const initialOriginal: Record<string, RoundStatus> = {}
@@ -588,7 +598,18 @@ export function GamesArenaRoundContent({
                 Pending
               </div>
             </div>
-            
+     
+            {/* Radar Chart Button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowMetricsModal(true)}
+              className="flex items-center gap-2"
+              disabled={!roundData?.candidates?.some(c => c.candidate_rounds?.[0]?.is_evaluation)}
+            >
+              <Users className="w-4 h-4" />
+              Radar Chart
+            </Button>
             {/* Settings Button - Hide in multi-job mode */}
             {!isMultiJobMode && (
               <Button
@@ -605,6 +626,7 @@ export function GamesArenaRoundContent({
                 Settings
               </Button>
             )}
+
           </div>
         </div>
 
@@ -705,6 +727,14 @@ export function GamesArenaRoundContent({
               }}
         onCancel={() => setShowSettingsModal(false)}
         hasValidConfiguration={() => tempAssessmentId.trim() !== ''}
+      />
+
+      {/* Competency Metrics Modal */}
+      <CompetencyMetricsModal
+        isOpen={showMetricsModal}
+        onClose={() => setShowMetricsModal(false)}
+        candidates={roundData?.candidates || []}
+        roundInfo={roundData?.template_info}
       />
     </div>
   )

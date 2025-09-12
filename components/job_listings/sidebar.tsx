@@ -45,6 +45,7 @@ interface AppSidebarProps {
   onJobsLoaded?: () => void;
   onCreateAllViews?: () => void; // Simplified - just trigger creation page
   appMode?: string; // Track the current app mode to prevent auto-selection
+
 }
 
 export function AppSidebar({

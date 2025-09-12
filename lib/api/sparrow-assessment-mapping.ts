@@ -25,7 +25,15 @@ export async function getSparrowAssessmentMapping(
   signal?: AbortSignal
 ): Promise<SparrowAssessmentMappingResponse> {
   try {
-    const response = await fetch(`${API_CONFIG.CANDIDATES_BASE_URL}/sparrow-assessment-mapping/job-round-template/${jobRoundTemplateId}`, {
+    // Check if API URL is configured
+    if (!API_CONFIG.CANDIDATES_BASE_URL) {
+      throw new Error('CANDIDATES_BASE_URL is not configured in environment variables')
+    }
+
+    const url = `${API_CONFIG.CANDIDATES_BASE_URL}/sparrow-assessment-mapping/job-round-template/${jobRoundTemplateId}`
+    console.log('Fetching sparrow assessment mapping from:', url)
+
+    const response = await fetch(url, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -34,7 +42,8 @@ export async function getSparrowAssessmentMapping(
     })
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch sparrow assessment mapping: ${response.statusText}`)
+      const errorText = await response.text().catch(() => 'Unknown error')
+      throw new Error(`Failed to fetch sparrow assessment mapping: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ''}`)
     }
 
     const data = await response.json()

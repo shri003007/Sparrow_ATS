@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { Loader2, AlertCircle, Users, ArrowRight } from "lucide-react"
 import { ModernScreeningCandidatesTable } from "./modern-screening-candidates-table"
+import { CompetencyMetricsModal } from "./competency-metrics-modal"
 import { RoundCandidatesApi } from "@/lib/api/round-candidates"
 import { CandidateRoundsApi, JobRoundTemplatesApi } from "@/lib/api/rounds"
 import type { JobRoundTemplate } from "@/lib/round-types"
@@ -34,6 +35,9 @@ export function ScreeningRoundContent({
   const [originalStatusById, setOriginalStatusById] = useState<Record<string, RoundStatus>>({})
   const [currentStatusById, setCurrentStatusById] = useState<Record<string, RoundStatus>>({})
   const [pendingChanges, setPendingChanges] = useState<Record<string, RoundStatus>>({})
+
+  // Metrics modal state
+  const [showMetricsModal, setShowMetricsModal] = useState(false)
 
   // Ref for request cancellation
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -298,6 +302,19 @@ export function ScreeningRoundContent({
                   </div>
                 )}
 
+                {/* Radar Chart Button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowMetricsModal(true)}
+                  className="flex items-center gap-2"
+                  disabled={!roundData?.candidates?.some(c => c.candidate_rounds?.[0]?.is_evaluation)}
+                  style={{ fontFamily }}
+                >
+                  <Users className="w-4 h-4" />
+                  Radar Chart
+                </Button>
+
                 {/* Next Round Button */}
                 {hasNextRound && (
                   <div className="flex flex-col items-end gap-2">
@@ -358,6 +375,14 @@ export function ScreeningRoundContent({
             />
           </div>
         </div>
+
+        {/* Competency Metrics Modal */}
+        <CompetencyMetricsModal
+          isOpen={showMetricsModal}
+          onClose={() => setShowMetricsModal(false)}
+          candidates={roundData?.candidates || []}
+          roundInfo={roundData?.template_info}
+        />
       </div>
     </div>
   )

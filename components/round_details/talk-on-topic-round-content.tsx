@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import { Loader2, AlertCircle, Users, ArrowRight, Settings } from "lucide-react"
 import { ModernTalkOnTopicCandidatesTable } from "./modern-talk-on-topic-candidates-table"
 import { RoundSettingsModal } from "./round-settings-modal"
+import { CompetencyMetricsModal } from "./competency-metrics-modal"
 import { RoundCandidatesApi } from "@/lib/api/round-candidates"
 import { CandidateRoundsApi, JobRoundTemplatesApi } from "@/lib/api/rounds"
 import type { JobRoundTemplate } from "@/lib/round-types"
@@ -61,6 +62,9 @@ export function TalkOnTopicRoundContent({
   const [selectedBulkStatus, setSelectedBulkStatus] = useState<RoundStatus | ''>('')
   const [isBulkStatusUpdate, setIsBulkStatusUpdate] = useState(false)
   const [bulkStatusError, setBulkStatusError] = useState<string | null>(null)
+
+  // Metrics modal state
+  const [showMetricsModal, setShowMetricsModal] = useState(false)
   
   // Re-evaluation states for all candidates
   const [candidateReEvaluationStates, setCandidateReEvaluationStates] = useState<Record<string, {
@@ -219,7 +223,7 @@ export function TalkOnTopicRoundContent({
         // Handle assessment mapping response
         if (mappingResponse) {
           setAssessmentMapping(mappingResponse)
-          
+
           // Auto-populate settings if mapping exists
           if (mappingResponse.mappings && mappingResponse.mappings.length > 0) {
             const firstMapping = mappingResponse.mappings[0]
@@ -228,6 +232,12 @@ export function TalkOnTopicRoundContent({
             setTempAssessmentId(firstMapping.sparrow_assessment_id)
             setTempBrandId(firstMapping.filter_column || 'surveysparrow')
           }
+        } else {
+          // If mapping fetch failed, set default values
+          console.warn('Sparrow assessment mapping not available, using default values')
+          setAssessmentMapping(null)
+          setBrandId('surveysparrow')
+          setTempBrandId('surveysparrow')
         }
         // Initialize status maps from API response
         const initialOriginal: Record<string, RoundStatus> = {}
@@ -593,6 +603,19 @@ export function TalkOnTopicRoundContent({
               </div>
             </div>
             
+
+            {/* Radar Chart Button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowMetricsModal(true)}
+              className="flex items-center gap-2"
+              disabled={!roundData?.candidates?.some(c => c.candidate_rounds?.[0]?.is_evaluation)}
+            >
+              <Users className="w-4 h-4" />
+              Radar Chart
+            </Button>
+        
             {/* Settings Button - Hide in multi-job mode */}
             {!isMultiJobMode && (
               <Button
@@ -609,6 +632,7 @@ export function TalkOnTopicRoundContent({
                 Settings
               </Button>
             )}
+
           </div>
         </div>
 
@@ -709,6 +733,14 @@ export function TalkOnTopicRoundContent({
         }}
         onCancel={() => setShowSettingsModal(false)}
         hasValidConfiguration={() => tempAssessmentId.trim() !== ''}
+      />
+
+      {/* Competency Metrics Modal */}
+      <CompetencyMetricsModal
+        isOpen={showMetricsModal}
+        onClose={() => setShowMetricsModal(false)}
+        candidates={roundData?.candidates || []}
+        roundInfo={roundData?.template_info}
       />
     </div>
   )

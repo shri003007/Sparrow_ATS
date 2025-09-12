@@ -20,7 +20,9 @@ import { Mail, Phone, MapPin, Calendar, Clock, ChevronDown } from "lucide-react"
 import { CandidateEvaluationPanel } from "./candidate-evaluation-panel"
 import { ModernInterviewCandidatesTable } from "./modern-interview-candidates-table"
 import { RoundSettingsModal } from "./round-settings-modal"
+import { CompetencyMetricsModal } from "./competency-metrics-modal"
 import { useMultiJobContextSafe } from "@/components/all_views/multi-job-context"
+
 
 type RoundStatus = 'selected' | 'rejected' | 'action_pending'
 
@@ -143,6 +145,9 @@ export function InterviewRoundContent({
   const [selectedBulkStatus, setSelectedBulkStatus] = useState<RoundStatus | ''>('')
   const [isBulkStatusUpdate, setIsBulkStatusUpdate] = useState(false)
   const [bulkStatusError, setBulkStatusError] = useState<string | null>(null)
+
+  // Metrics modal state
+  const [showMetricsModal, setShowMetricsModal] = useState(false)
 
   // Local storage key for round ID settings - using specific round template ID for uniqueness
   const getRoundIdStorageKey = () => {
@@ -787,6 +792,19 @@ export function InterviewRoundContent({
                   </div>
                 )}
 
+                {/* Radar Chart Button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowMetricsModal(true)}
+                  className="flex items-center gap-2"
+                  disabled={!roundData?.candidates?.some(c => c.candidate_rounds?.[0]?.is_evaluation)}
+                  style={{ fontFamily }}
+                >
+                  <Users className="w-4 h-4" />
+                  Radar Chart
+                </Button>
+        
                 {/* Sparrow Interviewer Settings Button (for INTERVIEW rounds only) - Hide in multi-job mode */}
                 {!isMultiJobMode && (
                   <Button
@@ -800,6 +818,7 @@ export function InterviewRoundContent({
                     Settings
                   </Button>
                 )}
+
 
                 {/* Next Round Button */}
                 {hasNextRound && (
@@ -904,6 +923,13 @@ export function InterviewRoundContent({
         hasValidConfiguration={() => Boolean(hasAssessmentId())}
       />
 
+      {/* Competency Metrics Modal */}
+      <CompetencyMetricsModal
+        isOpen={showMetricsModal}
+        onClose={() => setShowMetricsModal(false)}
+        candidates={roundData?.candidates || []}
+        roundInfo={roundData?.template_info}
+      />
     </div>
   )
 }
