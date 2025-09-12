@@ -25,6 +25,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import type { RoundCandidate, CustomFieldDefinition } from "@/lib/round-candidate-types"
 import { CandidateEvaluationPanel } from "./candidate-evaluation-panel"
+import { useMultiJobContextSafe } from "@/components/all_views/multi-job-context"
 
 type RoundStatus = 'selected' | 'rejected' | 'action_pending'
 
@@ -88,6 +89,7 @@ export function ModernInterviewCandidatesTable({
   onReEvaluationStateChange = () => {}
 }: ModernInterviewCandidatesTableProps) {
   const fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+  const { isMultiJobMode } = useMultiJobContextSafe()
   
   const [localCandidates, setLocalCandidates] = useState<RoundCandidate[]>(candidates)
   const [selectedCandidate, setSelectedCandidate] = useState<RoundCandidate | null>(null)
@@ -244,7 +246,7 @@ export function ModernInterviewCandidatesTable({
 
   return (
     <>
-      <div style={{ height: `calc(100vh - 262px)`, overflow: "auto" }}>
+      <div style={{ height: `calc(100vh - 262px)`, overflow: "auto", maxHeight: "600px" }}>
         <table 
           style={{ 
             position: "relative",
@@ -328,6 +330,30 @@ export function ModernInterviewCandidatesTable({
                   </Button>
                 </div>
               </th>
+              
+              {/* Job Column - Only show in multi-job mode */}
+              {isMultiJobMode && (
+                <th
+                  style={{
+                    background: "#f6f7f8",
+                    borderBottom: "none",
+                    height: "48px",
+                    fontSize: "12px",
+                    color: "#6B7280",
+                    padding: "8px 16px",
+                    fontWeight: "500",
+                    verticalAlign: "center",
+                    fontFamily,
+                    textAlign: "left",
+                    minWidth: "200px"
+                  }}
+                >
+                  <div className="flex items-center gap-2">
+                    Job
+                  </div>
+                </th>
+              )}
+              
               <th
                 style={{
                   background: "#f6f7f8",
@@ -491,6 +517,18 @@ export function ModernInterviewCandidatesTable({
                       {truncateText(candidate.email, 25)}
                     </div>
                   </td>
+
+                  {/* Job Column - Only show in multi-job mode */}
+                  {isMultiJobMode && (
+                    <td style={{ minWidth: "200px", padding: "12px" }}>
+                      <div 
+                        className="text-sm font-medium text-gray-900"
+                        style={{ fontFamily }}
+                      >
+                        {(candidate as any).jobTitle || 'Unknown Job'}
+                      </div>
+                    </td>
+                  )}
 
                   {/* Status */}
                   <td style={{ minWidth: "180px", padding: "12px" }}>

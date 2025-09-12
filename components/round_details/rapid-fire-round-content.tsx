@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { evaluateSalesCandidate, type SalesEvaluationRequest } from "@/lib/api/evaluation"
 import { getSparrowAssessmentMapping, type SparrowAssessmentMappingResponse } from "@/lib/api/sparrow-assessment-mapping"
+import { useMultiJobContextSafe } from "@/components/all_views/multi-job-context"
 
 interface RapidFireRoundContentProps {
   currentRound: JobRoundTemplate | null
@@ -32,6 +33,7 @@ export function RapidFireRoundContent({
   createdBy
 }: RapidFireRoundContentProps) {
   const fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+  const { selectedJobs, isMultiJobMode } = useMultiJobContextSafe()
   
   const [roundData, setRoundData] = useState<RoundCandidateResponse | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -66,6 +68,70 @@ export function RapidFireRoundContent({
     reEvaluationError: string | null
     showReEvaluationOptions: boolean
   }>>({})
+
+  // Multi-job data fetching function
+  const fetchMultiJobRoundData = async (roundType: string, roundName: string, abortSignal: AbortSignal) => {
+    if (!isMultiJobMode || selectedJobs.length === 0) {
+      return null
+    }
+
+    const allCandidates: any[] = []
+    let templateInfo = null
+    let customFieldDefinitions: any[] = []
+
+    for (const job of selectedJobs) {
+      try {
+        // Get round templates for this job
+        const templatesResponse = await JobRoundTemplatesApi.getJobRoundTemplates(job.id)
+        const matchingRounds = templatesResponse.job_round_templates?.filter(
+          round => round.round_type === roundType && round.round_name === roundName
+        ) || []
+
+        // Fetch candidates for each matching round
+        for (const round of matchingRounds) {
+          try {
+            const candidatesResponse = await RoundCandidatesApi.getCandidatesByRoundTemplate(round.id, abortSignal)
+            
+            if (candidatesResponse.candidates) {
+              // Add job context to each candidate
+              const candidatesWithJobInfo = candidatesResponse.candidates.map(candidate => ({
+                ...candidate,
+                jobTitle: job.posting_title,
+                jobId: job.id
+              }))
+              allCandidates.push(...candidatesWithJobInfo)
+            }
+
+            // Use the first round's template info and custom fields
+            if (!templateInfo && candidatesResponse.template_info) {
+              templateInfo = candidatesResponse.template_info
+            }
+            if (customFieldDefinitions.length === 0 && candidatesResponse.custom_field_definitions) {
+              customFieldDefinitions = candidatesResponse.custom_field_definitions
+            }
+          } catch (error) {
+            if ((error as any)?.name !== 'AbortError') {
+              console.error(`Failed to fetch candidates for round ${round.id}:`, error)
+            }
+          }
+        }
+      } catch (error) {
+        if ((error as any)?.name !== 'AbortError') {
+          console.error(`Failed to fetch round templates for job ${job.posting_title}:`, error)
+        }
+      }
+    }
+
+    return {
+      candidates: allCandidates,
+      template_info: templateInfo,
+      custom_field_definitions: customFieldDefinitions,
+      candidate_count: allCandidates.length,
+      job_round_template_id: templateInfo?.round_id || '',
+      custom_fields_included: true,
+      evaluations_included: true
+    }
+  }
 
   // Ref to track if data is currently being fetched to prevent duplicate calls
   const isLoadingRef = useRef(false)
@@ -109,17 +175,39 @@ export function RapidFireRoundContent({
       setError(null)
 
       try {
-        // Fetch both round data and assessment mapping in parallel
-        const [roundResponse, mappingResponse] = await Promise.all([
-          RoundCandidatesApi.getCandidatesByRoundTemplate(currentRound.id, abortController.signal),
-          getSparrowAssessmentMapping(currentRound.id, abortController.signal).catch(error => {
-            // Don't log abort errors as they're expected during navigation
-            if (error.name !== 'AbortError') {
-              console.error('Failed to fetch assessment mapping:', error)
-            }
-            return null // Return null on error, don't fail the entire request
-          })
-        ])
+        let roundResponse
+        let mappingResponse = null
+
+        if (isMultiJobMode) {
+          // Multi-job mode: fetch candidates from all jobs with the same round type
+          const [multiJobRoundData, mapping] = await Promise.all([
+            fetchMultiJobRoundData(currentRound.round_type, currentRound.round_name, abortController.signal),
+            getSparrowAssessmentMapping(currentRound.id, abortController.signal).catch(error => {
+              if (error.name !== 'AbortError') {
+                console.error('Failed to fetch assessment mapping:', error)
+              }
+              return null
+            })
+          ])
+          
+          roundResponse = multiJobRoundData
+          mappingResponse = mapping
+        } else {
+          // Single-job mode: fetch data normally
+          const [singleRoundResponse, singleMappingResponse] = await Promise.all([
+            RoundCandidatesApi.getCandidatesByRoundTemplate(currentRound.id, abortController.signal),
+            getSparrowAssessmentMapping(currentRound.id, abortController.signal).catch(error => {
+              // Don't log abort errors as they're expected during navigation
+              if (error.name !== 'AbortError') {
+                console.error('Failed to fetch assessment mapping:', error)
+              }
+              return null // Return null on error, don't fail the entire request
+            })
+          ])
+          
+          roundResponse = singleRoundResponse
+          mappingResponse = singleMappingResponse
+        }
         
         // Check if request was aborted before updating state
         if (abortController.signal.aborted) {
@@ -505,20 +593,22 @@ export function RapidFireRoundContent({
               </div>
             </div>
             
-            {/* Settings Button */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setTempAssessmentId(sparrowAssessmentId)
-                setTempBrandId(brandId)
-                setShowSettingsModal(true)
-              }}
-              className="flex items-center gap-2"
-            >
-              <Settings className="w-4 h-4" />
-              Settings
-            </Button>
+            {/* Settings Button - Hide in multi-job mode */}
+            {!isMultiJobMode && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setTempAssessmentId(sparrowAssessmentId)
+                  setTempBrandId(brandId)
+                  setShowSettingsModal(true)
+                }}
+                className="flex items-center gap-2"
+              >
+                <Settings className="w-4 h-4" />
+                Settings
+              </Button>
+            )}
           </div>
         </div>
 

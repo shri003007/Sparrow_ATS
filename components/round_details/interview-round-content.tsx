@@ -20,6 +20,7 @@ import { Mail, Phone, MapPin, Calendar, Clock, ChevronDown } from "lucide-react"
 import { CandidateEvaluationPanel } from "./candidate-evaluation-panel"
 import { ModernInterviewCandidatesTable } from "./modern-interview-candidates-table"
 import { RoundSettingsModal } from "./round-settings-modal"
+import { useMultiJobContextSafe } from "@/components/all_views/multi-job-context"
 
 type RoundStatus = 'selected' | 'rejected' | 'action_pending'
 
@@ -108,6 +109,7 @@ export function InterviewRoundContent({
   createdBy
 }: InterviewRoundContentProps) {
   const fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+  const { isMultiJobMode } = useMultiJobContextSafe()
   
   const [roundData, setRoundData] = useState<RoundCandidateResponse | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -785,17 +787,19 @@ export function InterviewRoundContent({
                   </div>
                 )}
 
-                {/* Sparrow Interviewer Settings Button (for INTERVIEW rounds only) */}
-                <Button
-                  onClick={handleOpenRoundIdModal}
-                  variant="outline"
-                  size="sm"
-                  className="flex items-center gap-2"
-                  style={{ fontFamily }}
-                >
-                  <Settings className="w-4 h-4" />
-                  Settings
-                </Button>
+                {/* Sparrow Interviewer Settings Button (for INTERVIEW rounds only) - Hide in multi-job mode */}
+                {!isMultiJobMode && (
+                  <Button
+                    onClick={handleOpenRoundIdModal}
+                    variant="outline"
+                    size="sm"
+                    className="flex items-center gap-2"
+                    style={{ fontFamily }}
+                  >
+                    <Settings className="w-4 h-4" />
+                    Settings
+                  </Button>
+                )}
 
                 {/* Next Round Button */}
                 {hasNextRound && (
