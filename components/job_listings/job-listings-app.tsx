@@ -41,10 +41,14 @@ export function JobListingsApp({ onCreateJob }: JobListingsAppProps) {
       if (savedJob) {
         const jobData = JSON.parse(savedJob)
         setSelectedJob(jobData)
-      }
 
-      if (savedView && (savedView === 'candidates' || savedView === 'rounds')) {
-        setCurrentView(savedView)
+        // Always restore the view if we have a saved job
+        if (savedView && (savedView === 'candidates' || savedView === 'rounds')) {
+          setCurrentView(savedView)
+        } else {
+          // Default to candidates if no saved view
+          setCurrentView('candidates')
+        }
       }
     } catch (error) {
       console.warn('Failed to load saved job selection from localStorage:', error)
@@ -80,25 +84,31 @@ export function JobListingsApp({ onCreateJob }: JobListingsAppProps) {
         setSelectedViewId(null) // Clear selected view when selecting a job
         setIsLoadingViewJobs(false) // Clear view loading state
         setSelectedJob(job)
-        // Set view based on has_rounds_started flag
-        setCurrentView(job.has_rounds_started ? 'rounds' : 'candidates')
+        // Only set view if we're actually switching jobs (not restoring)
+        // If we already have this job selected, preserve the current view
+        if (selectedJob?.id !== job.id) {
+          setCurrentView(job.has_rounds_started ? 'rounds' : 'candidates')
+        }
       })
     } else {
       setAppMode('single-job')
       setSelectedViewId(null) // Clear selected view when selecting a job
       setIsLoadingViewJobs(false) // Clear view loading state
       setSelectedJob(job)
-      // Set view based on has_rounds_started flag
-      setCurrentView(job.has_rounds_started ? 'rounds' : 'candidates')
+      // Only set view if we're actually switching jobs (not restoring)
+      // If we already have this job selected, preserve the current view
+      if (selectedJob?.id !== job.id) {
+        setCurrentView(job.has_rounds_started ? 'rounds' : 'candidates')
+      }
     }
   }, [])
 
   const handleJobsLoaded = useCallback((jobs: JobOpeningListItem[]) => {
     setIsLoadingJobs(false)
-    setJobsList(jobs)
+    setJobsList(jobs || [])
 
     // Check if the saved job is still in the list
-    if (selectedJob) {
+    if (selectedJob && jobs && Array.isArray(jobs)) {
       const jobStillExists = jobs.some(job => job.id === selectedJob.id)
       if (!jobStillExists) {
         // Saved job no longer exists, clear it
@@ -108,15 +118,22 @@ export function JobListingsApp({ onCreateJob }: JobListingsAppProps) {
       }
     } else {
       // If no job is selected but we have jobs, try to restore from localStorage
-      // But only if we're not in all-views mode (i.e., not viewing a saved view)
-      if (appMode !== 'all-views') {
-        try {
-          const savedJob = localStorage.getItem(SELECTED_JOB_KEY)
-          if (savedJob) {
-            const jobData = JSON.parse(savedJob)
-            const jobStillExists = jobs.some(job => job.id === jobData.id)
-            if (jobStillExists) {
-              setSelectedJob(jobData)
+
+      try {
+        const savedJob = localStorage.getItem(SELECTED_JOB_KEY)
+        const savedView = localStorage.getItem(CURRENT_VIEW_KEY)
+
+        if (savedJob && jobs && Array.isArray(jobs)) {
+          const jobData = JSON.parse(savedJob)
+          const jobStillExists = jobs.some(job => job.id === jobData.id)
+          if (jobStillExists) {
+            setSelectedJob(jobData)
+
+            // Use saved view if available, otherwise use job's rounds status
+            if (savedView && (savedView === 'candidates' || savedView === 'rounds')) {
+              setCurrentView(savedView)
+            } else {
+
               setCurrentView(jobData.has_rounds_started ? 'rounds' : 'candidates')
             }
           }

@@ -154,10 +154,10 @@ export function RoundSettingsModal({
   const showSecondaryId = roundType === 'RAPID_FIRE' || roundType === 'TALK_ON_A_TOPIC' || roundType === 'GAMES_ARENA'
 
   return (
-    <Dialog 
-      open={isOpen} 
+    <Dialog
+      open={isOpen}
       onOpenChange={(open) => {
-        if (!isBulkEvaluating && !isBulkStatusUpdate) {
+        if (!isBulkStatusUpdate) {
           if (!open) {
             onClose()
           }
@@ -187,7 +187,7 @@ export function RoundSettingsModal({
                   onChange={(e) => setPrimaryId(e.target.value)}
                   placeholder={getPrimaryIdPlaceholder()}
                   className="mt-1"
-                  disabled={isBulkEvaluating || isBulkStatusUpdate}
+                  disabled={isBulkStatusUpdate}
                 />
                 <p className="text-xs text-gray-500 mt-1" style={{ fontFamily }}>
                   {getPrimaryIdDescription()}
@@ -197,7 +197,7 @@ export function RoundSettingsModal({
               {showSecondaryId && secondaryId !== undefined && setSecondaryId && (
                 <div>
                   <Label htmlFor="brand-id" style={{ fontFamily }}>Brand ID</Label>
-                  <Select value={secondaryId} onValueChange={setSecondaryId}>
+                  <Select value={secondaryId} onValueChange={setSecondaryId} disabled={isBulkStatusUpdate}>
                     <SelectTrigger className="mt-1">
                       <SelectValue placeholder="Select brand" />
                     </SelectTrigger>
@@ -327,17 +327,17 @@ export function RoundSettingsModal({
         </div>
         
         <DialogFooter>
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             onClick={onCancel}
-            disabled={isBulkEvaluating || isBulkStatusUpdate}
+            disabled={isBulkStatusUpdate}
             style={{ fontFamily }}
           >
             Cancel
           </Button>
-          <Button 
+          <Button
             onClick={onSave}
-            disabled={isBulkEvaluating || isBulkStatusUpdate}
+            disabled={isBulkStatusUpdate}
             style={{
               backgroundColor: "#10B981",
               color: "#FFFFFF",

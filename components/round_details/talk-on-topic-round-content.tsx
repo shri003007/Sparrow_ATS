@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { evaluateSalesCandidate, type SalesEvaluationRequest } from "@/lib/api/evaluation"
 import { getSparrowAssessmentMapping, type SparrowAssessmentMappingResponse } from "@/lib/api/sparrow-assessment-mapping"
 import { useMultiJobContextSafe } from "@/components/all_views/multi-job-context"
+import { useToast } from "@/hooks/use-toast"
 
 interface TalkOnTopicRoundContentProps {
   currentRound: JobRoundTemplate | null
@@ -35,6 +36,10 @@ export function TalkOnTopicRoundContent({
 }: TalkOnTopicRoundContentProps) {
   const fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
   const { selectedJobs, isMultiJobMode } = useMultiJobContextSafe()
+  const { toast } = useToast()
+
+  // Toast notification tracking for bulk evaluation
+  const bulkEvaluationToastRef = useRef<{ id: string; update: (props: any) => void } | null>(null)
   
   const [roundData, setRoundData] = useState<RoundCandidateResponse | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -217,9 +222,12 @@ export function TalkOnTopicRoundContent({
         if (abortController.signal.aborted) {
           return
         }
-        
-        setRoundData(roundResponse)
-        
+
+        // Only set round data if we have a valid response
+        if (roundResponse) {
+          setRoundData(roundResponse)
+        }
+
         // Handle assessment mapping response
         if (mappingResponse) {
           setAssessmentMapping(mappingResponse)
@@ -242,12 +250,14 @@ export function TalkOnTopicRoundContent({
         // Initialize status maps from API response
         const initialOriginal: Record<string, RoundStatus> = {}
         const initialCurrent: Record<string, RoundStatus> = {}
-        
-        roundResponse.candidates.forEach(candidate => {
-          const status = candidate.round_status as RoundStatus
-          initialOriginal[candidate.id] = status
-          initialCurrent[candidate.id] = status
-        })
+
+        if (roundResponse?.candidates) {
+          roundResponse.candidates.forEach(candidate => {
+            const status = candidate.round_status as RoundStatus
+            initialOriginal[candidate.id] = status
+            initialCurrent[candidate.id] = status
+          })
+        }
         
         setOriginalStatusById(initialOriginal)
         setCurrentStatusById(initialCurrent)
@@ -398,6 +408,14 @@ export function TalkOnTopicRoundContent({
     setBulkEvaluationError(null)
     setBulkEvaluationProgress({ completed: 0, total: candidatesWithoutEvaluation.length })
 
+    // Show initial toast notification
+    const initialToast = toast({
+      title: "Bulk Evaluation Started",
+      description: `Evaluating ${candidatesWithoutEvaluation.length} candidates in background...`,
+      duration: 8000, // 8 seconds
+    })
+    bulkEvaluationToastRef.current = initialToast
+
     const BATCH_SIZE = 20 // Process 20 candidates in parallel
     const results = []
     let completed = 0
@@ -455,6 +473,15 @@ export function TalkOnTopicRoundContent({
         completed += batch.length
         setBulkEvaluationProgress({ completed, total: candidatesWithoutEvaluation.length })
 
+        // Update toast with progress
+        if (bulkEvaluationToastRef.current) {
+          bulkEvaluationToastRef.current.update({
+            title: "Bulk Evaluation in Progress",
+            description: `Evaluated ${completed} of ${candidatesWithoutEvaluation.length} candidates...`,
+            duration: 6000, // 6 seconds
+          })
+        }
+
         // Add delay between batches to avoid overwhelming the server
         if (batchIndex < batches.length - 1) {
           await new Promise(resolve => setTimeout(resolve, 1000)) // 1 second delay between batches
@@ -469,11 +496,37 @@ export function TalkOnTopicRoundContent({
     }
 
     setIsBulkEvaluating(false)
-    
+
     // Show summary
     const successful = results.filter(r => r.success).length
     const failed = results.filter(r => !r.success).length
-    
+
+    // Show final toast notification with detailed results
+    if (bulkEvaluationToastRef.current) {
+      const totalProcessed = results.length
+      const errorMessages = results
+        .filter(r => !r.success && r.error)
+        .map(r => r.error)
+        .slice(0, 3) // Show only first 3 errors to keep toast readable
+
+      let description = `Processed ${totalProcessed} candidates: ${successful} successful`
+      if (failed > 0) {
+        description += `, ${failed} failed`
+        if (errorMessages.length > 0) {
+          description += `\nErrors: ${errorMessages.join('; ')}`
+          if (results.filter(r => !r.success && r.error).length > 3) {
+            description += ` (+${results.filter(r => !r.success && r.error).length - 3} more errors)`
+          }
+        }
+      }
+
+      bulkEvaluationToastRef.current.update({
+        title: failed === 0 ? "Bulk Evaluation Complete" : "Bulk Evaluation Finished with Issues",
+        description: description,
+        duration: failed === 0 ? 4000 : 8000, // 4 seconds for success, 8 seconds for errors
+      })
+    }
+
     if (failed === 0) {
       setBulkEvaluationError(null)
     } else {

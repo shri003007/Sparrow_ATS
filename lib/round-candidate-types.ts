@@ -9,7 +9,7 @@ export interface RoundCandidateResponse {
     round_id: string
     evaluation_criteria: string | null
     competencies: any | null
-  }
+  } | null
   candidate_count: number
   candidates: RoundCandidate[]
   custom_field_definitions: CustomFieldDefinition[]

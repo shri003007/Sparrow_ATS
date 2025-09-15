@@ -159,6 +159,7 @@ export function AppSidebar({
           return new Date(bDate).getTime() - new Date(aDate).getTime();
         });
         setJobs(sortedJobs);
+
       } catch (error) {
         console.error("Failed to fetch jobs:", error);
       } finally {
