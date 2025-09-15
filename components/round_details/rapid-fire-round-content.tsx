@@ -36,7 +36,7 @@ export function RapidFireRoundContent({
 }: RapidFireRoundContentProps) {
   const fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
 
-  const { selectedJobs, isMultiJobMode } = useMultiJobContextSafe()
+  const { selectedJobs, isMultiJobMode, filteredJobIds } = useMultiJobContextSafe()
   const { toast } = useToast()
 
   // Toast notification tracking for bulk evaluation

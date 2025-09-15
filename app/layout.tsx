@@ -4,6 +4,7 @@ import { GeistMono } from 'geist/font/mono'
 import './globals.css'
 import { AuthProvider } from '@/contexts/auth-context'
 import { Toaster } from '@/components/ui/toaster'
+import { RefreshCacheManager } from '@/components/refresh-cache-manager'
 
 export const metadata: Metadata = {
   title: 'SparrowATS - Recruitment Management',
@@ -33,6 +34,7 @@ html {
       </head>
       <body>
         <AuthProvider>
+          <RefreshCacheManager />
           {children}
           <Toaster />
         </AuthProvider>

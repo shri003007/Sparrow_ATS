@@ -25,6 +25,9 @@ export function RoundDetailsView({ job, onBackToCandidates }: RoundDetailsViewPr
   
   // State for step navigation
   const [currentStepIndex, setCurrentStepIndex] = useState(0)
+  
+  // Constants for localStorage keys
+  const CURRENT_ROUND_INDEX_KEY = 'ats_current_round_index'
 
   // Fetch round templates when component mounts or job changes
   useEffect(() => {
@@ -47,18 +50,38 @@ export function RoundDetailsView({ job, onBackToCandidates }: RoundDetailsViewPr
         const sortedRounds = response.job_round_templates.sort((a, b) => a.order_index - b.order_index)
         setRounds(sortedRounds)
         
-        // Find the current active round (highest order_index with is_active: true)
-        const activeRounds = sortedRounds.filter(round => round.is_active)
+        // Try to restore saved round index first
         let initialStepIndex = 0
+        let useSavedIndex = false
         
-        if (activeRounds.length > 0) {
-          // Get the highest active round
-          const currentActiveRound = activeRounds.sort((a, b) => b.order_index - a.order_index)[0]
-          initialStepIndex = sortedRounds.findIndex(round => round.id === currentActiveRound.id)
-          setCurrentRound(currentActiveRound)
-        } else {
-          // If no rounds are active, start with the first round
-          setCurrentRound(sortedRounds[0] || null)
+        try {
+          const savedRoundIndex = localStorage.getItem(CURRENT_ROUND_INDEX_KEY)
+          if (savedRoundIndex !== null) {
+            const parsedIndex = parseInt(savedRoundIndex, 10)
+            if (!isNaN(parsedIndex) && parsedIndex >= 0 && parsedIndex < sortedRounds.length) {
+              initialStepIndex = parsedIndex
+              setCurrentRound(sortedRounds[parsedIndex])
+              useSavedIndex = true
+              console.log(`Restored round index ${parsedIndex} from localStorage`)
+            }
+          }
+        } catch (error) {
+          console.warn('Failed to restore saved round index:', error)
+        }
+        
+        // If no saved index or invalid saved index, find the current active round
+        if (!useSavedIndex) {
+          const activeRounds = sortedRounds.filter(round => round.is_active)
+          
+          if (activeRounds.length > 0) {
+            // Get the highest active round
+            const currentActiveRound = activeRounds.sort((a, b) => b.order_index - a.order_index)[0]
+            initialStepIndex = sortedRounds.findIndex(round => round.id === currentActiveRound.id)
+            setCurrentRound(currentActiveRound)
+          } else {
+            // If no rounds are active, start with the first round
+            setCurrentRound(sortedRounds[0] || null)
+          }
         }
         
         setCurrentStepIndex(Math.max(0, initialStepIndex))
@@ -90,6 +113,15 @@ export function RoundDetailsView({ job, onBackToCandidates }: RoundDetailsViewPr
       setCurrentRound(rounds[currentStepIndex])
     }
   }, [currentStepIndex, rounds])
+
+  // Save current round index to localStorage whenever it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem(CURRENT_ROUND_INDEX_KEY, currentStepIndex.toString())
+    } catch (error) {
+      console.warn('Failed to save current round index to localStorage:', error)
+    }
+  }, [currentStepIndex, CURRENT_ROUND_INDEX_KEY])
 
   // Navigation handlers
   const handleStepClick = (stepIndex: number) => {

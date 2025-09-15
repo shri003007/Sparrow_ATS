@@ -68,12 +68,16 @@ export class RoundCandidatesApi {
   /**
    * Get candidates by job round template ID with caching
    */
-  static async getCandidatesByRoundTemplate(jobRoundTemplateId: string, signal?: AbortSignal): Promise<RoundCandidateResponse> {
-    // Check cache first
-    const cachedData = this.getCachedData(jobRoundTemplateId)
-    if (cachedData) {
-      console.log(`Using cached round candidates for template: ${jobRoundTemplateId}`)
-      return cachedData
+  static async getCandidatesByRoundTemplate(jobRoundTemplateId: string, signal?: AbortSignal, forceRefresh: boolean = false): Promise<RoundCandidateResponse> {
+    // Check cache first (unless force refresh is requested)
+    if (!forceRefresh) {
+      const cachedData = this.getCachedData(jobRoundTemplateId)
+      if (cachedData) {
+        console.log(`Using cached round candidates for template: ${jobRoundTemplateId}`)
+        return cachedData
+      }
+    } else {
+      console.log(`Force refreshing round candidates for template: ${jobRoundTemplateId}`)
     }
 
     try {

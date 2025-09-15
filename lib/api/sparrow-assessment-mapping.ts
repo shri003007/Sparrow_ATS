@@ -85,13 +85,18 @@ export function clearSparrowAssessmentMappingCache(): void {
  */
 export async function getSparrowAssessmentMapping(
   jobRoundTemplateId: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  forceRefresh: boolean = false
 ): Promise<SparrowAssessmentMappingResponse> {
-  // Check cache first
-  const cachedData = getCachedAssessmentMapping(jobRoundTemplateId)
-  if (cachedData) {
-    console.log(`Using cached sparrow assessment mapping for template: ${jobRoundTemplateId}`)
-    return cachedData
+  // Check cache first (unless force refresh is requested)
+  if (!forceRefresh) {
+    const cachedData = getCachedAssessmentMapping(jobRoundTemplateId)
+    if (cachedData) {
+      console.log(`Using cached sparrow assessment mapping for template: ${jobRoundTemplateId}`)
+      return cachedData
+    }
+  } else {
+    console.log(`Force refreshing sparrow assessment mapping for template: ${jobRoundTemplateId}`)
   }
 
   try {

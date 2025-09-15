@@ -82,12 +82,16 @@ export class JobRoundTemplatesApi {
   /**
    * Get round templates for a specific job opening with caching
    */
-  static async getJobRoundTemplates(jobOpeningId: string): Promise<JobRoundTemplatesResponse> {
-    // Check cache first
-    const cachedData = this.getCachedData(jobOpeningId)
-    if (cachedData) {
-      console.log(`Using cached job round templates for job: ${jobOpeningId}`)
-      return cachedData
+  static async getJobRoundTemplates(jobOpeningId: string, forceRefresh: boolean = false): Promise<JobRoundTemplatesResponse> {
+    // Check cache first (unless force refresh is requested)
+    if (!forceRefresh) {
+      const cachedData = this.getCachedData(jobOpeningId)
+      if (cachedData) {
+        console.log(`Using cached job round templates for job: ${jobOpeningId}`)
+        return cachedData
+      }
+    } else {
+      console.log(`Force refreshing job round templates for job: ${jobOpeningId}`)
     }
 
     try {

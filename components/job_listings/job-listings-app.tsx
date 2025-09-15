@@ -31,6 +31,7 @@ export function JobListingsApp({ onCreateJob }: JobListingsAppProps) {
   // Constants for localStorage keys
   const SELECTED_JOB_KEY = 'ats_selected_job'
   const CURRENT_VIEW_KEY = 'ats_current_view'
+  const CURRENT_ROUND_INDEX_KEY = 'ats_current_round_index'
 
   // Load selected job and view from localStorage on mount
   useEffect(() => {
@@ -88,6 +89,12 @@ export function JobListingsApp({ onCreateJob }: JobListingsAppProps) {
         // If we already have this job selected, preserve the current view
         if (selectedJob?.id !== job.id) {
           setCurrentView(job.has_rounds_started ? 'rounds' : 'candidates')
+          // Clear round index when switching to a different job
+          try {
+            localStorage.removeItem(CURRENT_ROUND_INDEX_KEY)
+          } catch (error) {
+            console.warn('Failed to clear round index:', error)
+          }
         }
       })
     } else {
@@ -99,9 +106,15 @@ export function JobListingsApp({ onCreateJob }: JobListingsAppProps) {
       // If we already have this job selected, preserve the current view
       if (selectedJob?.id !== job.id) {
         setCurrentView(job.has_rounds_started ? 'rounds' : 'candidates')
+        // Clear round index when switching to a different job
+        try {
+          localStorage.removeItem(CURRENT_ROUND_INDEX_KEY)
+        } catch (error) {
+          console.warn('Failed to clear round index:', error)
+        }
       }
     }
-  }, [])
+  }, [selectedJob?.id, CURRENT_ROUND_INDEX_KEY])
 
   const handleJobsLoaded = useCallback((jobs: JobOpeningListItem[]) => {
     setIsLoadingJobs(false)
@@ -133,13 +146,12 @@ export function JobListingsApp({ onCreateJob }: JobListingsAppProps) {
             if (savedView && (savedView === 'candidates' || savedView === 'rounds')) {
               setCurrentView(savedView)
             } else {
-
               setCurrentView(jobData.has_rounds_started ? 'rounds' : 'candidates')
             }
           }
-        } catch (error) {
-          console.warn('Failed to restore saved job:', error)
         }
+      } catch (error) {
+        console.warn('Failed to restore saved job:', error);
       }
     }
   }, [selectedJob, appMode])
@@ -183,6 +195,12 @@ export function JobListingsApp({ onCreateJob }: JobListingsAppProps) {
 
   const handleBackToCandidates = () => {
     setCurrentView('candidates')
+    // Clear round index when going back to candidates
+    try {
+      localStorage.removeItem(CURRENT_ROUND_INDEX_KEY)
+    } catch (error) {
+      console.warn('Failed to clear round index:', error)
+    }
   }
 
   const handleCreateAllViews = useCallback(() => {
