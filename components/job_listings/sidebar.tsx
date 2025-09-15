@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Search,
   BarChart3,
@@ -41,10 +41,13 @@ interface AppSidebarProps {
   onCreateJob?: () => void;
   onJobSelect?: (job: JobOpeningListItem) => void;
   selectedJobId?: string | null;
+  selectedViewId?: string | null; // ID of the currently selected view
   mode?: "listing" | "creation"; // New prop to handle different modes
-  onJobsLoaded?: () => void;
+  onJobsLoaded?: (jobs: JobOpeningListItem[]) => void;
   onCreateAllViews?: () => void; // Simplified - just trigger creation page
+  onSelectSavedView?: (view: any) => void; // Callback for when user selects a saved view
   appMode?: string; // Track the current app mode to prevent auto-selection
+  refreshViewsTrigger?: number; // Trigger to refresh views list
 
 }
 
@@ -52,10 +55,13 @@ export function AppSidebar({
   onCreateJob,
   onJobSelect,
   selectedJobId,
+  selectedViewId,
   mode = "listing",
   onJobsLoaded,
   onCreateAllViews,
+  onSelectSavedView,
   appMode,
+  refreshViewsTrigger = 0,
 }: AppSidebarProps) {
   const { user, apiUser, logout } = useAuth();
   const [jobs, setJobs] = useState<JobOpeningListItem[]>([]);
@@ -68,7 +74,9 @@ export function AppSidebar({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const collapseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
-  // All Views state - simplified since we're using creation page approach
+  // All Views state
+  const [savedViews, setSavedViews] = useState<any[]>([])
+  const [loadingViews, setLoadingViews] = useState(true)
 
   const fontFamily =
     "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
@@ -141,32 +149,67 @@ export function AppSidebar({
         return;
       }
 
+      let sortedJobs: JobOpeningListItem[] = [];
       try {
         const response = await JobOpeningsApi.getJobOpenings(apiUser.id);
         // Sort by published_at desc (most recent first), then by updated_at desc
-        const sortedJobs = response.job_openings.sort((a, b) => {
+        sortedJobs = response.job_openings.sort((a, b) => {
           const aDate = a.published_at || a.updated_at;
           const bDate = b.published_at || b.updated_at;
           return new Date(bDate).getTime() - new Date(aDate).getTime();
         });
         setJobs(sortedJobs);
-
-        // Auto-select the first job if none is selected and we're in listing mode
-        // Don't auto-select during all views creation or when in all views mode
-        if (sortedJobs.length > 0 && !selectedJobId && mode === "listing" && onJobSelect && 
-            appMode !== 'all-views-creation' && appMode !== 'all-views') {
-          onJobSelect(sortedJobs[0]);
-        }
       } catch (error) {
         console.error("Failed to fetch jobs:", error);
       } finally {
         setLoading(false);
-        onJobsLoaded?.();
+        onJobsLoaded?.(sortedJobs);
       }
     };
 
     fetchJobs();
-  }, [apiUser?.id, selectedJobId, onJobSelect, mode]);
+  }, [apiUser?.id]);
+
+  // Handle auto-selection of first job
+  useEffect(() => {
+    // Auto-select the first job if none is selected and we're in listing mode
+    // Don't auto-select during all views creation or when in all views mode
+    if (jobs.length > 0 && !selectedJobId && mode === "listing" && onJobSelect && 
+        appMode !== 'all-views-creation' && appMode !== 'all-views' && !loading) {
+      onJobSelect(jobs[0]);
+    }
+  }, [jobs, selectedJobId, mode, onJobSelect, appMode, loading]);
+
+  // Function to fetch saved views - can be called externally
+  const fetchSavedViews = useCallback(async () => {
+    if (!apiUser?.id) {
+      return;
+    }
+
+    setLoadingViews(true);
+    try {
+      const { AllViewsApi } = await import('@/lib/api/all-views');
+
+      // Check if user is admin to decide which endpoint to use
+      const isAdmin = apiUser.role === 'admin';
+
+      const response = isAdmin
+        ? await AllViewsApi.getAllViews() // Admin sees all views
+        : await AllViewsApi.getAllViewsForUser(apiUser.id); // Regular user sees only their views
+
+      setSavedViews(response.all_views);
+    } catch (error) {
+      console.error('Failed to fetch saved views:', error);
+      setSavedViews([]); // Set empty array on error
+    } finally {
+      setLoadingViews(false);
+    }
+  }, [apiUser?.id, apiUser?.role]);
+
+  // Fetch saved views on mount, when apiUser changes, or when refresh trigger changes
+  useEffect(() => {
+    fetchSavedViews();
+  }, [fetchSavedViews, refreshViewsTrigger]);
 
   // Keyboard shortcut handler for Command+K
   useEffect(() => {
@@ -343,6 +386,7 @@ export function AppSidebar({
                   jobs={filteredJobs}
                   loading={loading}
                   selectedJobId={selectedJobId || null}
+                  selectedViewId={selectedViewId || null}
                   onJobSelect={onJobSelect}
                   onCreateJob={onCreateJob}
                   displayedJobs={displayedJobs}
@@ -353,6 +397,10 @@ export function AppSidebar({
                   mode={mode}
                   fontFamily={fontFamily}
                   onAllViewsClick={handleAllViewsClick}
+                  savedViews={savedViews}
+                  loadingViews={loadingViews}
+                  apiUser={apiUser}
+                  onSelectSavedView={onSelectSavedView}
                 />
               ))}
             </div>
@@ -475,6 +523,7 @@ const SidebarItem = ({
   jobs,
   loading,
   selectedJobId,
+  selectedViewId,
   onJobSelect,
   onCreateJob,
   displayedJobs,
@@ -485,12 +534,17 @@ const SidebarItem = ({
   mode,
   fontFamily,
   onAllViewsClick,
+  savedViews,
+  loadingViews,
+  apiUser,
+  onSelectSavedView,
 }: {
   isOpen: boolean;
   sidebar: any;
   jobs: JobOpeningListItem[];
   loading: boolean;
   selectedJobId: string | null;
+  selectedViewId: string | null;
   onJobSelect?: (job: JobOpeningListItem) => void;
   onCreateJob?: () => void;
   displayedJobs: JobOpeningListItem[];
@@ -501,6 +555,10 @@ const SidebarItem = ({
   mode: string;
   fontFamily: string;
   onAllViewsClick?: () => void;
+  savedViews: any[];
+  loadingViews: boolean;
+  apiUser: any;
+  onSelectSavedView?: (view: any) => void;
 }) => {
   const [hoverState, setHoverState] = useState(false);
 
@@ -561,10 +619,8 @@ const SidebarItem = ({
           <div
             className="ml-2 p-1.5 rounded-md cursor-pointer transition-all duration-200 hover:bg-teal-100 hover:scale-105"
             style={{
-              backgroundColor: sidebar.label === "All views" ? "#3B82F6" : "#5BA4A4",
-              boxShadow: sidebar.label === "All views" 
-                ? "0 2px 4px rgba(59, 130, 246, 0.2)" 
-                : "0 2px 4px rgba(91, 164, 164, 0.2)",
+              backgroundColor: "#5BA4A4",
+              boxShadow: "0 2px 4px rgba(91, 164, 164, 0.2)",
             }}
             onClick={(e) => {
               e.stopPropagation();
@@ -677,7 +733,7 @@ const SidebarItem = ({
           
           {sidebar.label === "All views" && (
             <div className="ml-10 mr-2 space-y-1">
-              {loading ? (
+              {loadingViews ? (
                 <div
                   className="flex items-center px-3 py-2 text-sm"
                   style={{
@@ -686,8 +742,37 @@ const SidebarItem = ({
                     fontFamily,
                   }}
                 >
-                  Loading jobs...
+                  Loading views...
                 </div>
+              ) : savedViews.length > 0 ? (
+                savedViews.map((view) => {
+                  const isSelected = selectedViewId === view.id;
+                  return (
+                    <div
+                      key={view.id}
+                      className="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer text-sm transition-colors hover:bg-teal-50"
+                      style={{
+                        backgroundColor: isSelected ? "rgba(91, 164, 164, 0.1)" : "transparent",
+                        color: isSelected ? "#5BA4A4" : "#374151",
+                        fontSize: "14px",
+                        fontFamily,
+                        fontWeight: isSelected ? "500" : "400",
+                      }}
+                      onClick={() => {
+                        onSelectSavedView?.(view);
+                      }}
+                    >
+                      <div
+                        className="w-2 h-2 rounded-full border"
+                        style={{
+                          borderColor: isSelected ? "#5BA4A4" : "#9CA3AF",
+                          backgroundColor: isSelected ? "#5BA4A4" : "transparent",
+                        }}
+                      />
+                      <span className="truncate">{view.title}</span>
+                    </div>
+                  );
+                })
               ) : (
                 <div
                   className="flex items-center gap-2 px-3 py-2 text-sm"

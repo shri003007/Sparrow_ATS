@@ -12,7 +12,7 @@ import type { JobOpeningListItem } from "@/lib/job-types"
 
 interface AllViewsCreationPageProps {
   onBack: () => void
-  onViewCreated: (viewTitle: string, selectedJobs: JobOpeningListItem[]) => void
+  onViewCreated: (viewTitle: string, selectedJobs: JobOpeningListItem[], viewId?: string) => void
 }
 
 export function AllViewsCreationPage({ onBack, onViewCreated }: AllViewsCreationPageProps) {
@@ -75,15 +75,29 @@ export function AllViewsCreationPage({ onBack, onViewCreated }: AllViewsCreation
   }
 
   const handleCreateView = async () => {
-    if (!viewTitle.trim() || selectedJobs.length === 0) return
+    if (!viewTitle.trim() || selectedJobs.length === 0 || !apiUser?.id) return
 
     setIsCreating(true)
     try {
-      // Simulate creation delay
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      onViewCreated(viewTitle.trim(), selectedJobs)
+      // Import the API client
+      const { AllViewsApi } = await import('@/lib/api/all-views')
+      
+      // Create the view using the API
+      const response = await AllViewsApi.createAllView({
+        title: viewTitle.trim(),
+        job_opening_ids: selectedJobs.map(job => job.id),
+        created_by: apiUser.id
+      })
+
+      if (response.success) {
+        // Call the parent callback with the created view data
+        onViewCreated(response.data.title, selectedJobs, response.data.id)
+      } else {
+        throw new Error('Failed to create view: ' + response.message)
+      }
     } catch (error) {
       console.error('Failed to create view:', error)
+      // You might want to show a toast notification here
     } finally {
       setIsCreating(false)
     }
@@ -107,8 +121,8 @@ export function AllViewsCreationPage({ onBack, onViewCreated }: AllViewsCreation
         </div>
         
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-            <Eye className="w-6 h-6 text-blue-600" />
+          <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
+            <Eye className="w-6 h-6 text-orange-600" />
           </div>
           <div>
             <h1 className="text-2xl font-semibold" style={{ color: "#111827", fontFamily }}>
@@ -127,7 +141,7 @@ export function AllViewsCreationPage({ onBack, onViewCreated }: AllViewsCreation
           {/* Step 1: View Title */}
           <div className="bg-white border border-gray-200 rounded-lg p-6">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-medium">
+              <div className="w-8 h-8 bg-orange-600 rounded-full flex items-center justify-center text-white text-sm font-medium">
                 1
               </div>
               <h2 className="text-lg font-semibold text-gray-900" style={{ fontFamily }}>
@@ -157,7 +171,7 @@ export function AllViewsCreationPage({ onBack, onViewCreated }: AllViewsCreation
           <div className="bg-white border border-gray-200 rounded-lg p-6">
             <div className="flex items-center gap-3 mb-4">
               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                viewTitle.trim() ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'
+                viewTitle.trim() ? 'bg-orange-600 text-white' : 'bg-gray-200 text-gray-500'
               }`}>
                 2
               </div>
@@ -168,7 +182,7 @@ export function AllViewsCreationPage({ onBack, onViewCreated }: AllViewsCreation
 
             {isLoadingJobs ? (
               <div className="flex items-center justify-center py-8">
-                <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mr-3"></div>
+                <div className="w-6 h-6 border-2 border-orange-600 border-t-transparent rounded-full animate-spin mr-3"></div>
                 <span className="text-gray-600" style={{ fontFamily }}>Loading jobs...</span>
               </div>
             ) : (
@@ -252,8 +266,8 @@ export function AllViewsCreationPage({ onBack, onViewCreated }: AllViewsCreation
 
                 {/* Selection Summary */}
                 {selectedJobs.length > 0 && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <div className="flex items-center gap-2 text-blue-800">
+                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                    <div className="flex items-center gap-2 text-orange-800">
                       <Check className="w-4 h-4" />
                       <span className="text-sm font-medium" style={{ fontFamily }}>
                         {selectedJobs.length} job{selectedJobs.length !== 1 ? 's' : ''} selected
@@ -263,7 +277,7 @@ export function AllViewsCreationPage({ onBack, onViewCreated }: AllViewsCreation
                       {selectedJobs.map((job) => (
                         <span
                           key={job.id}
-                          className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded-full"
+                          className="px-2 py-1 text-xs bg-orange-100 text-orange-700 rounded-full"
                           style={{ fontFamily }}
                         >
                           {job.posting_title}
@@ -299,7 +313,7 @@ export function AllViewsCreationPage({ onBack, onViewCreated }: AllViewsCreation
               disabled={!canCreate || isCreating}
               className="flex items-center gap-2"
               style={{
-                backgroundColor: canCreate && !isCreating ? "#3B82F6" : "#6B7280",
+                backgroundColor: canCreate && !isCreating ? "#FF8D4D" : "#6B7280",
                 color: "#FFFFFF",
                 fontFamily,
               }}

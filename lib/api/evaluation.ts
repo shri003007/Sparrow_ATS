@@ -479,24 +479,45 @@ export async function evaluateRapidFireSales(
 ): Promise<SalesEvaluationResponse> {
   const apiUrl = getSalesEvaluationApiUrl()
   
-  const response = await fetch(`${apiUrl}/evaluate-rapid-fire`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      ...request,
-      account_id: request.account_id || 'salesai',
-      brand_id: request.brand_id || 'surveysparrow'
-    }),
-  })
-  
-  const data = await response.json()
-  
-  // Check if the response indicates success in the data, not just HTTP status
-  if (!response.ok && !data?.success) {
-    throw new Error(data?.error_message || `Sales evaluation failed: ${response.status}`)
+  try {
+    const response = await fetch(`${apiUrl}/evaluate-rapid-fire`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...request,
+        account_id: request.account_id || 'salesai',
+        brand_id: request.brand_id || 'surveysparrow'
+      }),
+    })
+    
+    const data = await response.json()
+    
+    // Check if the response indicates success in the data, not just HTTP status
+    if (!response.ok && !data?.success) {
+      // Handle specific case where assessment data is not found
+      if (response.status === 404 || (data?.error_message && data.error_message.includes('not found'))) {
+        throw new Error('Assessment data not available for this candidate. The candidate may not have completed the assessment yet.')
+      }
+      throw new Error(data?.error_message || `Sales evaluation failed: ${response.status}`)
+    }
+    
+    return data as SalesEvaluationResponse
+  } catch (error) {
+    // Wrap fetch errors with more context
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      throw new Error('Network error: Unable to connect to evaluation service')
+    }
+    
+    // Re-throw with better context for assessment-related errors
+    if (error instanceof Error) {
+      if (error.message.includes('404')) {
+        throw new Error('Assessment retrieval failed: Assessment API request failed: 404')
+      }
+      throw new Error(`Rapid-fire evaluation failed: ${error.message}`)
+    }
+    
+    throw error
   }
-  
-  return data as SalesEvaluationResponse
 }
 
 export async function evaluateGamesArenaSales(

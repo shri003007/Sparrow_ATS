@@ -9,13 +9,17 @@ interface AllViewsCombinedViewProps {
   onNavigationCheck?: (hasUnsavedChanges: boolean, checkFunction: (callback: () => void) => void) => void
   isLoadingJobs?: boolean
   viewTitle?: string
+  viewId?: string
+  onBack?: () => void
 }
 
 export function AllViewsCombinedView({ 
   selectedJobs, 
   onNavigationCheck,
   isLoadingJobs = false,
-  viewTitle
+  viewTitle,
+  viewId,
+  onBack
 }: AllViewsCombinedViewProps) {
   const fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
 
@@ -24,7 +28,7 @@ export function AllViewsCombinedView({
       return (
         <div className="flex-1 flex items-center justify-center bg-white">
           <div className="text-center">
-            <div className="w-8 h-8 mx-auto mb-4 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+            <div className="w-8 h-8 mx-auto mb-4 border-4 border-orange-200 border-t-orange-600 rounded-full animate-spin"></div>
             <p className="text-gray-500" style={{ fontFamily }}>Loading jobs...</p>
           </div>
         </div>
@@ -51,6 +55,7 @@ export function AllViewsCombinedView({
         <UnifiedRoundsView
           selectedJobs={selectedJobs}
           onNavigationCheck={onNavigationCheck}
+          viewId={viewId}
         />
       </div>
     </div>

@@ -34,7 +34,7 @@ export function RapidFireRoundContent({
   createdBy
 }: RapidFireRoundContentProps) {
   const fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
-  const { selectedJobs, isMultiJobMode } = useMultiJobContextSafe()
+  const { selectedJobs, isMultiJobMode, filteredJobIds } = useMultiJobContextSafe()
   
   const [roundData, setRoundData] = useState<RoundCandidateResponse | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -83,7 +83,14 @@ export function RapidFireRoundContent({
     let templateInfo = null
     let customFieldDefinitions: any[] = []
 
-    for (const job of selectedJobs) {
+    // Filter jobs based on current selection
+    const jobsToProcess = selectedJobs.filter(job => 
+      !filteredJobIds || filteredJobIds.has(job.id)
+    )
+
+    console.log('Fetching multi-job round data for filtered jobs:', jobsToProcess.map(j => j.posting_title))
+
+    for (const job of jobsToProcess) {
       try {
         // Get round templates for this job
         const templatesResponse = await JobRoundTemplatesApi.getJobRoundTemplates(job.id)
@@ -128,7 +135,14 @@ export function RapidFireRoundContent({
 
     return {
       candidates: allCandidates,
-      template_info: templateInfo,
+      template_info: templateInfo || {
+        round_name: roundName,
+        round_type: roundType,
+        order_index: 0,
+        round_id: '',
+        evaluation_criteria: null,
+        competencies: null
+      },
       custom_field_definitions: customFieldDefinitions,
       candidate_count: allCandidates.length,
       job_round_template_id: templateInfo?.round_id || '',
@@ -218,6 +232,11 @@ export function RapidFireRoundContent({
           return
         }
         
+        if (!roundResponse) {
+          console.error('No round response data received')
+          return
+        }
+
         setRoundData(roundResponse)
         
         // Handle assessment mapping response
@@ -275,7 +294,7 @@ export function RapidFireRoundContent({
       // We handle round switching inside fetchRoundData, so cleanup only aborts on unmount
       // This prevents the first render from being cancelled
     }
-  }, [currentRound?.id])
+  }, [currentRound?.id, filteredJobIds])
 
   const handleStatusChange = (candidateId: string, newStatus: RoundStatus) => {
     setCurrentStatusById(prev => ({
@@ -635,8 +654,8 @@ export function RapidFireRoundContent({
           </div>
         </div>
 
-        {/* Action Buttons */}
-        {!isLastRound && (
+        {/* Action Buttons - Hide in multi-job mode */}
+        {!isLastRound && !isMultiJobMode && (
           <div className="mt-4">
             <div className="flex flex-col items-end gap-2">
               <div className="text-sm text-gray-600" style={{ fontFamily }}>

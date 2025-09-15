@@ -820,8 +820,8 @@ export function InterviewRoundContent({
                 )}
 
 
-                {/* Next Round Button */}
-                {hasNextRound && (
+                {/* Next Round Button - Hide in multi-job mode */}
+                {hasNextRound && !isMultiJobMode && (
                   <div className="flex flex-col items-end gap-2">
                     <div className="text-sm text-gray-600" style={{ fontFamily }}>
                       {selectedCandidatesCount} selected for next round

@@ -9,6 +9,7 @@ import { CandidateRoundsApi, JobRoundTemplatesApi } from "@/lib/api/rounds"
 import type { JobRoundTemplate } from "@/lib/round-types"
 import type { RoundCandidateResponse } from "@/lib/round-candidate-types"
 import { Button } from "@/components/ui/button"
+import { useMultiJobContextSafe } from "@/components/all_views/multi-job-context"
 
 interface ScreeningRoundContentProps {
   currentRound: JobRoundTemplate | null
@@ -25,6 +26,7 @@ export function ScreeningRoundContent({
   onNextRound,
   createdBy
 }: ScreeningRoundContentProps) {
+  const { isMultiJobMode } = useMultiJobContextSafe()
   const fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
   
   const [roundData, setRoundData] = useState<RoundCandidateResponse | null>(null)
@@ -315,8 +317,8 @@ export function ScreeningRoundContent({
                   Radar Chart
                 </Button>
 
-                {/* Next Round Button */}
-                {hasNextRound && (
+                {/* Next Round Button - Hide in multi-job mode */}
+                {hasNextRound && !isMultiJobMode && (
                   <div className="flex flex-col items-end gap-2">
                     <div className="text-sm text-gray-600" style={{ fontFamily }}>
                       {selectedCandidatesCount} selected for next round

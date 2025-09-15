@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { ModernProjectCandidatesTable } from "./modern-project-candidates-table"
 import { CandidateEvaluationPanel } from "./candidate-evaluation-panel"
 import { CompetencyMetricsModal } from "./competency-metrics-modal"
+import { useMultiJobContextSafe } from "@/components/all_views/multi-job-context"
 
 type RoundStatus = 'selected' | 'rejected' | 'action_pending'
 
@@ -47,6 +48,7 @@ export function ProjectRoundContent({
   onNextRound,
   createdBy
 }: ProjectRoundContentProps) {
+  const { isMultiJobMode } = useMultiJobContextSafe()
   const fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
   
   const [roundData, setRoundData] = useState<RoundCandidateResponse | null>(null)
@@ -339,8 +341,8 @@ export function ProjectRoundContent({
                   Radar Chart
                 </Button>
 
-                {/* Next Round Button */}
-                {nextRound && (
+                {/* Next Round Button - Hide in multi-job mode */}
+                {nextRound && !isMultiJobMode && (
                   <div className="flex flex-col items-end gap-2">
                     <div className="text-sm text-gray-600" style={{ fontFamily }}>
                       {selectedCandidatesCount} selected for next round

@@ -636,8 +636,8 @@ export function TalkOnTopicRoundContent({
           </div>
         </div>
 
-        {/* Action Buttons */}
-        {!isLastRound && (
+        {/* Action Buttons - Hide in multi-job mode */}
+        {!isLastRound && !isMultiJobMode && (
           <div className="mt-4">
             <div className="flex flex-col items-end gap-2">
               <div className="text-sm text-gray-600" style={{ fontFamily }}>

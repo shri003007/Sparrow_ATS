@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { AppSidebar } from "./sidebar"
 import { JobDetailsView } from "./job-details-view"
 import { RoundDetailsView } from "./round-details-view"
@@ -23,6 +23,9 @@ export function JobListingsApp({ onCreateJob }: JobListingsAppProps) {
   const [appMode, setAppMode] = useState<AppMode>('single-job')
   const [selectedJobsForAllViews, setSelectedJobsForAllViews] = useState<JobOpeningListItem[]>([])
   const [allViewsTitle, setAllViewsTitle] = useState<string>('')
+  const [selectedViewId, setSelectedViewId] = useState<string | null>(null)
+  const [refreshViewsTrigger, setRefreshViewsTrigger] = useState<number>(0)
+  const [isLoadingViewJobs, setIsLoadingViewJobs] = useState(false)
   const navigationCheckRef = useRef<((callback: () => void) => void) | null>(null)
 
   // Constants for localStorage keys
@@ -69,24 +72,28 @@ export function JobListingsApp({ onCreateJob }: JobListingsAppProps) {
     }
   }, [currentView])
 
-  const handleJobSelect = (job: JobOpeningListItem) => {
+  const handleJobSelect = useCallback((job: JobOpeningListItem) => {
     // Check for unsaved changes before switching jobs
     if (navigationCheckRef.current) {
       navigationCheckRef.current(() => {
         setAppMode('single-job')
+        setSelectedViewId(null) // Clear selected view when selecting a job
+        setIsLoadingViewJobs(false) // Clear view loading state
         setSelectedJob(job)
         // Set view based on has_rounds_started flag
         setCurrentView(job.has_rounds_started ? 'rounds' : 'candidates')
       })
     } else {
       setAppMode('single-job')
+      setSelectedViewId(null) // Clear selected view when selecting a job
+      setIsLoadingViewJobs(false) // Clear view loading state
       setSelectedJob(job)
       // Set view based on has_rounds_started flag
       setCurrentView(job.has_rounds_started ? 'rounds' : 'candidates')
     }
-  }
+  }, [])
 
-  const handleJobsLoaded = (jobs: JobOpeningListItem[]) => {
+  const handleJobsLoaded = useCallback((jobs: JobOpeningListItem[]) => {
     setIsLoadingJobs(false)
     setJobsList(jobs)
 
@@ -101,27 +108,30 @@ export function JobListingsApp({ onCreateJob }: JobListingsAppProps) {
       }
     } else {
       // If no job is selected but we have jobs, try to restore from localStorage
-      try {
-        const savedJob = localStorage.getItem(SELECTED_JOB_KEY)
-        if (savedJob) {
-          const jobData = JSON.parse(savedJob)
-          const jobStillExists = jobs.some(job => job.id === jobData.id)
-          if (jobStillExists) {
-            setSelectedJob(jobData)
-            setCurrentView(jobData.has_rounds_started ? 'rounds' : 'candidates')
+      // But only if we're not in all-views mode (i.e., not viewing a saved view)
+      if (appMode !== 'all-views') {
+        try {
+          const savedJob = localStorage.getItem(SELECTED_JOB_KEY)
+          if (savedJob) {
+            const jobData = JSON.parse(savedJob)
+            const jobStillExists = jobs.some(job => job.id === jobData.id)
+            if (jobStillExists) {
+              setSelectedJob(jobData)
+              setCurrentView(jobData.has_rounds_started ? 'rounds' : 'candidates')
+            }
           }
+        } catch (error) {
+          console.warn('Failed to restore saved job:', error)
         }
-      } catch (error) {
-        console.warn('Failed to restore saved job:', error)
       }
     }
-  }
+  }, [selectedJob, appMode])
 
   const handleNavigationCheck = (hasUnsavedChanges: boolean, checkFunction: (callback: () => void) => void) => {
     navigationCheckRef.current = hasUnsavedChanges ? checkFunction : null
   }
 
-  const handleCreateJob = () => {
+  const handleCreateJob = useCallback(() => {
     // Check for unsaved changes before creating new job
     if (navigationCheckRef.current && onCreateJob) {
       navigationCheckRef.current(() => {
@@ -130,7 +140,7 @@ export function JobListingsApp({ onCreateJob }: JobListingsAppProps) {
     } else if (onCreateJob) {
       onCreateJob()
     }
-  }
+  }, [onCreateJob])
 
   const handleSettings = () => {
     // Check for unsaved changes before going to settings
@@ -158,7 +168,7 @@ export function JobListingsApp({ onCreateJob }: JobListingsAppProps) {
     setCurrentView('candidates')
   }
 
-  const handleCreateAllViews = () => {
+  const handleCreateAllViews = useCallback(() => {
     // Check for unsaved changes before switching to creation page
     if (navigationCheckRef.current) {
       navigationCheckRef.current(() => {
@@ -169,17 +179,55 @@ export function JobListingsApp({ onCreateJob }: JobListingsAppProps) {
       setAppMode('all-views-creation')
       setSelectedJob(null) // Clear single job selection
     }
-  }
+  }, [])
 
   const handleAllViewsCreated = (viewTitle: string, jobs: JobOpeningListItem[]) => {
     setAllViewsTitle(viewTitle)
     setSelectedJobsForAllViews(jobs)
     setAppMode('all-views') // Go directly to rounds view (no toggle needed)
+
+    // Trigger sidebar refresh to show the newly created view
+    setRefreshViewsTrigger(prev => prev + 1)
   }
 
   const handleBackFromAllViewsCreation = () => {
+    setSelectedViewId(null)
     setAppMode('single-job')
+    setIsLoadingViewJobs(false)
   }
+
+  const handleSelectSavedView = useCallback(async (view: any) => {
+    try {
+      // Clear selected job when selecting a view and switch to all-views mode immediately
+      setSelectedJob(null);
+      setAppMode('all-views');
+      setIsLoadingViewJobs(true);
+
+      // Use the helper method to get jobs for this view
+      const { AllViewsApi } = await import('@/lib/api/all-views');
+
+      if (view.job_opening_ids && view.job_opening_ids.length > 0) {
+        // Use the helper method to fetch job details
+        const jobs = await AllViewsApi.getJobsForView(view.job_opening_ids, view.created_by);
+
+        // Set the view data
+        setSelectedViewId(view.id);
+        setAllViewsTitle(view.title);
+        setSelectedJobsForAllViews(jobs);
+        setIsLoadingViewJobs(false);
+      } else {
+        // Handle case where view has no jobs
+        setSelectedViewId(view.id);
+        setAllViewsTitle(view.title);
+        setSelectedJobsForAllViews([]);
+        setIsLoadingViewJobs(false);
+      }
+    } catch (error) {
+      console.error('Failed to load saved view:', error);
+      setIsLoadingViewJobs(false);
+      // Show error to user - you might want to add a toast notification here
+    }
+  }, [])
 
 
   return (
@@ -188,10 +236,13 @@ export function JobListingsApp({ onCreateJob }: JobListingsAppProps) {
         onCreateJob={handleCreateJob}
         onJobSelect={handleJobSelect}
         selectedJobId={selectedJob?.id || null}
+        selectedViewId={selectedViewId}
         mode="listing"
         onJobsLoaded={handleJobsLoaded}
         onCreateAllViews={handleCreateAllViews}
+        onSelectSavedView={handleSelectSavedView}
         appMode={appMode}
+        refreshViewsTrigger={refreshViewsTrigger}
       />
       {appMode === 'all-views-creation' ? (
         <AllViewsCreationPage
@@ -202,8 +253,9 @@ export function JobListingsApp({ onCreateJob }: JobListingsAppProps) {
         <AllViewsCombinedView
           selectedJobs={selectedJobsForAllViews}
           onNavigationCheck={handleNavigationCheck}
-          isLoadingJobs={isLoadingJobs}
+          isLoadingJobs={isLoadingViewJobs}
           viewTitle={allViewsTitle}
+          viewId={selectedViewId || undefined}
         />
       ) : (
         // Single job mode (existing functionality)

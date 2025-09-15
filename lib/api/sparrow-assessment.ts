@@ -56,6 +56,8 @@ export async function getSparrowAssessmentData(
   assessmentId: string
 ): Promise<SparrowAssessmentResponse> {
   try {
+    console.log(`Fetching sparrow assessment data for email: ${userEmail}, assessmentId: ${assessmentId}`)
+    
     const response = await fetch('https://kl85uizp68.execute-api.us-west-2.amazonaws.com/api/get-answers', {
       method: 'POST',
       headers: {
@@ -68,13 +70,26 @@ export async function getSparrowAssessmentData(
     })
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch sparrow assessment data: ${response.statusText}`)
+      const errorText = await response.text().catch(() => 'Unknown error')
+      
+      // Handle 404 errors gracefully - this is expected when no assessment data exists
+      if (response.status === 404) {
+        console.log(`No sparrow assessment data found for ${userEmail}/${assessmentId} (404 - this is normal)`)
+        return null as any // Return null to indicate no data available
+      }
+      
+      throw new Error(`Failed to fetch sparrow assessment data: ${response.status} ${response.statusText} - ${errorText}`)
     }
 
     const data = await response.json()
+    console.log('Successfully fetched sparrow assessment data:', data)
     return data
   } catch (error) {
     console.error('Error fetching sparrow assessment data:', error)
-    throw error
+    // Re-throw with more context
+    if (error instanceof Error) {
+      throw new Error(`Sparrow Assessment API Error: ${error.message}`)
+    }
+    throw new Error('Unknown error occurred while fetching sparrow assessment data')
   }
 }

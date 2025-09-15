@@ -175,36 +175,10 @@ export function CandidateEvaluationPanel({
     setFetchedKey(null)
   }, [candidate?.id])
 
-  // Fetch sparrow assessment mapping to get brand_id from filter_column
+  // Set default brand_id since we're removing the problematic assessment mapping call
   React.useEffect(() => {
-    const fetchAssessmentMapping = async () => {
-      if (!sparrowRoundId || sparrowRoundId.trim() === '') {
-        setAssessmentMapping(null)
-        setBrandId('surveysparrow') // Reset to default
-        return
-      }
-
-      try {
-        const mappingResponse = await getSparrowAssessmentMapping(sparrowRoundId)
-        setAssessmentMapping(mappingResponse)
-
-        // Extract brand_id from filter_column
-        if (mappingResponse && mappingResponse.mappings && mappingResponse.mappings.length > 0) {
-          const firstMapping = mappingResponse.mappings[0]
-          const extractedBrandId = firstMapping.filter_column || 'surveysparrow'
-          setBrandId(extractedBrandId)
-          console.log(`Candidate panel: Using brand_id: ${extractedBrandId} (from filter_column in sparrow assessment mapping)`)
-        } else {
-          setBrandId('surveysparrow') // Fallback to default
-        }
-      } catch (error) {
-        console.warn('Failed to fetch sparrow assessment mapping, using default values:', error)
-        setAssessmentMapping(null)
-        setBrandId('surveysparrow') // Fallback to default
-      }
-    }
-
-    fetchAssessmentMapping()
+    setBrandId('surveysparrow') // Use default brand_id
+    setAssessmentMapping(null) // Clear any existing mapping
   }, [sparrowRoundId])
 
   // Fetch sparrow assessment data if candidate has sparrow assessment
@@ -227,11 +201,27 @@ export function CandidateEvaluationPanel({
         
         setLoadingSparrowAssessment(true)
         try {
+          console.log('Attempting to fetch sparrow assessment:', { 
+            email: candidate.email, 
+            assessmentId: sparrowRoundId,
+            roundType 
+          })
           const data = await getSparrowAssessmentData(candidate.email, sparrowRoundId)
-          setSparrowAssessmentData(data)
+          
+          // Handle both null return (404 case) and actual data
+          if (data === null) {
+            console.log('No sparrow assessment data available for this candidate (expected for some candidates)')
+            setSparrowAssessmentData(null)
+          } else {
+            setSparrowAssessmentData(data)
+            console.log('Successfully loaded sparrow assessment data')
+          }
+          
           setFetchedKey(currentKey) // Mark this combination as fetched
         } catch (error) {
           console.error('Failed to fetch sparrow assessment data:', error)
+          // Reset the data to ensure UI shows appropriate state
+          setSparrowAssessmentData(null)
           // Don't show error to user as this might be expected for non-sparrow candidates
         } finally {
           setLoadingSparrowAssessment(false)
@@ -485,6 +475,17 @@ export function CandidateEvaluationPanel({
 
     if (!candidate?.candidate_rounds?.[0]?.id) {
       const errorMessage = 'Missing candidate information required for evaluation'
+      if (isReEvaluation) {
+        setReEvaluationError(errorMessage)
+      } else {
+        setSalesError(errorMessage)
+      }
+      return
+    }
+
+    // Check if sparrow assessment data is available
+    if (!sparrowAssessmentData) {
+      const errorMessage = 'Assessment data not available. The candidate may not have completed the assessment yet, or the assessment data may not be accessible.'
       if (isReEvaluation) {
         setReEvaluationError(errorMessage)
       } else {
