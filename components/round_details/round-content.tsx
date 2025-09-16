@@ -1,11 +1,8 @@
 "use client"
 
 import { ScreeningRoundContent } from "./screening-round-content"
-import { InterviewRoundContent } from "./interview-round-content"
 import { ProjectRoundContent } from "./project-round-content"
-import { RapidFireRoundContent } from "./rapid-fire-round-content"
-import { TalkOnTopicRoundContent } from "./talk-on-topic-round-content"
-import { GamesArenaRoundContent } from "./games-arena-round-content"
+import { SparrowInterviewsRoundContent } from "./sparrow-interviews-round-content"
 import type { JobRoundTemplate } from "@/lib/round-types"
 
 interface RoundContentProps {
@@ -45,16 +42,6 @@ export function RoundContent({ currentRound, rounds, currentStepIndex, onNextSte
         createdBy={createdBy || ''}
       />
     )
-  } else if (currentRound.round_type === 'INTERVIEW') {
-    return (
-      <InterviewRoundContent
-        currentRound={currentRound}
-        rounds={rounds}
-        currentStepIndex={currentStepIndex}
-        onNextRound={onNextStep}
-        createdBy={createdBy || ''}
-      />
-    )
   } else if (currentRound.round_type === 'PROJECT') {
     return (
       <ProjectRoundContent
@@ -65,29 +52,9 @@ export function RoundContent({ currentRound, rounds, currentStepIndex, onNextSte
         createdBy={createdBy || ''}
       />
     )
-  } else if (currentRound.round_type === 'RAPID_FIRE') {
+  } else if (currentRound.round_type === 'INTERVIEW' || currentRound.round_type === 'RAPID_FIRE' || currentRound.round_type === 'TALK_ON_A_TOPIC' || currentRound.round_type === 'GAMES_ARENA') {
     return (
-      <RapidFireRoundContent
-        currentRound={currentRound}
-        rounds={rounds}
-        currentStepIndex={currentStepIndex}
-        onNextRound={onNextStep}
-        createdBy={createdBy || ''}
-      />
-    )
-  } else if (currentRound.round_type === 'TALK_ON_A_TOPIC') {
-    return (
-      <TalkOnTopicRoundContent
-        currentRound={currentRound}
-        rounds={rounds}
-        currentStepIndex={currentStepIndex}
-        onNextRound={onNextStep}
-        createdBy={createdBy || ''}
-      />
-    )
-  } else if (currentRound.round_type === 'GAMES_ARENA') {
-    return (
-      <GamesArenaRoundContent
+      <SparrowInterviewsRoundContent
         currentRound={currentRound}
         rounds={rounds}
         currentStepIndex={currentStepIndex}

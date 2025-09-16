@@ -59,8 +59,15 @@ export function UnifiedRoundsView({
 
   // Fetch all rounds from all jobs and create unified list
   useEffect(() => {
+    console.log(`🎯 [COMPONENT] UnifiedRoundsView - useEffect triggered for ${selectedJobs.length} jobs, viewId: ${viewId}`)
+    
     const fetchAllJobsRounds = async () => {
-      if (selectedJobs.length === 0) return
+      if (selectedJobs.length === 0) {
+        console.log(`🎯 [COMPONENT] UnifiedRoundsView - No jobs selected, skipping fetch`)
+        return
+      }
+
+      console.log(`🎯 [COMPONENT] UnifiedRoundsView - Starting fetch for jobs:`, selectedJobs.map(j => `${j.posting_title} (${j.id})`))
 
       // Cancel any previous loading session
       const loadingSessionId = Date.now()
@@ -76,46 +83,71 @@ export function UnifiedRoundsView({
       const allJobRounds: MultiJobRoundTemplate[] = []
 
       try {
-        for (const job of selectedJobs) {
-          // Check if this loading session is still current
-          if (currentLoadingSession.current !== loadingSessionId) {
-            console.log('Loading session cancelled due to new session starting')
-            return // Exit if a newer loading session has started
-          }
-
+        // Process all jobs in parallel for better performance
+        console.log('Fetching rounds from API in parallel for jobs:', selectedJobs.map(j => j.posting_title))
+        const startTime = performance.now()
+        
+        const jobPromises = selectedJobs.map(async (job) => {
           try {
-            let jobRoundsWithContext: MultiJobRoundTemplate[] = []
-
             // Fetch round templates for this job
-            console.log(`Fetching rounds from API for job: ${job.posting_title}`)
             const templatesResponse = await JobRoundTemplatesApi.getJobRoundTemplates(job.id)
             const rounds = templatesResponse.job_round_templates || []
 
             // Add job context to each round
-            jobRoundsWithContext = rounds.map(round => ({
+            const jobRoundsWithContext: MultiJobRoundTemplate[] = rounds.map(round => ({
               ...round,
               jobTitle: job.posting_title,
               jobId: job.id
             }))
 
-            allJobRounds.push(...jobRoundsWithContext)
-
-            // Only update progress if this session is still current
+            // Update progress as each job completes
             setLoadingProgress(prev => {
               if (currentLoadingSession.current === loadingSessionId) {
                 return { ...prev, completed: prev.completed + 1 }
               }
               return prev // Don't update if session changed
             })
+
+            return {
+              job,
+              rounds: jobRoundsWithContext,
+              success: true
+            }
           } catch (error) {
             console.error(`Failed to fetch rounds for job "${job.posting_title}":`, error)
-            // Only update progress if this session is still current
+            
+            // Update progress even on error
             setLoadingProgress(prev => {
               if (currentLoadingSession.current === loadingSessionId) {
                 return { ...prev, completed: prev.completed + 1 }
               }
               return prev // Don't update if session changed
             })
+
+            return {
+              job,
+              rounds: [],
+              success: false,
+              error
+            }
+          }
+        })
+
+        // Wait for all jobs to complete
+        const jobResults = await Promise.all(jobPromises)
+        const endTime = performance.now()
+        console.log(`Parallel job rounds fetch completed in ${Math.round(endTime - startTime)}ms for ${selectedJobs.length} jobs`)
+
+        // Check if this loading session is still current after all requests complete
+        if (currentLoadingSession.current !== loadingSessionId) {
+          console.log('Loading session cancelled after parallel fetch completion')
+          return // Exit if a newer loading session has started
+        }
+
+        // Aggregate results from all jobs
+        for (const jobResult of jobResults) {
+          if (jobResult.success) {
+            allJobRounds.push(...jobResult.rounds)
           }
         }
 
@@ -143,28 +175,35 @@ export function UnifiedRoundsView({
     fetchAllJobsRounds()
   }, [selectedJobs])
 
-  // Clear cache when switching to a different view
+  // Track previous viewId to detect actual view changes
+  const previousViewIdRef = useRef<string | null>(null)
+  
+  // Clear cache only when truly switching views (not during development/HMR)
   useEffect(() => {
-    // Import and clear cache when viewId changes (switching to a different view)
-    return () => {
-      // Cleanup function runs when component unmounts or viewId changes
-      if (viewId) {
-        console.log('Clearing API caches due to view change')
-        // Import dynamically to avoid circular dependencies
-        Promise.all([
-          import('@/lib/api/round-candidates').then(({ RoundCandidatesApi }) => {
-            RoundCandidatesApi.clearCache()
-          }),
-          import('@/lib/api/rounds').then(({ JobRoundTemplatesApi }) => {
-            JobRoundTemplatesApi.clearCache()
-          }),
-          import('@/lib/api/sparrow-assessment-mapping').then(({ clearSparrowAssessmentMappingCache }) => {
-            clearSparrowAssessmentMappingCache()
+    // Only clear cache when viewId actually changes (not on initial mount or HMR)
+    if (previousViewIdRef.current && previousViewIdRef.current !== viewId) {
+      console.log('🧹 [CACHE CLEANUP] View changed, clearing stale caches')
+      
+      // Clear caches only when switching between different views
+      if (typeof localStorage !== 'undefined') {
+        try {
+          const keys = Object.keys(localStorage)
+          keys.forEach(key => {
+            if (key.includes('ats_job_round_templates_cache') || 
+                key.includes('ats_round_candidates_cache') || 
+                key.includes('ats_sparrow_assessment_mapping_cache')) {
+              localStorage.removeItem(key)
+            }
           })
-        ])
+        } catch (error) {
+          console.warn('Cache cleanup failed:', error)
+        }
       }
     }
+    
+    previousViewIdRef.current = viewId || null
   }, [viewId])
+
 
   // Set current round when rounds are loaded
   useEffect(() => {
@@ -232,6 +271,17 @@ export function UnifiedRoundsView({
       }
     }
   }, [selectedJobIds, allRounds])
+
+  // Debug logging (only when data changes, not on every render)
+  useEffect(() => {
+    if (allRounds.length > 0) {
+      console.log('🔍 [FILTER DEBUG] UnifiedRoundsView filter state:', {
+        allRoundsCount: allRounds.length,
+        selectedJobIdsCount: selectedJobIds.size,
+        currentRoundId: currentRound?.id
+      })
+    }
+  }, [allRounds.length, selectedJobIds.size, currentRound?.id])
 
   // Navigation handlers (similar to RoundDetailsView)
   const handleStepClick = (index: number) => {
@@ -382,30 +432,6 @@ export function UnifiedRoundsView({
     round_type: currentRound.round_type
   } : null
 
-  // Debug logging
-  console.log('Filter Debug:', {
-    allRoundsCount: allRounds.length,
-    allRoundsJobIds: allRounds.map(r => ({ id: r.id, jobId: r.jobId, roundName: r.round_name })),
-    selectedJobIdsCount: selectedJobIds.size,
-    selectedJobIds: Array.from(selectedJobIds),
-    currentRoundId: currentRound?.id,
-    currentRoundJobId: currentRound?.jobId,
-    isCurrentRoundJobSelected: currentRound ? selectedJobIds.has(currentRound.jobId) : false,
-    filteredRoundsCount: filteredRoundsForStepper.length,
-    filteredRoundsJobIds: filteredRoundsForStepper.map(r => ({ id: r.id, jobId: r.jobId, roundName: r.round_name })),
-    currentRoundForContentId: currentRoundForContent?.id,
-    currentRoundForContentIsNull: currentRoundForContent === null,
-    roundsForStepperCount: roundsForStepper.length
-  })
-
-  // Additional debug: Check if jobIds match
-  if (allRounds.length > 0 && selectedJobIds.size > 0) {
-    console.log('JobId Matching Debug:', {
-      roundJobIds: allRounds.map(r => r.jobId),
-      selectedJobIds: Array.from(selectedJobIds),
-      matchingRounds: allRounds.filter(round => selectedJobIds.has(round.jobId)).map(r => ({ id: r.id, jobId: r.jobId, roundName: r.round_name }))
-    })
-  }
 
   return (
     <MultiJobProvider selectedJobs={selectedJobs} filteredJobIds={selectedJobIds}>

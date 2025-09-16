@@ -67,6 +67,7 @@ export function AppSidebar({
   const [jobs, setJobs] = useState<JobOpeningListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAllJobs, setShowAllJobs] = useState(false);
+  const [showAllViews, setShowAllViews] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false); // Start collapsed
   const [showText, setShowText] = useState(false);
@@ -260,16 +261,28 @@ export function AppSidebar({
       job.minimum_experience?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Reset showAllJobs when search query changes
+  // Filter views based on search query
+  const filteredViews = savedViews.filter(
+    (view) =>
+      view.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      view.description?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Reset showAllJobs and showAllViews when search query changes
   useEffect(() => {
     if (searchQuery) {
       setShowAllJobs(false);
+      setShowAllViews(false);
     }
   }, [searchQuery]);
 
   // Show first 3 jobs by default, or all when expanded
   const displayedJobs = showAllJobs ? filteredJobs : filteredJobs.slice(0, 3);
   const hasMoreJobs = filteredJobs.length > 3;
+
+  // Show first 3 views by default, or all when expanded
+  const displayedViews = showAllViews ? filteredViews : filteredViews.slice(0, 3);
+  const hasMoreViews = filteredViews.length > 3;
 
   // All Views handlers - simplified
   const handleAllViewsClick = () => {
@@ -333,7 +346,7 @@ export function AppSidebar({
                   <input
                     ref={searchInputRef}
                     type="text"
-                    placeholder="Search jobs..."
+                    placeholder="Search jobs and views..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full pl-10 pr-12 py-2.5 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
@@ -366,7 +379,7 @@ export function AppSidebar({
                   size="sm"
                   className="w-10 h-10 p-0 rounded-lg hover:bg-green-50 transition-colors"
                   onClick={handleSearchIconClick}
-                  title="Search jobs"
+                  title="Search jobs and views"
                 >
                   <Search className="w-5 h-5" style={{ color: "#6A6A6A" }} />
                 </Button>
@@ -394,6 +407,11 @@ export function AppSidebar({
                   hasMoreJobs={hasMoreJobs}
                   showAllJobs={showAllJobs}
                   setShowAllJobs={setShowAllJobs}
+                  displayedViews={displayedViews}
+                  hasMoreViews={hasMoreViews}
+                  showAllViews={showAllViews}
+                  setShowAllViews={setShowAllViews}
+                  filteredViews={filteredViews}
                   searchQuery={searchQuery}
                   mode={mode}
                   fontFamily={fontFamily}
@@ -531,6 +549,11 @@ const SidebarItem = ({
   hasMoreJobs,
   showAllJobs,
   setShowAllJobs,
+  displayedViews,
+  hasMoreViews,
+  showAllViews,
+  setShowAllViews,
+  filteredViews,
   searchQuery,
   mode,
   fontFamily,
@@ -552,6 +575,11 @@ const SidebarItem = ({
   hasMoreJobs: boolean;
   showAllJobs: boolean;
   setShowAllJobs: (show: boolean) => void;
+  displayedViews: any[];
+  hasMoreViews: boolean;
+  showAllViews: boolean;
+  setShowAllViews: (show: boolean) => void;
+  filteredViews: any[];
   searchQuery: string;
   mode: string;
   fontFamily: string;
@@ -745,47 +773,73 @@ const SidebarItem = ({
                 >
                   Loading views...
                 </div>
-              ) : savedViews.length > 0 ? (
-                savedViews.map((view) => {
-                  const isSelected = selectedViewId === view.id;
-                  return (
-                    <div
-                      key={view.id}
-                      className="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer text-sm transition-colors hover:bg-teal-50"
-                      style={{
-                        backgroundColor: isSelected ? "rgba(91, 164, 164, 0.1)" : "transparent",
-                        color: isSelected ? "#5BA4A4" : "#374151",
-                        fontSize: "14px",
-                        fontFamily,
-                        fontWeight: isSelected ? "500" : "400",
-                      }}
-                      onClick={() => {
-                        onSelectSavedView?.(view);
-                      }}
-                    >
-                      <div
-                        className="w-2 h-2 rounded-full border"
-                        style={{
-                          borderColor: isSelected ? "#5BA4A4" : "#9CA3AF",
-                          backgroundColor: isSelected ? "#5BA4A4" : "transparent",
-                        }}
-                      />
-                      <span className="truncate">{view.title}</span>
-                    </div>
-                  );
-                })
-              ) : (
+              ) : filteredViews.length === 0 ? (
                 <div
-                  className="flex items-center gap-2 px-3 py-2 text-sm"
+                  className="flex items-center px-3 py-2 text-sm"
                   style={{
                     color: "#6B7280",
                     fontSize: "14px",
                     fontFamily,
                   }}
                 >
-                  <Eye className="w-4 h-4" />
-                  <span>No views created yet</span>
+                  {searchQuery
+                    ? `No views found matching "${searchQuery}"`
+                    : "No views created yet"}
                 </div>
+              ) : (
+                <>
+                  <div
+                    className={`space-y-1 ${
+                      showAllViews ? "max-h-80 overflow-y-auto pr-2" : ""
+                    }`}
+                  >
+                    {displayedViews.map((view) => {
+                      const isSelected = selectedViewId === view.id;
+                      return (
+                        <div
+                          key={view.id}
+                          className="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer text-sm transition-colors hover:bg-teal-50"
+                          style={{
+                            backgroundColor: isSelected ? "rgba(91, 164, 164, 0.1)" : "transparent",
+                            color: isSelected ? "#5BA4A4" : "#374151",
+                            fontSize: "14px",
+                            fontFamily,
+                            fontWeight: isSelected ? "500" : "400",
+                          }}
+                          onClick={() => {
+                            onSelectSavedView?.(view);
+                          }}
+                        >
+                          <div
+                            className="w-2 h-2 rounded-full border"
+                            style={{
+                              borderColor: isSelected ? "#5BA4A4" : "#9CA3AF",
+                              backgroundColor: isSelected ? "#5BA4A4" : "transparent",
+                            }}
+                          />
+                          <span className="truncate">{view.title}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {hasMoreViews && (
+                    <div
+                      className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 rounded-lg mt-2"
+                      style={{
+                        color: "#6B7280",
+                        fontSize: "14px",
+                        fontFamily,
+                      }}
+                      onClick={() => setShowAllViews(!showAllViews)}
+                    >
+                      {showAllViews
+                        ? "Show less"
+                        : `See all ${filteredViews.length} views${
+                            searchQuery ? ` matching "${searchQuery}"` : ""
+                          }`}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}

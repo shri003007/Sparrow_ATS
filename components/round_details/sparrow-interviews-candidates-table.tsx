@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useMemo } from "react"
+import React, { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -20,9 +20,7 @@ import {
   MapPin,
   ThumbsUp,
   ThumbsDown,
-  Clock3,
-  Check,
-  X
+  Clock3
 } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import type { RoundCandidate, CustomFieldDefinition } from "@/lib/round-candidate-types"
@@ -30,7 +28,9 @@ import { CandidateEvaluationPanel } from "./candidate-evaluation-panel"
 import { useMultiJobContextSafe } from "@/components/all_views/multi-job-context"
 
 type RoundStatus = 'selected' | 'rejected' | 'action_pending'
+type RoundType = 'INTERVIEW' | 'RAPID_FIRE' | 'GAMES_ARENA' | 'TALK_ON_A_TOPIC'
 
+// Unified status configuration with sales labels for all round types
 const ROUND_STATUS_CONFIG = {
   selected: {
     label: 'Hire',
@@ -52,13 +52,13 @@ const ROUND_STATUS_CONFIG = {
   }
 } as const
 
-interface ModernRapidFireCandidatesTableProps {
+interface SparrowInterviewsCandidatesTableProps {
   candidates: RoundCandidate[]
   customFieldDefinitions: CustomFieldDefinition[]
   isLoading?: boolean
   roundInfo?: any
   jobOpeningId?: string
-  onStatusChange: (candidateId: string, status: RoundStatus) => void
+  onStatusChange?: (candidateId: string, newStatus: RoundStatus) => void
   onCandidateUpdated?: (candidate: RoundCandidate) => void
   sparrowRoundId?: string
   currentRoundName?: string
@@ -67,84 +67,70 @@ interface ModernRapidFireCandidatesTableProps {
     reEvaluationError: string | null
     showReEvaluationOptions: boolean
   }>
-  onReEvaluationStateChange?: (candidateId: string, state: {
-    isReEvaluating?: boolean
-    reEvaluationError?: string | null
-    showReEvaluationOptions?: boolean
-  }) => void
+  onReEvaluationStateChange?: (candidateId: string, state: any) => void
+  roundType: RoundType
+  candidateMappings?: Record<string, { primaryId: string; secondaryId: string; jobRoundTemplateId: string }>
+  defaultSecondaryId?: string
 }
 
-export function ModernRapidFireCandidatesTable({
-  candidates,
-  customFieldDefinitions,
+const sortingOptions = [
+  { value: "name", label: "Name" },
+  { value: "email", label: "Email" },
+  { value: "created_at", label: "Date Added" },
+  { value: "status", label: "Status" },
+  { value: "score", label: "Score" }
+]
+
+export function SparrowInterviewsCandidatesTable({ 
+  candidates, 
+  customFieldDefinitions, 
   isLoading = false,
   roundInfo,
   jobOpeningId,
-  onStatusChange,
+  onStatusChange = () => {},
   onCandidateUpdated = () => {},
-  sparrowRoundId = '',
-  currentRoundName = 'Rapid Fire Round',
+  sparrowRoundId,
+  currentRoundName,
   candidateReEvaluationStates = {},
-  onReEvaluationStateChange = () => {}
-}: ModernRapidFireCandidatesTableProps) {
+  onReEvaluationStateChange = () => {},
+  roundType,
+  candidateMappings = {},
+  defaultSecondaryId = 'surveysparrow'
+}: SparrowInterviewsCandidatesTableProps) {
   const fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
   const { isMultiJobMode } = useMultiJobContextSafe()
-
+  
+  const [localCandidates, setLocalCandidates] = useState<RoundCandidate[]>(candidates)
   const [selectedCandidate, setSelectedCandidate] = useState<RoundCandidate | null>(null)
   const [isPanelOpen, setIsPanelOpen] = useState(false)
-  const [sortOrder, setSortOrder] = useState<{[key: string]: 'asc' | 'desc'}>({})
-  const [localCandidates, setLocalCandidates] = useState<RoundCandidate[]>(candidates)
+  const [sortOrder, setSortOrder] = useState<{ [key: string]: 'asc' | 'desc' }>({
+    name: 'asc',
+    email: 'asc',
+    created_at: 'desc',
+    status: 'asc',
+    score: 'desc' // Default to descending for scores (highest first)
+  })
 
-  // Update local candidates when prop changes
-  React.useEffect(() => {
-    setLocalCandidates(candidates)
+  // Update local candidates when prop changes and sort by score by default
+  useEffect(() => {
+    if (candidates.length > 0) {
+      // Sort by score in descending order by default (highest scores first)
+      const sortedCandidates = [...candidates].sort((a, b) => {
+        const aScore = getCandidateScoreValue(a)
+        const bScore = getCandidateScoreValue(b)
+        return bScore - aScore // Descending order
+      })
+      setLocalCandidates(sortedCandidates)
+    } else {
+      setLocalCandidates(candidates)
+    }
   }, [candidates])
 
-  const truncateText = (text: string, maxLength: number) => {
-    if (text.length <= maxLength) return text
-    return text.substring(0, maxLength) + '...'
-  }
-
-  const handleSort = (field: string) => {
-    const newOrder = sortOrder[field] === 'asc' ? 'desc' : 'asc'
-    setSortOrder({ ...sortOrder, [field]: newOrder })
-    
-    const sorted = [...localCandidates].sort((a, b) => {
-      let aVal, bVal
-      
-      switch (field) {
-        case 'name':
-          aVal = a.name.toLowerCase()
-          bVal = b.name.toLowerCase()
-          break
-        case 'email':
-          aVal = a.email.toLowerCase()
-          bVal = b.email.toLowerCase()
-          break
-        case 'status':
-          aVal = getCandidateRoundStatus(a)
-          bVal = getCandidateRoundStatus(b)
-          break
-        default:
-          return 0
-      }
-      
-      if (newOrder === 'asc') {
-        return aVal < bVal ? -1 : aVal > bVal ? 1 : 0
-      } else {
-        return aVal > bVal ? -1 : aVal < bVal ? 1 : 0
-      }
-    })
-    
-    setLocalCandidates(sorted)
-  }
-
   const getCandidateRoundStatus = (candidate: RoundCandidate): RoundStatus => {
-    // Get status from candidate_rounds[0].status (API source) with fallback to round_status
     if (candidate.candidate_rounds && candidate.candidate_rounds.length > 0) {
-      return candidate.candidate_rounds[0].status as RoundStatus || 'action_pending'
+      return candidate.candidate_rounds[0].status as RoundStatus
     }
-    return candidate.round_status as RoundStatus || 'action_pending'
+    return candidate.round_status as RoundStatus
   }
 
   const getCustomFieldValue = (candidate: RoundCandidate, fieldId: string) => {
@@ -164,26 +150,36 @@ export function ModernRapidFireCandidatesTable({
     return '-'
   }
 
+  const getCandidateScoreValue = (candidate: RoundCandidate): number => {
+    if (candidate.candidate_rounds && candidate.candidate_rounds.length > 0) {
+      const evaluation = candidate.candidate_rounds[0].evaluations?.[0]
+      if (evaluation?.evaluation_result?.overall_percentage_score !== undefined && evaluation?.evaluation_result?.overall_percentage_score !== null) {
+        return evaluation.evaluation_result.overall_percentage_score
+      }
+    }
+    return -1 // Return -1 for candidates without scores so they appear at the bottom
+  }
+
   const openEvaluationPanel = (candidate: RoundCandidate) => {
     setSelectedCandidate(candidate)
     setIsPanelOpen(true)
   }
 
   const closeEvaluationPanel = () => {
-    setSelectedCandidate(null)
     setIsPanelOpen(false)
+    setSelectedCandidate(null)
   }
 
-  const handleStatusChange = (candidateId: string, status: RoundStatus) => {
-    // Update local candidates state immediately for UI responsiveness
+  const handleStatusChange = (candidateId: string, newStatus: RoundStatus) => {
+    // Update local candidates
     setLocalCandidates(prevCandidates => 
       prevCandidates.map(candidate => {
         if (candidate.id === candidateId) {
           const updatedCandidate = { ...candidate }
           if (updatedCandidate.candidate_rounds && updatedCandidate.candidate_rounds.length > 0) {
-            updatedCandidate.candidate_rounds[0].status = status
+            updatedCandidate.candidate_rounds[0].status = newStatus
           } else {
-            updatedCandidate.round_status = status
+            updatedCandidate.round_status = newStatus
           }
           return updatedCandidate
         }
@@ -195,61 +191,111 @@ export function ModernRapidFireCandidatesTable({
     if (selectedCandidate && selectedCandidate.id === candidateId) {
       const updatedCandidate = { ...selectedCandidate }
       if (updatedCandidate.candidate_rounds && updatedCandidate.candidate_rounds.length > 0) {
-        updatedCandidate.candidate_rounds[0].status = status
+        updatedCandidate.candidate_rounds[0].status = newStatus
       } else {
-        updatedCandidate.round_status = status
+        updatedCandidate.round_status = newStatus
       }
       setSelectedCandidate(updatedCandidate)
     }
 
-    // Notify parent component
-    onStatusChange(candidateId, status)
+    onStatusChange(candidateId, newStatus)
+  }
+
+  const handleSort = (column: string) => {
+    const currentOrder = sortOrder[column]
+    const newOrder = currentOrder === 'asc' ? 'desc' : 'asc'
+    
+    setSortOrder(prev => ({
+      ...prev,
+      [column]: newOrder
+    }))
+
+    // Sort candidates locally
+    const sorted = [...localCandidates].sort((a, b) => {
+      let aValue: any
+      let bValue: any
+
+      switch (column) {
+        case 'name':
+          aValue = a.name.toLowerCase()
+          bValue = b.name.toLowerCase()
+          break
+        case 'email':
+          aValue = a.email.toLowerCase()
+          bValue = b.email.toLowerCase()
+          break
+        case 'created_at':
+          aValue = new Date(a.created_at).getTime()
+          bValue = new Date(b.created_at).getTime()
+          break
+        case 'status':
+          aValue = getCandidateRoundStatus(a)
+          bValue = getCandidateRoundStatus(b)
+          break
+        case 'score':
+          aValue = getCandidateScoreValue(a)
+          bValue = getCandidateScoreValue(b)
+          break
+        default:
+          return 0
+      }
+
+      if (newOrder === 'asc') {
+        return aValue > bValue ? 1 : -1
+      } else {
+        return aValue < bValue ? 1 : -1
+      }
+    })
+
+    setLocalCandidates(sorted)
+  }
+
+  const truncateText = (text: string, maxLength: number) => {
+    return text.length > maxLength ? `${text.substring(0, maxLength)}...` : text
   }
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center p-8">
-        <Spinner className="w-8 h-8" />
+      <div className="flex items-center justify-center" style={{ height: "calc(100vh - 300px)" }}>
+        <Spinner />
       </div>
     )
   }
 
   if (localCandidates.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center p-8 text-center">
+      <div className="flex items-center justify-center flex-col" style={{ height: "calc(100vh - 300px)" }}>
         <Users className="w-12 h-12 text-gray-400 mb-4" />
-        <h3 className="text-lg font-medium text-gray-900 mb-2" style={{ fontFamily }}>
-          No candidates found
-        </h3>
-        <p className="text-gray-500" style={{ fontFamily }}>
-          No candidates have been added to this rapid fire round yet.
-        </p>
+        <div className="text-gray-500 mb-2" style={{ fontFamily }}>
+          No candidates found for this round
+        </div>
+        {roundInfo && (
+          <div className="text-sm text-gray-400" style={{ fontFamily }}>
+            {roundInfo.round_name} • Round {roundInfo.order_index}
+          </div>
+        )}
       </div>
     )
   }
 
   return (
     <>
-      <div 
-        className="w-full"
-        style={{ 
-          fontFamily,
-          backgroundColor: "#FFFFFF",
-          borderRadius: "8px",
-          overflow: "hidden",
-          maxHeight: "600px",
-          overflowY: "auto"
-        }}
-      >
-        {/* Table Header */}
-        <table className="w-full" style={{ borderCollapse: "separate", borderSpacing: 0 }}>
+      <div style={{ height: `calc(100vh - 262px)`, overflow: "auto", maxHeight: "600px" }}>
+        <table 
+          style={{ 
+            position: "relative",
+            width: "100%",
+            borderCollapse: "separate",
+            borderSpacing: 0
+          }}
+        >
+          {/* Sticky Header */}
           <thead
             style={{
-              backgroundColor: "#f6f7f8",
-              borderRadius: "8px",
               position: "sticky",
               top: 0,
-              zIndex: 11
+              zIndex: 11,
+              borderRadius: "8px"
             }}
           >
             <tr>
@@ -387,7 +433,20 @@ export function ModernRapidFireCandidatesTable({
                   minWidth: "120px"
                 }}
               >
-                Evaluation
+                <div className="flex items-center gap-2">
+                  Score
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0"
+                    onClick={() => handleSort('score')}
+                  >
+                    {sortOrder.score === 'asc' ? 
+                      <ChevronUp className="w-4 h-4" /> : 
+                      <ChevronDown className="w-4 h-4" />
+                    }
+                  </Button>
+                </div>
               </th>
               <th
                 style={{
@@ -560,25 +619,41 @@ export function ModernRapidFireCandidatesTable({
                     </DropdownMenu>
                   </td>
 
-                  {/* Evaluation Status */}
+                  {/* Score with Color Coding */}
                   <td style={{ minWidth: "120px", padding: "12px" }}>
-                    <div className="flex items-center">
-                      {candidate.candidate_rounds?.[0]?.is_evaluation ? (
-                        <div className="flex items-center gap-2">
-                          <Check className="w-4 h-4 text-green-600" />
-                          <span className="text-xs text-green-600 font-medium" style={{ fontFamily }}>
-                            Evaluated
-                          </span>
+                    {score !== '-' ? (
+                      <div className="flex items-center">
+                        <div
+                          className="px-2 py-1 rounded-full text-xs font-medium"
+                          style={{
+                            backgroundColor: (() => {
+                              const numScore = parseInt(score.replace('%', ''))
+                              if (numScore >= 80) return '#DCFCE7' // green-100
+                              if (numScore >= 60) return '#FEF3C7' // yellow-100  
+                              if (numScore >= 40) return '#FED7AA' // orange-100
+                              return '#FEE2E2' // red-100
+                            })(),
+                            color: (() => {
+                              const numScore = parseInt(score.replace('%', ''))
+                              if (numScore >= 80) return '#16A34A' // green-600
+                              if (numScore >= 60) return '#D97706' // yellow-600
+                              if (numScore >= 40) return '#EA580C' // orange-600
+                              return '#DC2626' // red-600
+                            })(),
+                            fontFamily
+                          }}
+                        >
+                          {score}
                         </div>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <X className="w-4 h-4 text-gray-400" />
-                          <span className="text-xs text-gray-400" style={{ fontFamily }}>
-                            Pending
-                          </span>
-                        </div>
-                      )}
-                    </div>
+                      </div>
+                    ) : (
+                      <div 
+                        className="text-sm text-gray-400"
+                        style={{ fontFamily }}
+                      >
+                        -
+                      </div>
+                    )}
                   </td>
 
                   {/* Contact */}
@@ -607,28 +682,51 @@ export function ModernRapidFireCandidatesTable({
         </table>
       </div>
 
-      {/* Candidate Evaluation Panel */}
-      {selectedCandidate && isPanelOpen && (
-        <CandidateEvaluationPanel
-          candidate={selectedCandidate}
-          isOpen={isPanelOpen}
-          onClose={closeEvaluationPanel}
-          roundType={roundInfo?.round_type || 'RAPID_FIRE'}
-          onStatusChange={handleStatusChange}
-          onCandidateUpdated={(updatedCandidate) => {
-            setLocalCandidates(prev =>
-              prev.map(candidate =>
-                candidate.id === updatedCandidate.id ? updatedCandidate : candidate
-              )
+      {/* Evaluation Panel */}
+      <CandidateEvaluationPanel
+        candidate={selectedCandidate}
+        isOpen={isPanelOpen}
+        onClose={closeEvaluationPanel}
+        roundType={roundType}
+        onStatusChange={handleStatusChange}
+        isEvaluating={false}
+        candidateReEvaluationStates={candidateReEvaluationStates}
+        onReEvaluationStateChange={onReEvaluationStateChange}
+        sparrowRoundId={(() => {
+          const candidateSpecificId = selectedCandidate ? (candidateMappings[selectedCandidate.id]?.primaryId || sparrowRoundId) : sparrowRoundId
+          if (selectedCandidate) {
+            console.log(`🎯 [EVAL PANEL] Using sparrowRoundId for candidate ${selectedCandidate.id}:`, {
+              candidateSpecificId,
+              fallbackId: sparrowRoundId,
+              isFromMapping: !!candidateMappings[selectedCandidate.id]?.primaryId
+            })
+          }
+          return candidateSpecificId
+        })()}
+        brandId={(() => {
+          const candidateSpecificBrandId = selectedCandidate ? (candidateMappings[selectedCandidate.id]?.secondaryId || defaultSecondaryId) : defaultSecondaryId
+          if (selectedCandidate) {
+            console.log(`🎯 [EVAL PANEL] Using brandId for candidate ${selectedCandidate.id}:`, {
+              candidateSpecificBrandId,
+              fallbackId: defaultSecondaryId,
+              isFromMapping: !!candidateMappings[selectedCandidate.id]?.secondaryId
+            })
+          }
+          return candidateSpecificBrandId
+        })()}
+        currentRoundName={currentRoundName || `${roundType} Round`}
+        onCandidateUpdated={(updatedCandidate) => {
+          setLocalCandidates(prev => 
+            prev.map(candidate => 
+              candidate.id === updatedCandidate.id ? updatedCandidate : candidate
             )
-            onCandidateUpdated(updatedCandidate)
-          }}
-          sparrowRoundId={sparrowRoundId}
-          currentRoundName={currentRoundName}
-          candidateReEvaluationStates={candidateReEvaluationStates}
-          onReEvaluationStateChange={onReEvaluationStateChange}
-        />
-      )}
+          )
+          if (selectedCandidate && selectedCandidate.id === updatedCandidate.id) {
+            setSelectedCandidate(updatedCandidate)
+          }
+          onCandidateUpdated(updatedCandidate)
+        }}
+      />
     </>
   )
 }

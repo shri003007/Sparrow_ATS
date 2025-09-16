@@ -1,4 +1,5 @@
 import { API_CONFIG } from '../config'
+import { apiDebugger } from '../utils/api-debug'
 
 export interface SparrowAssessmentMapping {
   id: number
@@ -21,6 +22,9 @@ export interface SparrowAssessmentMappingResponse {
 const CACHE_KEY = 'ats_sparrow_assessment_mapping_cache'
 const CACHE_EXPIRY_KEY = 'ats_sparrow_assessment_mapping_cache_expiry'
 const CACHE_DURATION = 30 * 60 * 1000 // 30 minutes
+
+// Request deduplication - prevent multiple simultaneous requests for the same template
+const pendingRequests = new Map<string, Promise<SparrowAssessmentMappingResponse>>()
 
 /**
  * Get cached sparrow assessment mapping data
@@ -88,25 +92,40 @@ export async function getSparrowAssessmentMapping(
   signal?: AbortSignal,
   forceRefresh: boolean = false
 ): Promise<SparrowAssessmentMappingResponse> {
+  const callId = `mapping-${jobRoundTemplateId}-${Date.now()}`
+  console.log(`🔵 [API CALL START] ${callId} - getSparrowAssessmentMapping(${jobRoundTemplateId}, forceRefresh: ${forceRefresh})`)
+  apiDebugger.logCall(callId, 'SparrowAssessmentMapping', 'request', undefined, { templateId: jobRoundTemplateId })
+  
+  // Check for pending request first (deduplication)
+  if (!forceRefresh && pendingRequests.has(jobRoundTemplateId)) {
+    console.log(`🟡 [PENDING REQUEST] ${callId} - Waiting for existing request for template: ${jobRoundTemplateId}`)
+    apiDebugger.logCall(callId, 'SparrowAssessmentMapping', 'cache', 0, { templateId: jobRoundTemplateId, reason: 'pending_request' })
+    return pendingRequests.get(jobRoundTemplateId)!
+  }
+  
   // Check cache first (unless force refresh is requested)
   if (!forceRefresh) {
     const cachedData = getCachedAssessmentMapping(jobRoundTemplateId)
     if (cachedData) {
-      console.log(`Using cached sparrow assessment mapping for template: ${jobRoundTemplateId}`)
+      console.log(`🟢 [CACHE HIT] ${callId} - Using cached sparrow assessment mapping for template: ${jobRoundTemplateId}`)
+      apiDebugger.logCall(callId, 'SparrowAssessmentMapping', 'cache', 0, { templateId: jobRoundTemplateId })
       return cachedData
     }
   } else {
-    console.log(`Force refreshing sparrow assessment mapping for template: ${jobRoundTemplateId}`)
+    console.log(`🟡 [FORCE REFRESH] ${callId} - Force refreshing sparrow assessment mapping for template: ${jobRoundTemplateId}`)
   }
 
-  try {
-    // Check if API URL is configured
-    if (!API_CONFIG.CANDIDATES_BASE_URL) {
-      throw new Error('CANDIDATES_BASE_URL is not configured in environment variables')
-    }
+  // Create and store the promise to prevent duplicate requests
+  const requestPromise = (async (): Promise<SparrowAssessmentMappingResponse> => {
+    try {
+      // Check if API URL is configured
+      if (!API_CONFIG.CANDIDATES_BASE_URL) {
+        throw new Error('CANDIDATES_BASE_URL is not configured in environment variables')
+      }
 
-    console.log(`Fetching sparrow assessment mapping from API for template: ${jobRoundTemplateId}`)
-    const url = `${API_CONFIG.CANDIDATES_BASE_URL}/sparrow-assessment-mapping/job-round-template/${jobRoundTemplateId}`
+      console.log(`🔴 [API REQUEST] ${callId} - Fetching sparrow assessment mapping from API for template: ${jobRoundTemplateId}`)
+      const startTime = performance.now()
+      const url = `${API_CONFIG.CANDIDATES_BASE_URL}/sparrow-assessment-mapping/job-round-template/${jobRoundTemplateId}`
 
     const response = await fetch(url, {
       method: 'GET',
@@ -121,17 +140,37 @@ export async function getSparrowAssessmentMapping(
       throw new Error(`Failed to fetch sparrow assessment mapping: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ''}`)
     }
 
-    const data = await response.json() as SparrowAssessmentMappingResponse
-    
-    // Cache the data for future use
-    setCachedAssessmentMapping(jobRoundTemplateId, data)
-    
-    return data
-  } catch (error: any) {
-    // Don't log AbortErrors as they're expected during navigation
-    if (error.name !== 'AbortError') {
-      console.error('Error fetching sparrow assessment mapping:', error)
+      const data = await response.json() as SparrowAssessmentMappingResponse
+      const endTime = performance.now()
+      
+      console.log(`✅ [API SUCCESS] ${callId} - Sparrow assessment mapping fetched in ${Math.round(endTime - startTime)}ms, found ${data.mappings?.length || 0} mappings`)
+      apiDebugger.logCall(callId, 'SparrowAssessmentMapping', 'success', endTime - startTime, { templateId: jobRoundTemplateId, mappingsCount: data.mappings?.length || 0 })
+      
+      // Cache the data for future use
+      setCachedAssessmentMapping(jobRoundTemplateId, data)
+      
+      return data
+    } catch (error: any) {
+      // Don't log AbortErrors as they're expected during navigation
+      if (error.name !== 'AbortError') {
+        console.error(`❌ [API ERROR] ${callId} - Error fetching sparrow assessment mapping:`, error)
+        apiDebugger.logCall(callId, 'SparrowAssessmentMapping', 'error', undefined, { templateId: jobRoundTemplateId, error: error instanceof Error ? error.message : 'Unknown error' })
+      } else {
+        console.log(`🟠 [API ABORTED] ${callId} - Request was aborted (expected during navigation)`)
+        apiDebugger.logCall(callId, 'SparrowAssessmentMapping', 'aborted', undefined, { templateId: jobRoundTemplateId })
+      }
+      throw error
     }
-    throw error
+  })()
+
+  // Store the promise to prevent duplicate requests
+  pendingRequests.set(jobRoundTemplateId, requestPromise)
+
+  try {
+    const result = await requestPromise
+    return result
+  } finally {
+    // Clean up the pending request
+    pendingRequests.delete(jobRoundTemplateId)
   }
 }

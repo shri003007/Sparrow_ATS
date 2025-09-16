@@ -99,6 +99,15 @@ export interface CandidateApiResponse {
   notes: string | null
   created_at: string
   updated_at: string
+  overall_evaluation?: {
+    round_scores: Record<string, {
+      order: number
+      score: number
+      round_name: string
+      round_type: string
+    }>
+    overall_score: number
+  }
 }
 
 export interface CandidatesByJobResponse {
@@ -131,6 +140,7 @@ export interface CandidateDisplay {
   source: string | null
   notes: string | null
   created_at: string
+  overall_score?: number // Overall evaluation score from rounds
   custom_field_values?: Array<{
     id: string
     field_value: string

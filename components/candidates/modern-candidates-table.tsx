@@ -40,18 +40,31 @@ const STATUS_CONFIG = {
 interface ModernCandidatesTableProps {
   candidates: CandidateDisplay[]
   onStatusChange: (candidateId: string, newStatus: CandidateUIStatus) => void
+  hasRoundsStarted?: boolean
 }
 
-export function ModernCandidatesTable({ candidates, onStatusChange }: ModernCandidatesTableProps) {
+export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsStarted = false }: ModernCandidatesTableProps) {
   const fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
 
-  const [sortOrder, setSortOrder] = useState<{[key: string]: 'asc' | 'desc'}>({})
+  const [sortOrder, setSortOrder] = useState<{[key: string]: 'asc' | 'desc'}>({
+    score: 'desc' // Default to descending for scores (highest first)
+  })
   const [localCandidates, setLocalCandidates] = useState<CandidateDisplay[]>(candidates)
 
-  // Update local candidates when prop changes
+  // Update local candidates when prop changes and sort by score by default when rounds started
   React.useEffect(() => {
-    setLocalCandidates(candidates)
-  }, [candidates])
+    if (hasRoundsStarted && candidates.length > 0) {
+      // Sort by score in descending order by default (highest scores first)
+      const sortedCandidates = [...candidates].sort((a, b) => {
+        const aScore = a.overall_score ?? -1
+        const bScore = b.overall_score ?? -1
+        return bScore - aScore // Descending order
+      })
+      setLocalCandidates(sortedCandidates)
+    } else {
+      setLocalCandidates(candidates)
+    }
+  }, [candidates, hasRoundsStarted])
 
   const truncateText = (text: string, maxLength: number) => {
     if (text.length <= maxLength) return text
@@ -77,6 +90,10 @@ export function ModernCandidatesTable({ candidates, onStatusChange }: ModernCand
         case 'status':
           aVal = a.status
           bVal = b.status
+          break
+        case 'score':
+          aVal = a.overall_score ?? -1
+          bVal = b.overall_score ?? -1
           break
         default:
           return 0
@@ -260,6 +277,39 @@ export function ModernCandidatesTable({ candidates, onStatusChange }: ModernCand
                 </Button>
               </div>
             </th>
+            {/* Score Column - Only show when rounds have started */}
+            {hasRoundsStarted && (
+              <th
+                style={{
+                  background: "#f6f7f8",
+                  borderBottom: "none",
+                  height: "48px",
+                  fontSize: "12px",
+                  color: "#6B7280",
+                  padding: "8px 16px",
+                  fontWeight: "500",
+                  verticalAlign: "center",
+                  fontFamily,
+                  textAlign: "left",
+                  minWidth: "120px"
+                }}
+              >
+                <div className="flex items-center gap-2">
+                  Score
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0"
+                    onClick={() => handleSort('score')}
+                  >
+                    {sortOrder.score === 'asc' ? 
+                      <ChevronUp className="w-4 h-4" /> : 
+                      <ChevronDown className="w-4 h-4" />
+                    }
+                  </Button>
+                </div>
+              </th>
+            )}
             <th
               style={{
                 background: "#f6f7f8",
@@ -408,6 +458,45 @@ export function ModernCandidatesTable({ candidates, onStatusChange }: ModernCand
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </td>
+
+                {/* Score - Only show when rounds have started */}
+                {hasRoundsStarted && (
+                  <td style={{ minWidth: "120px", padding: "12px" }}>
+                    {candidate.overall_score !== undefined && candidate.overall_score !== null ? (
+                      <div className="flex items-center">
+                        <div
+                          className="px-2 py-1 rounded-full text-xs font-medium"
+                          style={{
+                            backgroundColor: (() => {
+                              const score = candidate.overall_score
+                              if (score >= 80) return '#DCFCE7' // green-100
+                              if (score >= 60) return '#FEF3C7' // yellow-100  
+                              if (score >= 40) return '#FED7AA' // orange-100
+                              return '#FEE2E2' // red-100
+                            })(),
+                            color: (() => {
+                              const score = candidate.overall_score
+                              if (score >= 80) return '#16A34A' // green-600
+                              if (score >= 60) return '#D97706' // yellow-600
+                              if (score >= 40) return '#EA580C' // orange-600
+                              return '#DC2626' // red-600
+                            })(),
+                            fontFamily
+                          }}
+                        >
+                          {Math.round(candidate.overall_score)}%
+                        </div>
+                      </div>
+                    ) : (
+                      <div 
+                        className="text-sm text-gray-400"
+                        style={{ fontFamily }}
+                      >
+                        -
+                      </div>
+                    )}
+                  </td>
+                )}
 
                 {/* Contact */}
                 <td style={{ minWidth: "140px", padding: "12px" }}>

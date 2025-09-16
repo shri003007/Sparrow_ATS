@@ -1,4 +1,4 @@
-import { config } from '../config'
+import { API_CONFIG } from '../config'
 
 export interface SparrowAssessmentResponse {
   status: string
@@ -58,14 +58,19 @@ export async function getSparrowAssessmentData(
   try {
     console.log(`Fetching sparrow assessment data for email: ${userEmail}, assessmentId: ${assessmentId}`)
     
-    const response = await fetch('https://kl85uizp68.execute-api.us-west-2.amazonaws.com/api/get-answers', {
+    if (!API_CONFIG.GET_ANSWERS_API_URL) {
+      throw new Error('GET_ANSWERS_API_URL is not configured. Please set NEXT_PUBLIC_GET_ANSWERS in your environment variables.')
+    }
+    
+    const response = await fetch(API_CONFIG.GET_ANSWERS_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         user_email: userEmail,
-        assessment_id: assessmentId
+        assessment_id: assessmentId,
+        devpass: "Sparrow123"
       })
     })
 

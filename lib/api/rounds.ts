@@ -1,4 +1,5 @@
 import { API_CONFIG } from '@/lib/config'
+import { apiDebugger } from '@/lib/utils/api-debug'
 import type {
   JobRoundTemplatesResponse,
   BulkCandidateRoundStatusRequest,
@@ -83,19 +84,25 @@ export class JobRoundTemplatesApi {
    * Get round templates for a specific job opening with caching
    */
   static async getJobRoundTemplates(jobOpeningId: string, forceRefresh: boolean = false): Promise<JobRoundTemplatesResponse> {
+    const callId = `rounds-${jobOpeningId}-${Date.now()}`
+    console.log(`🔵 [API CALL START] ${callId} - JobRoundTemplatesApi.getJobRoundTemplates(${jobOpeningId}, forceRefresh: ${forceRefresh})`)
+    apiDebugger.logCall(callId, 'JobRoundTemplates', 'request', undefined, { jobId: jobOpeningId })
+    
     // Check cache first (unless force refresh is requested)
     if (!forceRefresh) {
       const cachedData = this.getCachedData(jobOpeningId)
       if (cachedData) {
-        console.log(`Using cached job round templates for job: ${jobOpeningId}`)
+        console.log(`🟢 [CACHE HIT] ${callId} - Using cached job round templates for job: ${jobOpeningId}`)
+        apiDebugger.logCall(callId, 'JobRoundTemplates', 'cache', 0, { jobId: jobOpeningId })
         return cachedData
       }
     } else {
-      console.log(`Force refreshing job round templates for job: ${jobOpeningId}`)
+      console.log(`🟡 [FORCE REFRESH] ${callId} - Force refreshing job round templates for job: ${jobOpeningId}`)
     }
 
     try {
-      console.log(`Fetching job round templates from API for job: ${jobOpeningId}`)
+      console.log(`🔴 [API REQUEST] ${callId} - Fetching job round templates from API for job: ${jobOpeningId}`)
+      const startTime = performance.now()
       const url = `${this.baseUrl}${API_CONFIG.ENDPOINTS.JOB_ROUND_TEMPLATES_GET}/${jobOpeningId}/round-templates`
       const response = await fetch(url, {
         method: 'GET',
@@ -109,13 +116,18 @@ export class JobRoundTemplatesApi {
       }
 
       const data = await response.json() as JobRoundTemplatesResponse
+      const endTime = performance.now()
+      
+      console.log(`✅ [API SUCCESS] ${callId} - Job round templates fetched in ${Math.round(endTime - startTime)}ms, found ${data.job_round_templates?.length || 0} rounds`)
+      apiDebugger.logCall(callId, 'JobRoundTemplates', 'success', endTime - startTime, { jobId: jobOpeningId, roundsCount: data.job_round_templates?.length || 0 })
       
       // Cache the data for future use
       this.setCachedData(jobOpeningId, data)
       
       return data
     } catch (error) {
-      console.error('Error fetching job round templates:', error)
+      console.error(`❌ [API ERROR] ${callId} - Error fetching job round templates:`, error)
+      apiDebugger.logCall(callId, 'JobRoundTemplates', 'error', undefined, { jobId: jobOpeningId, error: error instanceof Error ? error.message : 'Unknown error' })
       throw error
     }
   }

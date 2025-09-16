@@ -69,19 +69,23 @@ export class RoundCandidatesApi {
    * Get candidates by job round template ID with caching
    */
   static async getCandidatesByRoundTemplate(jobRoundTemplateId: string, signal?: AbortSignal, forceRefresh: boolean = false): Promise<RoundCandidateResponse> {
+    const callId = `candidates-${jobRoundTemplateId}-${Date.now()}`
+    console.log(`🔵 [API CALL START] ${callId} - RoundCandidatesApi.getCandidatesByRoundTemplate(${jobRoundTemplateId}, forceRefresh: ${forceRefresh})`)
+    
     // Check cache first (unless force refresh is requested)
     if (!forceRefresh) {
       const cachedData = this.getCachedData(jobRoundTemplateId)
       if (cachedData) {
-        console.log(`Using cached round candidates for template: ${jobRoundTemplateId}`)
+        console.log(`🟢 [CACHE HIT] ${callId} - Using cached round candidates for template: ${jobRoundTemplateId}`)
         return cachedData
       }
     } else {
-      console.log(`Force refreshing round candidates for template: ${jobRoundTemplateId}`)
+      console.log(`🟡 [FORCE REFRESH] ${callId} - Force refreshing round candidates for template: ${jobRoundTemplateId}`)
     }
 
     try {
-      console.log(`Fetching round candidates from API for template: ${jobRoundTemplateId}`)
+      console.log(`🔴 [API REQUEST] ${callId} - Fetching round candidates from API for template: ${jobRoundTemplateId}`)
+      const startTime = performance.now()
       const url = `${API_CONFIG.CANDIDATES_BASE_URL}/candidates/by-job-round-template/${jobRoundTemplateId}`
       
       const response = await fetch(url, {
@@ -97,6 +101,9 @@ export class RoundCandidatesApi {
       }
 
       const data = await response.json() as RoundCandidateResponse
+      const endTime = performance.now()
+      
+      console.log(`✅ [API SUCCESS] ${callId} - Round candidates fetched in ${Math.round(endTime - startTime)}ms, found ${data.candidates?.length || 0} candidates`)
       
       // Cache the data for future use
       this.setCachedData(jobRoundTemplateId, data)
@@ -105,7 +112,9 @@ export class RoundCandidatesApi {
     } catch (error: any) {
       // Don't log AbortErrors as they're expected during navigation
       if (error.name !== 'AbortError') {
-        console.error('Error fetching round candidates:', error)
+        console.error(`❌ [API ERROR] ${callId} - Error fetching round candidates:`, error)
+      } else {
+        console.log(`🟠 [API ABORTED] ${callId} - Request was aborted (expected during navigation)`)
       }
       throw error
     }

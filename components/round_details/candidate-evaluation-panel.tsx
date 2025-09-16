@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import { X, ChevronDown, Check, AlertCircle, Mail, Phone, Settings, Calendar, FileText, Award, Upload, Loader2, MessageSquare } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -45,7 +45,7 @@ const ROUND_STATUS_CONFIG = {
     bgColor: '#DCFCE7'
   },
   rejected: {
-    label: 'Reject', 
+    label: 'No Hire', 
     color: '#EF4444',
     bgColor: '#FEE2E2'
   },
@@ -77,6 +77,8 @@ interface CandidateEvaluationPanelProps {
   }) => void
   // Sparrow Interviewer round ID
   sparrowRoundId?: string
+  // Brand ID for sales rounds
+  brandId?: string
   // Current round name for fallback mapping
   currentRoundName?: string
 }
@@ -92,6 +94,7 @@ export function CandidateEvaluationPanel({
   candidateReEvaluationStates = {},
   onReEvaluationStateChange = () => {},
   sparrowRoundId = '',
+  brandId = 'surveysparrow',
   currentRoundName = ''
 }: CandidateEvaluationPanelProps) {
   const [selectedCompetency, setSelectedCompetency] = useState<string>('')
@@ -109,7 +112,12 @@ export function CandidateEvaluationPanel({
   
   // Sparrow assessment mapping states
   const [assessmentMapping, setAssessmentMapping] = useState<SparrowAssessmentMappingResponse | null>(null)
-  const [brandId, setBrandId] = useState<string>('surveysparrow')
+  const [internalBrandId, setInternalBrandId] = useState<string>(brandId)
+  
+  // Update internal brandId when prop changes
+  useEffect(() => {
+    setInternalBrandId(brandId)
+  }, [brandId])
   
   // Sales evaluation states
   const [loadingSalesEvaluation, setLoadingSalesEvaluation] = useState<boolean>(false)
@@ -177,7 +185,7 @@ export function CandidateEvaluationPanel({
 
   // Set default brand_id since we're removing the problematic assessment mapping call
   React.useEffect(() => {
-    setBrandId('surveysparrow') // Use default brand_id
+    setInternalBrandId('surveysparrow') // Use default brand_id
     setAssessmentMapping(null) // Clear any existing mapping
   }, [sparrowRoundId])
 
@@ -462,7 +470,7 @@ export function CandidateEvaluationPanel({
   }
 
   // Sales evaluation handler
-  const handleSalesEvaluation = async (assessmentId: string, brandId: string = 'surveysparrow', isReEvaluation = false) => {
+  const handleSalesEvaluation = async (assessmentId: string, brandIdParam: string = 'surveysparrow', isReEvaluation = false) => {
     if (!assessmentId || assessmentId.trim() === '') {
       const errorMessage = 'No assessment ID provided. Please configure assessment ID in round settings.'
       if (isReEvaluation) {
@@ -508,7 +516,7 @@ export function CandidateEvaluationPanel({
         sparrow_assessment_id: assessmentId,
         candidate_round_id: candidate.candidate_rounds[0].id,
         account_id: 'salesai',
-        brand_id: brandId
+        brand_id: brandIdParam
       }
 
       const result = await evaluateSalesCandidate(
@@ -900,7 +908,7 @@ export function CandidateEvaluationPanel({
                           </p>
                           
                           <Button 
-                            onClick={() => handleSalesEvaluation(sparrowRoundId || '', brandId, true)}
+                            onClick={() => handleSalesEvaluation(sparrowRoundId || '', internalBrandId, true)}
                             disabled={isReEvaluating || !sparrowRoundId || sparrowRoundId.trim() === ''}
                             className="w-full"
                             style={{
@@ -1434,7 +1442,7 @@ export function CandidateEvaluationPanel({
                               </p>
                               
                               <Button 
-                                onClick={() => handleSalesEvaluation(sparrowRoundId || '', brandId)}
+                                onClick={() => handleSalesEvaluation(sparrowRoundId || '', internalBrandId)}
                                 disabled={loadingSalesEvaluation || !sparrowRoundId || sparrowRoundId.trim() === ''}
                                 className="w-full"
                                 style={{

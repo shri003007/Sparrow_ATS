@@ -879,7 +879,8 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
         ) : (
           <ModernCandidatesTable 
             candidates={candidates} 
-            onStatusChange={handleStatusChange} 
+            onStatusChange={handleStatusChange}
+            hasRoundsStarted={job?.has_rounds_started || false}
           />
         )}
       </div>
