@@ -79,7 +79,6 @@ export function CSVImportFlow({
 
   const handleUploadResumes = () => {
     // TODO: Implement resume upload flow
-    console.log('Resume upload not implemented yet')
   }
 
   const handleManualEntry = () => {
@@ -172,8 +171,6 @@ export function CSVImportFlow({
     setCurrentStep('matching')
 
     // Debug logging for field mappings
-    console.log('🗺️ CSV Field mappings:', mappings)
-    console.log('🔧 Custom fields available:', customFields)
 
     // Simulate matching delay
     setTimeout(() => {

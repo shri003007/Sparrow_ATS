@@ -6,6 +6,7 @@ import type {
   CandidateBulkCreateRequest,
   CandidateBulkCreateResponse
 } from '@/lib/candidate-types'
+import { authenticatedApiService } from './authenticated-api-service'
 
 export class CandidatesApi {
   private static baseUrl = API_CONFIG.CANDIDATES_BASE_URL
@@ -16,12 +17,7 @@ export class CandidatesApi {
   static async getCandidatesByJob(jobOpeningId: string): Promise<CandidatesByJobResponse> {
     try {
       const url = `${this.baseUrl}${API_CONFIG.ENDPOINTS.CANDIDATES_BY_JOB}/${jobOpeningId}`
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
+      const response = await authenticatedApiService.get(url)
 
       if (!response.ok) {
         throw new Error(`Failed to fetch candidates: ${response.status}`)
@@ -40,13 +36,7 @@ export class CandidatesApi {
   static async createCandidate(candidateData: CandidateCreateRequest): Promise<CandidateCreateResponse> {
     try {
       const url = `${this.baseUrl}${API_CONFIG.ENDPOINTS.CANDIDATE_CREATE}`
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(candidateData),
-      })
+      const response = await authenticatedApiService.post(url, candidateData)
 
       if (!response.ok) {
         throw new Error(`Failed to create candidate: ${response.status}`)
@@ -65,13 +55,7 @@ export class CandidatesApi {
   static async createCandidatesBulk(candidatesData: CandidateBulkCreateRequest): Promise<CandidateBulkCreateResponse> {
     try {
       const url = `${this.baseUrl}${API_CONFIG.ENDPOINTS.CANDIDATES_BULK_CREATE}`
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(candidatesData),
-      })
+      const response = await authenticatedApiService.post(url, candidatesData)
 
       // For bulk operations, we want to handle partial successes
       // The API might return 400 for validation errors but still process some candidates

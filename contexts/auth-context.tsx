@@ -12,6 +12,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import { toast } from '@/hooks/use-toast'
 import { clarityService } from '@/lib/clarity'
 import { UsersApi, type User as ApiUser } from '@/lib/api/users'
+import { authenticatedApiService } from '@/lib/api/authenticated-api-service'
 
 interface AuthContextType {
   user: User | null
@@ -87,6 +88,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const token = await user.getIdToken()
           localStorage.setItem('auth-token', token)
           
+          // Update API service with new token
+          authenticatedApiService.setIdToken(token)
+          
           // Set up API user (check existence and create if needed)
           const apiUserData = await handleApiUserSetup(user)
           setApiUser(apiUserData)
@@ -108,6 +112,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(null)
           setApiUser(null)
           localStorage.removeItem('auth-token')
+          
+          // Clear API service token
+          authenticatedApiService.clearToken()
           
           // Clear all user-specific localStorage data when user becomes null
           // This handles cases where auth state changes without explicit logout
@@ -143,6 +150,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         const token = await result.user.getIdToken()
         localStorage.setItem('auth-token', token)
+        
+        // Update API service with new token
+        authenticatedApiService.setIdToken(token)
         
         // Set up API user (check existence and create if needed)
         const apiUserData = await handleApiUserSetup(result.user)
@@ -180,6 +190,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await signOut(auth)
       localStorage.removeItem('auth-token')
       setApiUser(null)
+      
+      // Clear API service token
+      authenticatedApiService.clearToken()
       
       // Clear user identification in Clarity
       clarityService.identifyUser(null)

@@ -1,5 +1,6 @@
 import { API_CONFIG } from '@/lib/config'
 import type { JobOpeningListItem } from '@/lib/job-types'
+import { authenticatedApiService } from './authenticated-api-service'
 
 export interface AllView {
   id: string
@@ -48,12 +49,7 @@ export class AllViewsApi {
       }
 
       const url = `${this.baseUrl}/all-views/user/${userId}`
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
+      const response = await authenticatedApiService.get(url)
 
       if (!response.ok) {
         throw new Error(`Failed to fetch all views: ${response.status}`)
@@ -76,12 +72,7 @@ export class AllViewsApi {
       }
 
       const url = `${this.baseUrl}/all-views`
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
+      const response = await authenticatedApiService.get(url)
 
       if (!response.ok) {
         throw new Error(`Failed to fetch all views: ${response.status}`)
@@ -103,13 +94,7 @@ export class AllViewsApi {
         throw new Error('All Views API URL not configured. Please set NEXT_PUBLIC_ALL_VIEWS_API_URL in your environment variables.')
       }
 
-      const response = await fetch(`${this.baseUrl}/all-views`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      })
+      const response = await authenticatedApiService.post(`${this.baseUrl}/all-views`, data)
 
       if (!response.ok) {
         const errorData = await response.text()

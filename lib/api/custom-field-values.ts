@@ -1,4 +1,5 @@
 import type { CandidateCustomFieldDefinition } from '@/lib/custom-field-types'
+import { authenticatedApiService } from './authenticated-api-service'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_CANDIDATES_API_BASE_URL 
 
@@ -89,13 +90,7 @@ export class CustomFieldValuesApi {
     candidateId: string
   ): Promise<CandidateCustomFieldValue[]> {
     try {
-      const response = await fetch(`${API_BASE_URL}/custom-field-values/candidate/${candidateId}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          // Add any required authentication headers here
-        }
-      })
+      const response = await authenticatedApiService.get(`${API_BASE_URL}/custom-field-values/candidate/${candidateId}`)
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
@@ -117,21 +112,7 @@ export class CustomFieldValuesApi {
     request: BulkUpsertRequest
   ): Promise<BulkUpsertResponse> {
     try {
-      // Debug logging
-      console.log('🚀 Custom Field Values Bulk Upsert URL:', `${API_BASE_URL}/custom-field-values/bulk-upsert`)
-      console.log('🚀 Custom Field Values Bulk Upsert Body:', JSON.stringify(request, null, 2))
-
-      const response = await fetch(`${API_BASE_URL}/custom-field-values/bulk-upsert`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // Add any required authentication headers here
-        },
-        body: JSON.stringify(request)
-      })
-
-      // Log response details
-      console.log('🚀 Custom Field Values API Response Status:', response.status)
+      const response = await authenticatedApiService.post(`${API_BASE_URL}/custom-field-values/bulk-upsert`, request)
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
@@ -139,7 +120,6 @@ export class CustomFieldValuesApi {
       }
 
       const data: BulkUpsertResponse = await response.json()
-      console.log('🚀 Custom Field Values API Response:', data)
       
       return data
     } catch (error) {
@@ -155,21 +135,7 @@ export class CustomFieldValuesApi {
     request: BulkCandidatesUpsertRequest
   ): Promise<BulkCandidatesUpsertResponse> {
     try {
-      // Debug logging
-      console.log('🚀 Bulk Candidates Custom Field Values URL:', `${API_BASE_URL}/custom-field-values/bulk-candidates-upsert`)
-      console.log('🚀 Bulk Candidates Custom Field Values Body:', JSON.stringify(request, null, 2))
-
-      const response = await fetch(`${API_BASE_URL}/custom-field-values/bulk-candidates-upsert`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // Add any required authentication headers here
-        },
-        body: JSON.stringify(request)
-      })
-
-      // Log response details
-      console.log('🚀 Bulk Candidates Custom Field Values Response Status:', response.status)
+      const response = await authenticatedApiService.post(`${API_BASE_URL}/custom-field-values/bulk-candidates-upsert`, request)
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
@@ -177,7 +143,6 @@ export class CustomFieldValuesApi {
       }
 
       const data: BulkCandidatesUpsertResponse = await response.json()
-      console.log('🚀 Bulk Candidates Custom Field Values Response:', data)
       
       return data
     } catch (error) {

@@ -1,5 +1,6 @@
 import { API_CONFIG } from '@/lib/config'
 import { apiDebugger } from '@/lib/utils/api-debug'
+import { authenticatedApiService } from './authenticated-api-service'
 import type {
   JobRoundTemplatesResponse,
   BulkCandidateRoundStatusRequest,
@@ -85,31 +86,22 @@ export class JobRoundTemplatesApi {
    */
   static async getJobRoundTemplates(jobOpeningId: string, forceRefresh: boolean = false): Promise<JobRoundTemplatesResponse> {
     const callId = `rounds-${jobOpeningId}-${Date.now()}`
-    console.log(`🔵 [API CALL START] ${callId} - JobRoundTemplatesApi.getJobRoundTemplates(${jobOpeningId}, forceRefresh: ${forceRefresh})`)
     apiDebugger.logCall(callId, 'JobRoundTemplates', 'request', undefined, { jobId: jobOpeningId })
     
     // Check cache first (unless force refresh is requested)
     if (!forceRefresh) {
       const cachedData = this.getCachedData(jobOpeningId)
       if (cachedData) {
-        console.log(`🟢 [CACHE HIT] ${callId} - Using cached job round templates for job: ${jobOpeningId}`)
         apiDebugger.logCall(callId, 'JobRoundTemplates', 'cache', 0, { jobId: jobOpeningId })
         return cachedData
       }
     } else {
-      console.log(`🟡 [FORCE REFRESH] ${callId} - Force refreshing job round templates for job: ${jobOpeningId}`)
     }
 
     try {
-      console.log(`🔴 [API REQUEST] ${callId} - Fetching job round templates from API for job: ${jobOpeningId}`)
       const startTime = performance.now()
       const url = `${this.baseUrl}${API_CONFIG.ENDPOINTS.JOB_ROUND_TEMPLATES_GET}/${jobOpeningId}/round-templates`
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
+      const response = await authenticatedApiService.get(url)
 
       if (!response.ok) {
         throw new Error(`Failed to fetch job round templates: ${response.status}`)
@@ -118,7 +110,6 @@ export class JobRoundTemplatesApi {
       const data = await response.json() as JobRoundTemplatesResponse
       const endTime = performance.now()
       
-      console.log(`✅ [API SUCCESS] ${callId} - Job round templates fetched in ${Math.round(endTime - startTime)}ms, found ${data.job_round_templates?.length || 0} rounds`)
       apiDebugger.logCall(callId, 'JobRoundTemplates', 'success', endTime - startTime, { jobId: jobOpeningId, roundsCount: data.job_round_templates?.length || 0 })
       
       // Cache the data for future use
@@ -138,12 +129,7 @@ export class JobRoundTemplatesApi {
   static async startRounds(jobOpeningId: string): Promise<StartRoundsResponse> {
     try {
       const url = `${this.baseUrl}${API_CONFIG.ENDPOINTS.START_ROUNDS}/${jobOpeningId}/start-rounds`
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
+      const response = await authenticatedApiService.post(url)
 
       if (!response.ok) {
         throw new Error(`Failed to start rounds: ${response.status}`)
@@ -162,12 +148,7 @@ export class JobRoundTemplatesApi {
   static async confirmJobRoundTemplate(jobRoundTemplateId: string): Promise<any> {
     try {
       const url = `${API_CONFIG.CANDIDATES_BASE_URL}/job-round-template/${jobRoundTemplateId}/confirm`
-      const response = await fetch(url, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
+      const response = await authenticatedApiService.makeRequest(url, { method: 'PATCH' })
 
       if (!response.ok) {
         throw new Error(`Failed to confirm job round template: ${response.status}`)
@@ -193,13 +174,7 @@ export class CandidateRoundsApi {
   static async bulkUpdateRoundStatus(request: BulkCandidateRoundStatusRequest): Promise<BulkCandidateRoundStatusResponse> {
     try {
       const url = `${this.baseUrl}${API_CONFIG.ENDPOINTS.CANDIDATES_BULK_ROUND_STATUS_UPDATE}`
-      const response = await fetch(url, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(request),
-      })
+      const response = await authenticatedApiService.makeRequest(url, { method: 'PATCH', body: JSON.stringify(request) })
 
       // Handle partial success responses (like in bulk create)
       if (response.status === 400) {
@@ -228,13 +203,7 @@ export class CandidateRoundsApi {
   static async bulkCreateCandidateRounds(request: BulkCandidateRoundsCreateRequest): Promise<BulkCandidateRoundsCreateResponse> {
     try {
       const url = `${this.baseUrl}${API_CONFIG.ENDPOINTS.CANDIDATE_ROUNDS_BULK_CREATE}`
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(request),
-      })
+      const response = await authenticatedApiService.post(url, request)
 
       // Handle partial success responses
       if (response.status === 400) {
@@ -263,13 +232,7 @@ export class CandidateRoundsApi {
   static async updateCandidateRoundStatus(request: UpdateCandidateRoundStatusRequest): Promise<UpdateCandidateRoundStatusResponse> {
     try {
       const url = `${this.baseUrl}${API_CONFIG.ENDPOINTS.UPDATE_CANDIDATE_ROUND_STATUS}`
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(request),
-      })
+      const response = await authenticatedApiService.post(url, request)
 
       if (!response.ok) {
         const text = await response.text().catch(() => '')
@@ -299,13 +262,7 @@ export class CandidateRoundsApi {
   ): Promise<any> {
     try {
       const url = `${this.baseUrl}/candidate-round/${candidateRoundId}/update`
-      const response = await fetch(url, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      })
+      const response = await authenticatedApiService.put(url, data)
 
       if (!response.ok) {
         const text = await response.text().catch(() => '')

@@ -1,4 +1,5 @@
 import { API_CONFIG } from '../config'
+import { authenticatedApiService } from './authenticated-api-service'
 
 export interface SparrowAssessmentResponse {
   status: string
@@ -56,22 +57,16 @@ export async function getSparrowAssessmentData(
   assessmentId: string
 ): Promise<SparrowAssessmentResponse> {
   try {
-    console.log(`Fetching sparrow assessment data for email: ${userEmail}, assessmentId: ${assessmentId}`)
-    
     if (!API_CONFIG.GET_ANSWERS_API_URL) {
       throw new Error('GET_ANSWERS_API_URL is not configured. Please set NEXT_PUBLIC_GET_ANSWERS in your environment variables.')
     }
+
+    // Force token refresh to ensure we have the latest token
+    await authenticatedApiService.refreshToken()
     
-    const response = await fetch(API_CONFIG.GET_ANSWERS_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        user_email: userEmail,
-        assessment_id: assessmentId,
-        devpass: "Sparrow123"
-      })
+    const response = await authenticatedApiService.post(API_CONFIG.GET_ANSWERS_API_URL!, {
+      user_email: userEmail,
+      assessment_id: assessmentId
     })
 
     if (!response.ok) {
@@ -79,7 +74,6 @@ export async function getSparrowAssessmentData(
       
       // Handle 404 errors gracefully - this is expected when no assessment data exists
       if (response.status === 404) {
-        console.log(`No sparrow assessment data found for ${userEmail}/${assessmentId} (404 - this is normal)`)
         return null as any // Return null to indicate no data available
       }
       
@@ -87,7 +81,6 @@ export async function getSparrowAssessmentData(
     }
 
     const data = await response.json()
-    console.log('Successfully fetched sparrow assessment data:', data)
     return data
   } catch (error) {
     console.error('Error fetching sparrow assessment data:', error)

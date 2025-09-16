@@ -209,20 +209,13 @@ export function CandidateEvaluationPanel({
         
         setLoadingSparrowAssessment(true)
         try {
-          console.log('Attempting to fetch sparrow assessment:', { 
-            email: candidate.email, 
-            assessmentId: sparrowRoundId,
-            roundType 
-          })
           const data = await getSparrowAssessmentData(candidate.email, sparrowRoundId)
           
           // Handle both null return (404 case) and actual data
           if (data === null) {
-            console.log('No sparrow assessment data available for this candidate (expected for some candidates)')
             setSparrowAssessmentData(null)
           } else {
             setSparrowAssessmentData(data)
-            console.log('Successfully loaded sparrow assessment data')
           }
           
           setFetchedKey(currentKey) // Mark this combination as fetched

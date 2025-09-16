@@ -6,6 +6,7 @@ import type {
   JobConfirmationResponse,
   JobOpeningsListResponse
 } from '@/lib/job-types'
+import { authenticatedApiService } from './authenticated-api-service'
 
 export class JobOpeningsApi {
   private static baseUrl = API_CONFIG.BASE_URL
@@ -16,12 +17,7 @@ export class JobOpeningsApi {
   static async getJobOpenings(userId: string): Promise<JobOpeningsListResponse> {
     try {
       const url = `${this.baseUrl}${API_CONFIG.ENDPOINTS.JOB_OPENINGS}/user/${userId}`
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
+      const response = await authenticatedApiService.get(url)
 
       if (!response.ok) {
         throw new Error(`Failed to fetch job openings: ${response.status}`)
@@ -36,13 +32,7 @@ export class JobOpeningsApi {
 
   static async createJobOpening(data: JobOpeningCreateRequest): Promise<JobOpeningApiResponse> {
     try {
-      const response = await fetch(`${this.baseUrl}${API_CONFIG.ENDPOINTS.JOB_OPENINGS}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      })
+      const response = await authenticatedApiService.post(`${this.baseUrl}${API_CONFIG.ENDPOINTS.JOB_OPENINGS}`, data)
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
@@ -61,13 +51,7 @@ export class JobOpeningsApi {
     data: JobOpeningUpdateRequest
   ): Promise<JobOpeningApiResponse> {
     try {
-      const response = await fetch(`${this.baseUrl}${API_CONFIG.ENDPOINTS.JOB_OPENINGS}/${jobId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      })
+      const response = await authenticatedApiService.put(`${this.baseUrl}${API_CONFIG.ENDPOINTS.JOB_OPENINGS}/${jobId}`, data)
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
@@ -88,12 +72,7 @@ export class JobOpeningsApi {
     try {
       const url = `${this.baseUrl}${API_CONFIG.ENDPOINTS.JOB_CONFIRM}/${jobOpeningId}/confirm`
       
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
+      const response = await authenticatedApiService.post(url)
 
       if (!response.ok) {
         const errorData = await response.text()
@@ -113,12 +92,7 @@ export class JobOpeningsApi {
    */
   static async deleteJobOpening(jobOpeningId: string): Promise<{ message: string }> {
     try {
-      const response = await fetch(`${this.baseUrl}${API_CONFIG.ENDPOINTS.JOB_OPENINGS}/${jobOpeningId}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
+      const response = await authenticatedApiService.delete(`${this.baseUrl}${API_CONFIG.ENDPOINTS.JOB_OPENINGS}/${jobOpeningId}`)
 
       if (!response.ok) {
         const errorData = await response.text()

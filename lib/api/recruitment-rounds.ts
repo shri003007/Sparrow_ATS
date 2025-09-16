@@ -1,17 +1,13 @@
 import { API_CONFIG } from '@/lib/config'
 import type { RecruitmentRoundsApiResponse } from '@/lib/hiring-types'
+import { authenticatedApiService } from './authenticated-api-service'
 
 export class RecruitmentRoundsApi {
   private static baseUrl = API_CONFIG.BASE_URL
 
   static async getRecruitmentRounds(): Promise<RecruitmentRoundsApiResponse> {
     try {
-      const response = await fetch(`${this.baseUrl}${API_CONFIG.ENDPOINTS.RECRUITMENT_ROUNDS}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
+      const response = await authenticatedApiService.get(`${this.baseUrl}${API_CONFIG.ENDPOINTS.RECRUITMENT_ROUNDS}`)
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)

@@ -161,11 +161,9 @@ export default function ATSInterface() {
         setCurrentJobId(null)
         setAppView("job-creation")
         setJobCreationView("form")
-        console.log('AI job generation successful:', response.generation_info)
       } else {
         // Error case: Invalid/vague input or AI couldn't generate content
         const errorMessage = response.reason || response.error || 'AI could not generate a job description'
-        console.warn('AI generation failed - user input issue:', errorMessage)
         
         // TODO: Show user-friendly error message in UI
         // For now, show in console for debugging
@@ -222,14 +220,12 @@ export default function ATSInterface() {
         // Only update existing job if there are changes
         const updateRequest = JobOpeningTransformer.transformFormToUpdateRequest(data)
         const response = await JobOpeningsApi.updateJobOpening(currentJobId, updateRequest)
-        console.log('Job updated successfully:', response)
       } else if (!currentJobId) {
         // Create new job
         // Get actual user ID from auth context, fallback to mock if not available
         const userId = apiUser?.id || "6693120e-31e2-4727-92c0-3606885e7e9e"
         const createRequest = JobOpeningTransformer.transformFormToCreateRequest(data, userId)
         const response = await JobOpeningsApi.createJobOpening(createRequest)
-        console.log('Job created successfully:', response)
         setCurrentJobId(response.job_opening.id)
       }
       // If currentJobId exists and no changes, skip API call
@@ -273,18 +269,14 @@ export default function ATSInterface() {
           selectedOriginalTemplates
         )
         const roundTemplatesResponse = await JobRoundTemplatesApi.createJobRoundTemplates(currentJobId, roundTemplatesRequest)
-        console.log('Job round templates created successfully:', roundTemplatesResponse)
         
         // After successfully creating round templates, confirm the job opening
         const confirmationResponse = await JobOpeningsApi.confirmJobOpening(currentJobId)
-        console.log('Job opening confirmed and published successfully:', confirmationResponse)
       } else if (currentJobId) {
         // If we have a job but no rounds, still confirm it
         const confirmationResponse = await JobOpeningsApi.confirmJobOpening(currentJobId)
-        console.log('Job opening confirmed and published successfully:', confirmationResponse)
       }
       
-      console.log("Job published:", { jobData: jobFormData, rounds: selectedRounds })
       setShowPublishConfirmation(false)
       setAppView("job-listings")
       setJobFormData({})
@@ -335,7 +327,6 @@ export default function ATSInterface() {
     try {
       setIsDeleting(true)
       await JobOpeningsApi.deleteJobOpening(currentJobId)
-      console.log('Job opening deleted successfully')
       
       // Reset all job creation state
       setShowNavigationWarning(false)

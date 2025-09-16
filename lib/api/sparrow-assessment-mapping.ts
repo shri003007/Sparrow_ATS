@@ -1,5 +1,6 @@
 import { API_CONFIG } from '../config'
 import { apiDebugger } from '../utils/api-debug'
+import { authenticatedApiService } from './authenticated-api-service'
 
 export interface SparrowAssessmentMapping {
   id: number
@@ -78,7 +79,6 @@ export function clearSparrowAssessmentMappingCache(): void {
   try {
     localStorage.removeItem(CACHE_KEY)
     localStorage.removeItem(CACHE_EXPIRY_KEY)
-    console.log('Sparrow assessment mapping cache cleared')
   } catch (error) {
     console.warn('Failed to clear sparrow assessment mapping cache:', error)
   }
@@ -93,12 +93,10 @@ export async function getSparrowAssessmentMapping(
   forceRefresh: boolean = false
 ): Promise<SparrowAssessmentMappingResponse> {
   const callId = `mapping-${jobRoundTemplateId}-${Date.now()}`
-  console.log(`🔵 [API CALL START] ${callId} - getSparrowAssessmentMapping(${jobRoundTemplateId}, forceRefresh: ${forceRefresh})`)
   apiDebugger.logCall(callId, 'SparrowAssessmentMapping', 'request', undefined, { templateId: jobRoundTemplateId })
   
   // Check for pending request first (deduplication)
   if (!forceRefresh && pendingRequests.has(jobRoundTemplateId)) {
-    console.log(`🟡 [PENDING REQUEST] ${callId} - Waiting for existing request for template: ${jobRoundTemplateId}`)
     apiDebugger.logCall(callId, 'SparrowAssessmentMapping', 'cache', 0, { templateId: jobRoundTemplateId, reason: 'pending_request' })
     return pendingRequests.get(jobRoundTemplateId)!
   }
@@ -107,12 +105,9 @@ export async function getSparrowAssessmentMapping(
   if (!forceRefresh) {
     const cachedData = getCachedAssessmentMapping(jobRoundTemplateId)
     if (cachedData) {
-      console.log(`🟢 [CACHE HIT] ${callId} - Using cached sparrow assessment mapping for template: ${jobRoundTemplateId}`)
       apiDebugger.logCall(callId, 'SparrowAssessmentMapping', 'cache', 0, { templateId: jobRoundTemplateId })
       return cachedData
     }
-  } else {
-    console.log(`🟡 [FORCE REFRESH] ${callId} - Force refreshing sparrow assessment mapping for template: ${jobRoundTemplateId}`)
   }
 
   // Create and store the promise to prevent duplicate requests
@@ -123,17 +118,10 @@ export async function getSparrowAssessmentMapping(
         throw new Error('CANDIDATES_BASE_URL is not configured in environment variables')
       }
 
-      console.log(`🔴 [API REQUEST] ${callId} - Fetching sparrow assessment mapping from API for template: ${jobRoundTemplateId}`)
       const startTime = performance.now()
       const url = `${API_CONFIG.CANDIDATES_BASE_URL}/sparrow-assessment-mapping/job-round-template/${jobRoundTemplateId}`
 
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      signal,
-    })
+    const response = await authenticatedApiService.get(url, { signal })
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => 'Unknown error')
@@ -143,7 +131,6 @@ export async function getSparrowAssessmentMapping(
       const data = await response.json() as SparrowAssessmentMappingResponse
       const endTime = performance.now()
       
-      console.log(`✅ [API SUCCESS] ${callId} - Sparrow assessment mapping fetched in ${Math.round(endTime - startTime)}ms, found ${data.mappings?.length || 0} mappings`)
       apiDebugger.logCall(callId, 'SparrowAssessmentMapping', 'success', endTime - startTime, { templateId: jobRoundTemplateId, mappingsCount: data.mappings?.length || 0 })
       
       // Cache the data for future use
@@ -153,10 +140,9 @@ export async function getSparrowAssessmentMapping(
     } catch (error: any) {
       // Don't log AbortErrors as they're expected during navigation
       if (error.name !== 'AbortError') {
-        console.error(`❌ [API ERROR] ${callId} - Error fetching sparrow assessment mapping:`, error)
+        console.error('Error fetching sparrow assessment mapping:', error)
         apiDebugger.logCall(callId, 'SparrowAssessmentMapping', 'error', undefined, { templateId: jobRoundTemplateId, error: error instanceof Error ? error.message : 'Unknown error' })
       } else {
-        console.log(`🟠 [API ABORTED] ${callId} - Request was aborted (expected during navigation)`)
         apiDebugger.logCall(callId, 'SparrowAssessmentMapping', 'aborted', undefined, { templateId: jobRoundTemplateId })
       }
       throw error

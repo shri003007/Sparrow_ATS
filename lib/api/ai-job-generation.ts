@@ -1,5 +1,6 @@
 import { API_CONFIG } from '@/lib/config'
 import type { AIJobGenerationRequest, AIJobGenerationResponse } from '@/lib/job-types'
+import { authenticatedApiService } from './authenticated-api-service'
 
 export class AIJobGenerationApi {
   /**
@@ -9,13 +10,7 @@ export class AIJobGenerationApi {
   static async generateJobDescription(request: AIJobGenerationRequest): Promise<AIJobGenerationResponse> {
     const url = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AI_GENERATE_JOB}`
     
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(request),
-    })
+    const response = await authenticatedApiService.post(url, request)
 
     // For 400 errors (validation failures), the API returns structured error responses
     // that we should return rather than throw

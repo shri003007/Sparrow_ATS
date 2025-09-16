@@ -3,6 +3,7 @@ import type {
   CustomFieldDefinitionCreateRequest,
   CustomFieldDefinitionUpdateRequest 
 } from '@/lib/custom-field-types'
+import { authenticatedApiService } from './authenticated-api-service'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_CANDIDATES_API_BASE_URL 
 
@@ -66,14 +67,7 @@ export class CustomFieldsApi {
         created_by: userId
       }
 
-      const response = await fetch(`${API_BASE_URL}/custom-field-definitions/create`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // Add any required authentication headers here
-        },
-        body: JSON.stringify(requestWithCreatedBy)
-      })
+      const response = await authenticatedApiService.post(`${API_BASE_URL}/custom-field-definitions/create`, requestWithCreatedBy)
 
       // Log response details
 
@@ -127,12 +121,7 @@ export class CustomFieldsApi {
         queryParams.toString() ? `?${queryParams.toString()}` : ''
       }`
 
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          // Add any required authentication headers here
-        }
-      })
+      const response = await authenticatedApiService.get(url)
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
@@ -174,13 +163,7 @@ export class CustomFieldsApi {
     try {
 
 
-      const response = await fetch(`${API_BASE_URL}/custom-field-definitions/${fieldDefinitionId}/update`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(updateData)
-      })
+      const response = await authenticatedApiService.put(`${API_BASE_URL}/custom-field-definitions/${fieldDefinitionId}/update`, updateData)
 
 
 
@@ -224,12 +207,7 @@ export class CustomFieldsApi {
     try {
 
 
-      const response = await fetch(`${API_BASE_URL}/custom-field-definitions/${fieldDefinitionId}/delete`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        }
-      })
+      const response = await authenticatedApiService.delete(`${API_BASE_URL}/custom-field-definitions/${fieldDefinitionId}/delete`)
 
 
 

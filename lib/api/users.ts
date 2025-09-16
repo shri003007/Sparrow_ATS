@@ -1,4 +1,5 @@
 import { API_CONFIG } from '@/lib/config'
+import { authenticatedApiService } from './authenticated-api-service'
 
 export interface User {
   id: string
@@ -57,13 +58,7 @@ export class UsersApi {
   static async createUser(userData: CreateUserRequest): Promise<CreateUserResponse> {
     try {
       const url = `${this.baseUrl}/users`
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(userData),
-      })
+      const response = await authenticatedApiService.post(url, userData)
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
@@ -90,12 +85,7 @@ export class UsersApi {
       if (params?.is_active !== undefined) searchParams.append('is_active', params.is_active.toString())
 
       const url = `${this.baseUrl}/users${searchParams.toString() ? `?${searchParams.toString()}` : ''}`
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
+      const response = await authenticatedApiService.get(url)
 
       if (!response.ok) {
         throw new Error(`Failed to fetch users: ${response.status}`)
@@ -114,12 +104,7 @@ export class UsersApi {
   static async getUserById(userId: string): Promise<GetUserResponse> {
     try {
       const url = `${this.baseUrl}/users/${userId}`
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
+      const response = await authenticatedApiService.get(url)
 
       if (!response.ok) {
         throw new Error(`Failed to fetch user: ${response.status}`)
@@ -154,13 +139,7 @@ export class UsersApi {
   static async updateUser(userId: string, userData: UpdateUserRequest): Promise<UpdateUserResponse> {
     try {
       const url = `${this.baseUrl}/users/${userId}`
-      const response = await fetch(url, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(userData),
-      })
+      const response = await authenticatedApiService.put(url, userData)
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
@@ -180,12 +159,7 @@ export class UsersApi {
   static async deleteUser(userId: string): Promise<DeleteUserResponse> {
     try {
       const url = `${this.baseUrl}/users/${userId}`
-      const response = await fetch(url, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
+      const response = await authenticatedApiService.delete(url)
 
       if (!response.ok) {
         throw new Error(`Failed to delete user: ${response.status}`)
