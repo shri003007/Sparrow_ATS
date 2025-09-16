@@ -990,8 +990,8 @@ export function CandidateEvaluationPanel({
                   {/* Show existing evaluation only when not re-evaluating */}
                   {!isReEvaluating && (
                   <>
-                  {/* Overall Score Section - Hidden for sales rounds */}
-                  {!['RAPID_FIRE', 'GAMES_ARENA', 'TALK_ON_A_TOPIC'].includes(roundType) && (
+                  {/* Overall Score Section */}
+                  {(
                     <div className="w-full max-w-4xl mx-auto">
                       <div className="bg-white border border-gray-100 rounded-2xl p-6">
                         <div className="flex items-center justify-center mb-6">
@@ -1016,8 +1016,8 @@ export function CandidateEvaluationPanel({
                     </div>
                   )}
 
-                  {/* Section Scores - Hidden for sales rounds */}
-                  {!['RAPID_FIRE', 'GAMES_ARENA', 'TALK_ON_A_TOPIC'].includes(roundType) && (
+                  {/* Section Scores */}
+                  {(
                     <div className="w-full max-w-4xl mx-auto">
                       <div className="bg-white border border-gray-100 rounded-2xl">
                         <div className="p-6 border-b border-gray-100">
@@ -1053,7 +1053,7 @@ export function CandidateEvaluationPanel({
                     </div>
                   )}
 
-                  {/* Detailed Evaluation - Show for all rounds, but hide scores for sales rounds */}
+                  {/* Detailed Evaluation */}
                   {(
                   <div className="w-full max-w-4xl mx-auto">
                     <div className="bg-white border border-gray-100 rounded-2xl">
@@ -1086,24 +1086,19 @@ export function CandidateEvaluationPanel({
                         return (
                           <div className="p-6">
                             <div className="flex items-center gap-4 mb-6">
-                              {/* Hide score chart for sales rounds */}
-                              {!['RAPID_FIRE', 'GAMES_ARENA', 'TALK_ON_A_TOPIC'].includes(roundType) && (
-                                <div className="flex-shrink-0">
-                                  <EvaluationScoreChart 
-                                    score={competency.percentage_score} 
-                                    size="small"
-                                  />
-                                </div>
-                              )}
+                              {/* Score chart for all rounds */}
+                              <div className="flex-shrink-0">
+                                <EvaluationScoreChart 
+                                  score={competency.percentage_score} 
+                                  size="small"
+                                />
+                              </div>
                               <div>
                                 <h4 className="font-bold text-gray-900 text-lg">{competency.competency_name}</h4>
                                 <div className="flex items-center gap-2 mt-1">
                                   <span className={`px-3 py-1 rounded-full text-sm font-medium ${getScoreBadgeColor(competency.percentage_score)}`}>
-                                    {/* Hide percentage for sales rounds, show only text label */}
-                                    {['RAPID_FIRE', 'GAMES_ARENA', 'TALK_ON_A_TOPIC'].includes(roundType) 
-                                      ? getScoreLabel(competency.percentage_score)
-                                      : `${competency.percentage_score}% • ${getScoreLabel(competency.percentage_score)}`
-                                    }
+                                    {/* Show percentage and label for all rounds */}
+                                    {`${competency.percentage_score}% • ${getScoreLabel(competency.percentage_score)}`}
                                   </span>
                                   <span className="text-sm text-gray-500">
                                     {competency.questions?.length || 0} criteria
