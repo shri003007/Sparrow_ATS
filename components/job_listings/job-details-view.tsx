@@ -8,6 +8,7 @@ import { ModernCandidatesTable } from "@/components/candidates/modern-candidates
 import { CandidatesApi } from "@/lib/api/candidates"
 import { CandidateTransformer } from "@/lib/transformers/candidate-transformer"
 import { JobRoundTemplatesApi, CandidateRoundsApi } from "@/lib/api/rounds"
+import { RoundCandidatesApi } from "@/lib/api/round-candidates"
 import { UnsavedChangesDialog } from "@/components/candidates/unsaved-changes-dialog"
 import { useAuth } from "@/contexts/auth-context"
 import type { JobOpeningListItem } from "@/lib/job-types"
@@ -67,7 +68,8 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
     const abortController = new AbortController()
     
     if (job?.id) {
-      fetchCandidates(job.id, abortController.signal)
+      // Force refresh when job changes to ensure fresh data
+      fetchCandidates(job.id, abortController.signal, true)
     }
     
     // Cleanup function to cancel request when job changes or component unmounts
@@ -103,10 +105,11 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
     }
   }, [hasUnsavedChanges, pendingStatusChanges])
 
-  const fetchCandidates = async (jobId: string, abortSignal?: AbortSignal) => {
+  const fetchCandidates = async (jobId: string, abortSignal?: AbortSignal, forceRefresh: boolean = false) => {
     setIsLoadingCandidates(true)
     try {
-      const response = await CandidatesApi.getCandidatesByJob(jobId)
+      // Force refresh to bypass cache for new job selections
+      const response = await CandidatesApi.getCandidatesByJob(jobId, forceRefresh)
       
       // Check if request was cancelled
       if (abortSignal?.aborted) {
@@ -137,7 +140,23 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
       if (abortSignal?.aborted) {
         return
       }
+      
       console.error('Failed to fetch candidates:', error)
+      
+      // Check if this is a 404/500 error indicating the job might be deleted
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch candidates'
+      if (errorMessage.includes('500') || errorMessage.includes('404')) {
+        console.warn('Job may have been deleted, clearing localStorage')
+        // Clear localStorage to prevent repeated errors
+        try {
+          localStorage.removeItem('ats_selected_job')
+          localStorage.removeItem('ats_current_view')
+          localStorage.removeItem('ats_current_round_index')
+        } catch (storageError) {
+          console.warn('Failed to clear localStorage:', storageError)
+        }
+      }
+      
       setCandidates([])
       setCandidatesCount(0)
       setOriginalCandidatesState({})
@@ -246,7 +265,7 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
   const handleDiscardChanges = async () => {
     // Revert to original status by refetching from API
     if (job?.id) {
-      await fetchCandidates(job.id) // This will reset to API state and clear pending changes
+      await fetchCandidates(job.id, undefined, true) // Force refresh to reset to API state and clear pending changes
     } else {
       // Fallback: just clear pending changes
       setPendingStatusChanges({})
@@ -372,6 +391,11 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
       setPendingStatusChanges({})
       setHasUnsavedChanges(false)
 
+      // Clear caches to ensure fresh data when viewing rounds
+      console.log('🔄 Clearing caches after start rounds completion...')
+      JobRoundTemplatesApi.clearCache() // Clear round templates cache
+      RoundCandidatesApi.clearCache()   // Clear round candidates cache
+      
       // Reset flow state after a delay and redirect to rounds page
       setTimeout(() => {
         setStartRoundsFlow({
@@ -441,27 +465,32 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
         progress: { ...prev.progress, templatesLoaded: true }
       }))
 
-      // Step 2: Update candidate round status (ONLY for candidates with actual changes)
+      // Step 2: Update candidate round status for ALL candidates (not just changed ones)
       setStartRoundsFlow(prev => ({ ...prev, currentStep: 'updating-status' }))
       
-      // Only include candidates that actually have pending status changes
+      // Include ALL candidates with their current status (changed or unchanged)
       const candidateStatusUpdates: CandidateRoundStatusUpdate[] = []
       
-      for (const [candidateId, newStatus] of Object.entries(pendingStatusChanges)) {
-        const roundStatus = CandidateTransformer.mapUIStatusToRoundStatus(newStatus)
+      for (const candidate of candidates) {
+        // Use pending status if changed, otherwise use current status
+        const currentStatus = pendingStatusChanges[candidate.id] || candidate.status
+        const roundStatus = CandidateTransformer.mapUIStatusToRoundStatus(currentStatus)
         candidateStatusUpdates.push({
-          candidate_id: candidateId,
+          candidate_id: candidate.id,
           round_status: roundStatus as 'action_pending' | 'selected' | 'rejected'
         })
       }
 
-      console.log('Bulk update: Sending only changed candidates:', {
+      console.log('Bulk update: Sending ALL candidates for start rounds:', {
         totalCandidates: candidates.length,
-        changedCandidates: candidateStatusUpdates.length,
-        changes: candidateStatusUpdates.map(u => ({ id: u.candidate_id, status: u.round_status }))
+        allCandidates: candidateStatusUpdates.length,
+        statusBreakdown: candidateStatusUpdates.reduce((acc, u) => {
+          acc[u.round_status] = (acc[u.round_status] || 0) + 1
+          return acc
+        }, {} as Record<string, number>)
       })
 
-      // Only make API call if there are actual changes
+      // Always make API call for all candidates when starting rounds
       let bulkUpdateResponse = null
       if (candidateStatusUpdates.length > 0) {
         bulkUpdateResponse = await CandidateRoundsApi.bulkUpdateRoundStatus({ candidates: candidateStatusUpdates })
@@ -469,8 +498,10 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
         // Update the original state baseline with the saved changes
         setOriginalCandidatesState(prev => {
           const updated = { ...prev }
-          Object.entries(pendingStatusChanges).forEach(([candidateId, status]) => {
-            updated[candidateId] = status
+          // Update with both pending changes and current statuses
+          candidates.forEach(candidate => {
+            const finalStatus = pendingStatusChanges[candidate.id] || candidate.status
+            updated[candidate.id] = finalStatus
           })
           return updated
         })
@@ -480,7 +511,7 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
           statusSummary: bulkUpdateResponse.status_summary
         })
       } else {
-        console.log('No status changes to save, skipping bulk update')
+        console.log('No candidates found, skipping bulk update')
       }
       
       setStartRoundsFlow(prev => ({ 
@@ -497,34 +528,33 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
         progress: { ...prev.progress, roundsStarted: true }
       }))
 
-      // Step 4: Create/update candidate rounds for ALL changed candidates
+      // Step 4: Create/update candidate rounds for ALL candidates
       setStartRoundsFlow(prev => ({ ...prev, currentStep: 'creating-rounds' }))
       
       // Use the same candidate status updates that were sent to bulk-round-status-update
       const candidateRoundsData: { candidate_id: string, status: 'selected' | 'rejected' | 'action_pending' }[] = []
       
-      if (candidateStatusUpdates.length > 0) {
-        candidateStatusUpdates.forEach(update => {
-          candidateRoundsData.push({
-            candidate_id: update.candidate_id,
-            status: update.round_status as 'selected' | 'rejected' | 'action_pending'
-          })
+      // Process ALL candidates (same as candidateStatusUpdates)
+      candidateStatusUpdates.forEach(update => {
+        candidateRoundsData.push({
+          candidate_id: update.candidate_id,
+          status: update.round_status as 'selected' | 'rejected' | 'action_pending'
         })
-      }
+      })
 
-      console.log('Creating/updating rounds for changed candidates:', {
+      console.log('Creating/updating rounds for ALL candidates:', {
         totalCandidates: candidates.length,
-        changedCandidates: candidateRoundsData.length,
-        candidateChanges: candidateRoundsData.map(c => ({ 
-          id: c.candidate_id, 
-          status: c.status 
-        }))
+        allCandidates: candidateRoundsData.length,
+        statusBreakdown: candidateRoundsData.reduce((acc, c) => {
+          acc[c.status] = (acc[c.status] || 0) + 1
+          return acc
+        }, {} as Record<string, number>)
       })
 
       // Step 4.5: Confirm job round template before creating candidate rounds
       await JobRoundTemplatesApi.confirmJobRoundTemplate(firstRoundTemplate.id)
 
-      // Only make API call if there are candidate changes
+      // Always make API call for all candidates when starting rounds
       if (candidateRoundsData.length > 0) {
         const bulkCreateRequest: BulkCandidateRoundsCreateRequest = {
           candidates: candidateRoundsData,
@@ -543,7 +573,7 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
           statusSummary: createResponse.status_summary
         })
       } else {
-        console.log('No candidate changes found, skipping candidate rounds processing')
+        console.log('No candidates found, skipping candidate rounds processing')
       }
       
       setStartRoundsFlow(prev => ({ 
@@ -556,6 +586,11 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
       // Clear pending changes since they've been saved
       setPendingStatusChanges({})
       setHasUnsavedChanges(false)
+
+      // Clear caches to ensure fresh data when viewing rounds
+      console.log('🔄 Clearing caches after start rounds completion...')
+      JobRoundTemplatesApi.clearCache() // Clear round templates cache
+      RoundCandidatesApi.clearCache()   // Clear round candidates cache
 
       // Reset flow state after a delay and redirect to rounds page
       setTimeout(() => {
@@ -895,7 +930,7 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
           setShowImportFlow(false)
           // Refresh candidates list
           if (job?.id) {
-            fetchCandidates(job.id)
+            fetchCandidates(job.id, undefined, true) // Force refresh after import
           }
         }}
       />

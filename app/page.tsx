@@ -41,6 +41,7 @@ export default function ATSInterface() {
   const [jobCreationView, setJobCreationView] = useState<JobCreationView>("form")
   const [jobFormData, setJobFormData] = useState<Partial<JobFormData>>({})
   const [currentJobId, setCurrentJobId] = useState<string | null>(null)
+  const [newlyCreatedJobId, setNewlyCreatedJobId] = useState<string | null>(null)
 
   // Modal states
   const [showCreationModal, setShowCreationModal] = useState(false)
@@ -105,7 +106,13 @@ export default function ATSInterface() {
   }
 
   const handleCreateJobClick = () => {
+    setNewlyCreatedJobId(null) // Clear any previously created job ID
     setShowCreationModal(true)
+  }
+
+  const handleJobCreated = (jobId: string) => {
+    // Called when returning from job creation with a newly created job
+    setNewlyCreatedJobId(jobId)
   }
 
   const handleSelectCreationMethod = (method: CreationMethod) => {
@@ -278,21 +285,33 @@ export default function ATSInterface() {
       }
       
       setShowPublishConfirmation(false)
+      setNewlyCreatedJobId(currentJobId) // Store the newly created job ID
       setAppView("job-listings")
       setJobFormData({})
       setSelectedRounds([])
       setSelectedOriginalTemplates([])
       setCurrentJobId(null)
+      
+      // Clear the newly created job ID after a delay to allow job selection
+      setTimeout(() => {
+        setNewlyCreatedJobId(null)
+      }, 2000)
     } catch (error) {
       console.error('Failed to publish job:', error)
       // TODO: Show error notification to user
       // For now, continue with the flow even if publishing fails
       setShowPublishConfirmation(false)
+      setNewlyCreatedJobId(currentJobId) // Store the newly created job ID even on error
       setAppView("job-listings")
       setJobFormData({})
       setSelectedRounds([])
       setSelectedOriginalTemplates([])
       setCurrentJobId(null)
+      
+      // Clear the newly created job ID after a delay to allow job selection
+      setTimeout(() => {
+        setNewlyCreatedJobId(null)
+      }, 2000)
     } finally {
       setIsPublishing(false)
     }
@@ -420,7 +439,7 @@ export default function ATSInterface() {
 
   return (
     <>
-      {appView === "job-listings" && <JobListingsApp onCreateJob={handleCreateJobClick} />}
+      {appView === "job-listings" && <JobListingsApp onCreateJob={handleCreateJobClick} newlyCreatedJobId={newlyCreatedJobId} />}
       {appView === "job-creation" && renderJobCreationView()}
 
       {/* Global Modals */}

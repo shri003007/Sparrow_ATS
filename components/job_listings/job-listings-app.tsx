@@ -10,12 +10,13 @@ import type { JobOpeningListItem } from "@/lib/job-types"
 
 interface JobListingsAppProps {
   onCreateJob?: () => void
+  newlyCreatedJobId?: string | null
 }
 
 type JobView = 'candidates' | 'rounds'
 type AppMode = 'single-job' | 'all-views' | 'all-views-creation'
 
-export function JobListingsApp({ onCreateJob }: JobListingsAppProps) {
+export function JobListingsApp({ onCreateJob, newlyCreatedJobId }: JobListingsAppProps) {
   const [selectedJob, setSelectedJob] = useState<JobOpeningListItem | null>(null)
   const [currentView, setCurrentView] = useState<JobView>('candidates')
   const [isLoadingJobs, setIsLoadingJobs] = useState(true)
@@ -33,23 +34,16 @@ export function JobListingsApp({ onCreateJob }: JobListingsAppProps) {
   const CURRENT_VIEW_KEY = 'ats_current_view'
   const CURRENT_ROUND_INDEX_KEY = 'ats_current_round_index'
 
-  // Load selected job and view from localStorage on mount
+  // Load selected job from localStorage on mount (but always use job's has_rounds_started for view)
   useEffect(() => {
     try {
       const savedJob = localStorage.getItem(SELECTED_JOB_KEY)
-      const savedView = localStorage.getItem(CURRENT_VIEW_KEY)
 
       if (savedJob) {
         const jobData = JSON.parse(savedJob)
         setSelectedJob(jobData)
-
-        // Always restore the view if we have a saved job
-        if (savedView && (savedView === 'candidates' || savedView === 'rounds')) {
-          setCurrentView(savedView)
-        } else {
-          // Default to candidates if no saved view
-          setCurrentView('candidates')
-        }
+        // Always set view based on job's has_rounds_started flag, not saved view
+        setCurrentView(jobData.has_rounds_started ? 'rounds' : 'candidates')
       }
     } catch (error) {
       console.warn('Failed to load saved job selection from localStorage:', error)
@@ -85,26 +79,7 @@ export function JobListingsApp({ onCreateJob }: JobListingsAppProps) {
         setSelectedViewId(null) // Clear selected view when selecting a job
         setIsLoadingViewJobs(false) // Clear view loading state
         setSelectedJob(job)
-        // Only set view if we're actually switching jobs (not restoring)
-        // If we already have this job selected, preserve the current view
-        if (selectedJob?.id !== job.id) {
-          setCurrentView(job.has_rounds_started ? 'rounds' : 'candidates')
-          // Clear round index when switching to a different job
-          try {
-            localStorage.removeItem(CURRENT_ROUND_INDEX_KEY)
-          } catch (error) {
-            console.warn('Failed to clear round index:', error)
-          }
-        }
-      })
-    } else {
-      setAppMode('single-job')
-      setSelectedViewId(null) // Clear selected view when selecting a job
-      setIsLoadingViewJobs(false) // Clear view loading state
-      setSelectedJob(job)
-      // Only set view if we're actually switching jobs (not restoring)
-      // If we already have this job selected, preserve the current view
-      if (selectedJob?.id !== job.id) {
+        // Always set view based on has_rounds_started flag (like the previous working version)
         setCurrentView(job.has_rounds_started ? 'rounds' : 'candidates')
         // Clear round index when switching to a different job
         try {
@@ -112,49 +87,106 @@ export function JobListingsApp({ onCreateJob }: JobListingsAppProps) {
         } catch (error) {
           console.warn('Failed to clear round index:', error)
         }
+      })
+    } else {
+      setAppMode('single-job')
+      setSelectedViewId(null) // Clear selected view when selecting a job
+      setIsLoadingViewJobs(false) // Clear view loading state
+      setSelectedJob(job)
+      // Always set view based on has_rounds_started flag (like the previous working version)
+      setCurrentView(job.has_rounds_started ? 'rounds' : 'candidates')
+      // Clear round index when switching to a different job
+      try {
+        localStorage.removeItem(CURRENT_ROUND_INDEX_KEY)
+      } catch (error) {
+        console.warn('Failed to clear round index:', error)
       }
     }
-  }, [selectedJob?.id, CURRENT_ROUND_INDEX_KEY])
+  }, [CURRENT_ROUND_INDEX_KEY])
 
   const handleJobsLoaded = useCallback((jobs: JobOpeningListItem[]) => {
     setIsLoadingJobs(false)
     setJobsList(jobs || [])
 
-    // Check if the saved job is still in the list
+    // Priority 1: Select newly created job if available
+    if (newlyCreatedJobId && jobs && Array.isArray(jobs)) {
+      const newlyCreatedJob = jobs.find(job => job.id === newlyCreatedJobId)
+      if (newlyCreatedJob) {
+        console.log('Selecting newly created job:', newlyCreatedJob.posting_title)
+        setSelectedJob(newlyCreatedJob)
+        setCurrentView(newlyCreatedJob.has_rounds_started ? 'rounds' : 'candidates')
+        return // Exit early, we found and selected the newly created job
+      }
+    }
+
+    // Priority 2: Check if the saved job is still in the list
     if (selectedJob && jobs && Array.isArray(jobs)) {
       const jobStillExists = jobs.some(job => job.id === selectedJob.id)
       if (!jobStillExists) {
-        // Saved job no longer exists, clear it
-        setSelectedJob(null)
+        // Saved job no longer exists, select most recent job as fallback
+        console.warn('Previously selected job no longer exists, selecting most recent job as fallback')
         localStorage.removeItem(SELECTED_JOB_KEY)
-        console.warn('Previously selected job no longer exists, clearing selection')
+        localStorage.removeItem(CURRENT_VIEW_KEY)
+        localStorage.removeItem(CURRENT_ROUND_INDEX_KEY)
+        
+        if (jobs.length > 0) {
+          // Select the most recent job (first in the sorted list)
+          const mostRecentJob = jobs[0]
+          setSelectedJob(mostRecentJob)
+          setCurrentView(mostRecentJob.has_rounds_started ? 'rounds' : 'candidates')
+          console.log('Selected fallback job:', mostRecentJob.posting_title)
+        } else {
+          setSelectedJob(null)
+        }
       }
     } else {
       // If no job is selected but we have jobs, try to restore from localStorage
-
       try {
         const savedJob = localStorage.getItem(SELECTED_JOB_KEY)
-        const savedView = localStorage.getItem(CURRENT_VIEW_KEY)
 
         if (savedJob && jobs && Array.isArray(jobs)) {
           const jobData = JSON.parse(savedJob)
           const jobStillExists = jobs.some(job => job.id === jobData.id)
           if (jobStillExists) {
             setSelectedJob(jobData)
-
-            // Use saved view if available, otherwise use job's rounds status
-            if (savedView && (savedView === 'candidates' || savedView === 'rounds')) {
-              setCurrentView(savedView)
-            } else {
-              setCurrentView(jobData.has_rounds_started ? 'rounds' : 'candidates')
+            // Always set view based on job's has_rounds_started flag
+            setCurrentView(jobData.has_rounds_started ? 'rounds' : 'candidates')
+          } else {
+            // Saved job was deleted, clear localStorage and select most recent job
+            console.warn('Saved job no longer exists, selecting most recent job as fallback')
+            localStorage.removeItem(SELECTED_JOB_KEY)
+            localStorage.removeItem(CURRENT_VIEW_KEY)
+            localStorage.removeItem(CURRENT_ROUND_INDEX_KEY)
+            
+            if (jobs.length > 0) {
+              const mostRecentJob = jobs[0]
+              setSelectedJob(mostRecentJob)
+              setCurrentView(mostRecentJob.has_rounds_started ? 'rounds' : 'candidates')
+              console.log('Selected fallback job:', mostRecentJob.posting_title)
             }
           }
+        } else if (jobs.length > 0 && !selectedJob) {
+          // No saved job, select the most recent one
+          const mostRecentJob = jobs[0]
+          setSelectedJob(mostRecentJob)
+          setCurrentView(mostRecentJob.has_rounds_started ? 'rounds' : 'candidates')
+          console.log('No saved job, selected most recent:', mostRecentJob.posting_title)
         }
       } catch (error) {
-        console.warn('Failed to restore saved job:', error);
+        console.warn('Failed to restore saved job, selecting most recent as fallback:', error)
+        // Clear corrupted localStorage and select most recent job
+        localStorage.removeItem(SELECTED_JOB_KEY)
+        localStorage.removeItem(CURRENT_VIEW_KEY)
+        localStorage.removeItem(CURRENT_ROUND_INDEX_KEY)
+        
+        if (jobs.length > 0) {
+          const mostRecentJob = jobs[0]
+          setSelectedJob(mostRecentJob)
+          setCurrentView(mostRecentJob.has_rounds_started ? 'rounds' : 'candidates')
+        }
       }
     }
-  }, [selectedJob, appMode])
+  }, [selectedJob, appMode, newlyCreatedJobId])
 
   const handleNavigationCheck = (hasUnsavedChanges: boolean, checkFunction: (callback: () => void) => void) => {
     navigationCheckRef.current = hasUnsavedChanges ? checkFunction : null

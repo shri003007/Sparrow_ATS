@@ -40,7 +40,8 @@ export function RoundDetailsView({ job, onBackToCandidates }: RoundDetailsViewPr
       setRoundsError(null)
 
       try {
-        const response = await JobRoundTemplatesApi.getJobRoundTemplates(job.id)
+        // Force refresh to get latest data (bypass cache)
+        const response = await JobRoundTemplatesApi.getJobRoundTemplates(job.id, true)
         
         // Check if request was cancelled
         if (abortController.signal.aborted) {
@@ -90,8 +91,26 @@ export function RoundDetailsView({ job, onBackToCandidates }: RoundDetailsViewPr
         if (abortController.signal.aborted) {
           return
         }
+        
         console.error('Error fetching round templates:', error)
-        setRoundsError(error instanceof Error ? error.message : 'Failed to load round details')
+        
+        // Check if this is a 404/500 error indicating the job might be deleted
+        const errorMessage = error instanceof Error ? error.message : 'Failed to load round details'
+        if (errorMessage.includes('500') || errorMessage.includes('404')) {
+          console.warn('Job may have been deleted, clearing localStorage and attempting recovery')
+          // Clear localStorage to prevent repeated errors
+          try {
+            localStorage.removeItem('ats_selected_job')
+            localStorage.removeItem('ats_current_view')
+            localStorage.removeItem('ats_current_round_index')
+          } catch (storageError) {
+            console.warn('Failed to clear localStorage:', storageError)
+          }
+          
+          setRoundsError('This job may have been deleted or is no longer available. Please select another job from the sidebar.')
+        } else {
+          setRoundsError(errorMessage)
+        }
       } finally {
         if (!abortController.signal.aborted) {
           setIsLoadingRounds(false)
