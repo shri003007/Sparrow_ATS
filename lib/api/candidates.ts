@@ -10,11 +10,83 @@ import { authenticatedApiService } from './authenticated-api-service'
 
 export class CandidatesApi {
   private static baseUrl = API_CONFIG.CANDIDATES_BASE_URL
+  
+  // Cache configuration
+  private static CACHE_KEY = 'ats_candidates_by_job_cache'
+  private static CACHE_EXPIRY_KEY = 'ats_candidates_by_job_cache_expiry'
+  private static CACHE_DURATION = 30 * 60 * 1000 // 30 minutes
 
   /**
-   * Get all candidates for a specific job opening
+   * Get cached candidates data
    */
-  static async getCandidatesByJob(jobOpeningId: string): Promise<CandidatesByJobResponse> {
+  private static getCachedData(jobOpeningId: string): CandidatesByJobResponse | null {
+    try {
+      const cache = localStorage.getItem(this.CACHE_KEY)
+      const expiry = localStorage.getItem(this.CACHE_EXPIRY_KEY)
+      
+      if (!cache || !expiry) return null
+      
+      const now = Date.now()
+      const expiryTime = parseInt(expiry)
+      
+      if (now > expiryTime) {
+        // Cache expired, clear it
+        localStorage.removeItem(this.CACHE_KEY)
+        localStorage.removeItem(this.CACHE_EXPIRY_KEY)
+        return null
+      }
+      
+      const cacheData = JSON.parse(cache)
+      return cacheData[jobOpeningId] || null
+    } catch (error) {
+      console.warn('Failed to read candidates cache:', error)
+      return null
+    }
+  }
+
+  /**
+   * Cache candidates data
+   */
+  private static setCachedData(jobOpeningId: string, data: CandidatesByJobResponse): void {
+    try {
+      const cache = localStorage.getItem(this.CACHE_KEY)
+      const cacheData = cache ? JSON.parse(cache) : {}
+      
+      cacheData[jobOpeningId] = data
+      
+      localStorage.setItem(this.CACHE_KEY, JSON.stringify(cacheData))
+      localStorage.setItem(this.CACHE_EXPIRY_KEY, (Date.now() + this.CACHE_DURATION).toString())
+    } catch (error) {
+      console.warn('Failed to cache candidates data:', error)
+    }
+  }
+
+  /**
+   * Clear candidates cache
+   */
+  static clearCache(): void {
+    try {
+      localStorage.removeItem(this.CACHE_KEY)
+      localStorage.removeItem(this.CACHE_EXPIRY_KEY)
+    } catch (error) {
+      console.warn('Failed to clear candidates cache:', error)
+    }
+  }
+
+  /**
+   * Get all candidates for a specific job opening with caching
+   */
+  static async getCandidatesByJob(jobOpeningId: string, forceRefresh: boolean = false): Promise<CandidatesByJobResponse> {
+    // Check cache first (unless force refresh is requested)
+    if (!forceRefresh) {
+      const cachedData = this.getCachedData(jobOpeningId)
+      if (cachedData) {
+        console.log(`🔍 [CACHE HIT] Using cached candidates for job ${jobOpeningId}`)
+        return cachedData
+      }
+    }
+
+    console.log(`🔍 [API CALL] Fetching candidates for job ${jobOpeningId}`)
     try {
       const url = `${this.baseUrl}${API_CONFIG.ENDPOINTS.CANDIDATES_BY_JOB}/${jobOpeningId}`
       const response = await authenticatedApiService.get(url)
@@ -23,7 +95,12 @@ export class CandidatesApi {
         throw new Error(`Failed to fetch candidates: ${response.status}`)
       }
 
-      return await response.json()
+      const data = await response.json()
+      
+      // Cache the data for future use
+      this.setCachedData(jobOpeningId, data)
+      
+      return data
     } catch (error) {
       console.error('Error fetching candidates by job:', error)
       throw error

@@ -237,6 +237,11 @@ export function JobListingsApp({ onCreateJob }: JobListingsAppProps) {
       setSelectedJob(null);
       setAppMode('all-views');
       setIsLoadingViewJobs(true);
+      
+      // Set view title and ID immediately for better UX
+      setSelectedViewId(view.id);
+      setAllViewsTitle(view.title);
+      setSelectedJobsForAllViews([]); // Clear jobs initially to show loading state
 
       // Use the helper method to get jobs for this view
       const { AllViewsApi } = await import('@/lib/api/all-views');
@@ -245,15 +250,11 @@ export function JobListingsApp({ onCreateJob }: JobListingsAppProps) {
         // Use the helper method to fetch job details
         const jobs = await AllViewsApi.getJobsForView(view.job_opening_ids, view.created_by);
 
-        // Set the view data
-        setSelectedViewId(view.id);
-        setAllViewsTitle(view.title);
+        // Set the jobs data
         setSelectedJobsForAllViews(jobs);
         setIsLoadingViewJobs(false);
       } else {
         // Handle case where view has no jobs
-        setSelectedViewId(view.id);
-        setAllViewsTitle(view.title);
         setSelectedJobsForAllViews([]);
         setIsLoadingViewJobs(false);
       }

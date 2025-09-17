@@ -355,7 +355,7 @@ export function ScreeningRoundContent({
 
         {/* Modern Screening Candidates Table */}
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <div className="max-h-[calc(100vh-300px)] overflow-y-auto">
+          <div className={`overflow-y-auto ${isMultiJobMode ? 'max-h-[calc(100vh-400px)]' : 'max-h-[calc(100vh-300px)]'}`}>
             <ModernScreeningCandidatesTable
               candidates={roundData?.candidates || []}
               customFieldDefinitions={roundData?.custom_field_definitions || []}

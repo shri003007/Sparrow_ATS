@@ -264,7 +264,7 @@ export function SparrowInterviewsCandidatesTable({
 
   if (localCandidates.length === 0) {
     return (
-      <div className="flex items-center justify-center flex-col" style={{ height: "calc(100vh - 300px)" }}>
+      <div className="flex items-center justify-center flex-col" style={{ height: `calc(100vh - ${isMultiJobMode ? '400' : '300'}px)` }}>
         <Users className="w-12 h-12 text-gray-400 mb-4" />
         <div className="text-gray-500 mb-2" style={{ fontFamily }}>
           No candidates found for this round
@@ -280,7 +280,7 @@ export function SparrowInterviewsCandidatesTable({
 
   return (
     <>
-      <div style={{ height: `calc(100vh - 262px)`, overflow: "auto", maxHeight: "600px" }}>
+      <div style={{ height: `calc(100vh - ${isMultiJobMode ? '362' : '262'}px)`, overflow: "auto", maxHeight: "600px" }}>
         <table 
           style={{ 
             position: "relative",

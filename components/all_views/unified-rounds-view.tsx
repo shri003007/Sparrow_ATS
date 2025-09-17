@@ -21,6 +21,7 @@ interface UnifiedRoundsViewProps {
   selectedJobs: JobOpeningListItem[]
   onNavigationCheck?: (hasUnsavedChanges: boolean, checkFunction: (callback: () => void) => void) => void
   viewId?: string // Add viewId to detect view changes
+  onBackToCandidates?: () => void
 }
 
 // Enhanced JobRoundTemplate with job context
@@ -32,7 +33,8 @@ interface MultiJobRoundTemplate extends JobRoundTemplate {
 export function UnifiedRoundsView({ 
   selectedJobs, 
   onNavigationCheck,
-  viewId 
+  viewId,
+  onBackToCandidates
 }: UnifiedRoundsViewProps) {
   const fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
   
@@ -324,9 +326,9 @@ export function UnifiedRoundsView({
   }
 
   const handleBackToCandidates = () => {
-    // This would navigate back to candidates view in the parent component
-    // For now, we'll just log it
-    console.log('Navigate back to candidates')
+    if (onBackToCandidates) {
+      onBackToCandidates()
+    }
   }
 
   // Job filter handlers
