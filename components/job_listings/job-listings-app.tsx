@@ -11,12 +11,13 @@ import type { JobOpeningListItem } from "@/lib/job-types"
 interface JobListingsAppProps {
   onCreateJob?: () => void
   newlyCreatedJobId?: string | null
+  onSettingsClick?: () => void
 }
 
 type JobView = 'candidates' | 'rounds'
 type AppMode = 'single-job' | 'all-views' | 'all-views-creation'
 
-export function JobListingsApp({ onCreateJob, newlyCreatedJobId }: JobListingsAppProps) {
+export function JobListingsApp({ onCreateJob, newlyCreatedJobId, onSettingsClick }: JobListingsAppProps) {
   const [selectedJob, setSelectedJob] = useState<JobOpeningListItem | null>(null)
   const [currentView, setCurrentView] = useState<JobView>('candidates')
   const [isLoadingJobs, setIsLoadingJobs] = useState(true)
@@ -311,6 +312,7 @@ export function JobListingsApp({ onCreateJob, newlyCreatedJobId }: JobListingsAp
         onSelectSavedView={handleSelectSavedView}
         appMode={appMode}
         refreshViewsTrigger={refreshViewsTrigger}
+        onSettingsClick={onSettingsClick}
       />
       {appMode === 'all-views-creation' ? (
         <AllViewsCreationPage

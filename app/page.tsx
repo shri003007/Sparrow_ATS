@@ -26,9 +26,10 @@ import { JobPublishConfirmationModal } from "@/components/job_opening/job-publis
 import { NavigationWarningDialog } from "@/components/job_opening/navigation-warning-dialog"
 import { useNavigationPrevention } from "@/hooks/use-navigation-prevention"
 import { JobListingsApp } from "@/components/job_listings/job-listings-app"
+import { AdminSettingsPage } from "@/components/admin/admin-settings-page"
 
 
-type AppView = "job-listings" | "job-creation"
+type AppView = "job-listings" | "job-creation" | "admin-settings"
 type JobCreationView = "form" | "canvas"
 
 export default function ATSInterface() {
@@ -317,6 +318,10 @@ export default function ATSInterface() {
     }
   }
 
+  const handleSettingsClick = () => {
+    setAppView("admin-settings")
+  }
+
   const handleNavigationWarningCancel = () => {
     setShowNavigationWarning(false)
     setIsReloadAttempt(false)
@@ -439,8 +444,17 @@ export default function ATSInterface() {
 
   return (
     <>
-      {appView === "job-listings" && <JobListingsApp onCreateJob={handleCreateJobClick} newlyCreatedJobId={newlyCreatedJobId} />}
+      {appView === "job-listings" && (
+        <JobListingsApp 
+          onCreateJob={handleCreateJobClick} 
+          newlyCreatedJobId={newlyCreatedJobId}
+          onSettingsClick={handleSettingsClick}
+        />
+      )}
       {appView === "job-creation" && renderJobCreationView()}
+      {appView === "admin-settings" && (
+        <AdminSettingsPage onClose={() => setAppView("job-listings")} />
+      )}
 
       {/* Global Modals */}
       <JobCreationModal

@@ -15,6 +15,7 @@ import {
   User,
   EllipsisVertical,
   Eye,
+  Settings,
 } from "lucide-react";
 import {
   Tooltip,
@@ -48,6 +49,7 @@ interface AppSidebarProps {
   onSelectSavedView?: (view: any) => void; // Callback for when user selects a saved view
   appMode?: string; // Track the current app mode to prevent auto-selection
   refreshViewsTrigger?: number; // Trigger to refresh views list
+  onSettingsClick?: () => void; // Callback for admin settings click
 
 }
 
@@ -62,6 +64,7 @@ export function AppSidebar({
   onSelectSavedView,
   appMode,
   refreshViewsTrigger = 0,
+  onSettingsClick,
 }: AppSidebarProps) {
   const { user, apiUser, logout } = useAuth();
   const [jobs, setJobs] = useState<JobOpeningListItem[]>([]);
@@ -424,6 +427,44 @@ export function AppSidebar({
               ))}
             </div>
           </div>
+
+          {/* Admin Settings Section */}
+          {apiUser?.role === 'admin' && (
+            <div className="p-3">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div
+                      className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors hover:bg-gray-50 ${
+                        !isOpen ? "justify-center" : ""
+                      }`}
+                      onClick={() => {
+                        onSettingsClick?.();
+                      }}
+                    >
+                      <Settings className="w-5 h-5" style={{ color: "#6B7280" }} />
+                      {isOpen && (
+                        <span
+                          className="text-sm font-medium"
+                          style={{
+                            color: "#374151",
+                            fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                          }}
+                        >
+                          Settings
+                        </span>
+                      )}
+                    </div>
+                  </TooltipTrigger>
+                  {!isOpen && (
+                    <TooltipContent side="right">
+                      <p>Settings</p>
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          )}
 
           {/* Bottom Account Section */}
           <div className="p-3 border-t" style={{ borderColor: "#E2E8F0" }}>

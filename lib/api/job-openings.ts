@@ -12,6 +12,25 @@ export class JobOpeningsApi {
   private static baseUrl = API_CONFIG.BASE_URL
 
   /**
+   * Get all job openings (admin access)
+   */
+  static async getAllJobOpenings(): Promise<JobOpeningsListResponse> {
+    try {
+      const url = `${this.baseUrl}${API_CONFIG.ENDPOINTS.JOB_OPENINGS}`
+      const response = await authenticatedApiService.get(url)
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch job openings: ${response.status}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error('Error fetching job openings:', error)
+      throw error
+    }
+  }
+
+  /**
    * Get job openings accessible by a specific user
    */
   static async getJobOpenings(userId: string): Promise<JobOpeningsListResponse> {
