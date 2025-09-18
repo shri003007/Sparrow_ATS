@@ -1,15 +1,21 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { 
+  Button, 
+  Input, 
+  Chip, 
+  Box, 
+  Text, 
+  Heading, 
+  Avatar, 
+  CircleLoader 
+} from '@sparrowengg/twigs-react'
 import { Search, Plus, Settings, Trash2, Eye } from 'lucide-react'
 import { UsersApi, type User } from '@/lib/api/users'
 import { UserJobAccessApi, type UserJobAccess } from '@/lib/api/user-job-access'
-import { JobOpeningsApi, type JobOpeningListItem } from '@/lib/api/job-openings'
+import { JobOpeningsApi } from '@/lib/api/job-openings'
+import { type JobOpeningListItem } from '@/lib/job-types'
 import { toast } from '@/hooks/use-toast'
 import { AddUserModal } from './add-user-modal'
 import { UserJobAssignmentsModal } from './user-job-assignments-modal'
@@ -174,14 +180,14 @@ export function UserManagementView() {
     setShowJobAssignmentsModal(false)
   }
 
-  const getRoleBadgeVariant = (role: string) => {
+  const getRoleChipColor = (role: string) => {
     switch (role) {
-      case 'admin': return 'destructive'
-      case 'hr_manager': return 'default'
+      case 'admin': return 'error'
+      case 'hr_manager': return 'primary'
       case 'hiring_manager': return 'secondary'
-      case 'interviewer': return 'outline'
+      case 'interviewer': return 'neutral'
       case 'recruiter': 
-      default: return 'default'
+      default: return 'primary'
     }
   }
 
@@ -191,12 +197,12 @@ export function UserManagementView() {
     ).join(' ')
   }
 
-  const getAccessBadgeVariant = (accessType: string) => {
+  const getAccessChipColor = (accessType: string) => {
     switch (accessType) {
-      case 'admin': return 'destructive'
-      case 'write': return 'default'
+      case 'admin': return 'error'
+      case 'write': return 'primary'
       case 'read': return 'secondary'
-      default: return 'outline'
+      default: return 'neutral'
     }
   }
 
@@ -209,160 +215,236 @@ export function UserManagementView() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-      </div>
+      <Box css={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '16rem' }}>
+        <CircleLoader size="lg" />
+      </Box>
     )
   }
 
   return (
-    <div className="p-6">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <Box css={{ padding: '$4', height: '100%', overflow: 'hidden' }}>
+      <Box css={{ 
+        display: 'grid', 
+        gridTemplateColumns: '1fr',
+        '@media (min-width: 1024px)': {
+          gridTemplateColumns: 'repeat(2, 1fr)'
+        },
+        gap: '$4',
+        height: 'calc(100% - 32px)' // Fixed height minus reduced padding
+      }}>
         {/* Users List */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <Search className="w-5 h-5" />
-                Users ({filteredUsers.length})
-              </CardTitle>
-              <Button onClick={() => setShowAddUserModal(true)} size="sm">
-                <Plus className="w-4 h-4 mr-2" />
+        <Box css={{ 
+          backgroundColor: 'white', 
+          borderRadius: '$md', 
+          boxShadow: '$sm',
+          border: '1px solid $neutral200',
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100%', // Take full height of grid cell
+          minHeight: 0
+        }}>
+          <Box css={{ padding: '$4', borderBottom: '1px solid $neutral200', flexShrink: 0 }}>
+            <Box css={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '$4' }}>
+              <div className="flex items-center gap-2">
+                <Search size={20} />
+                <h2 className="text-lg font-semibold text-gray-900">
+                  Users ({filteredUsers.length})
+                </h2>
+              </div>
+              <Button 
+                variant="solid" 
+                color="primary" 
+                size="sm"
+                leftIcon={<Plus size={16} />}
+                onClick={() => setShowAddUserModal(true)}
+              >
                 Add User
               </Button>
-            </div>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            </Box>
+            <Box css={{ position: 'relative' }}>
+              <Search 
+                size={16} 
+                style={{ 
+                  position: 'absolute', 
+                  left: '12px', 
+                  top: '50%', 
+                  transform: 'translateY(-50%)',
+                  color: 'var(--colors-neutral400)'
+                }} 
+              />
               <Input
                 placeholder="Search users..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
+                css={{ paddingLeft: '$18' }}
               />
-            </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="max-h-96 overflow-y-auto">
+            </Box>
+          </Box>
+          <Box css={{ flex: 1, overflowY: 'auto', padding: '$2', minHeight: 0 }}>
+            <Box css={{ display: 'flex', flexDirection: 'column', gap: '$2' }}>
               {filteredUsers.map((user) => (
-                <div
+                <Box
                   key={user.id}
-                  className={`p-4 border-b cursor-pointer hover:bg-gray-50 transition-colors ${
-                    selectedUser?.id === user.id ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''
-                  }`}
+                  css={{ 
+                    padding: '$4', 
+                    borderRadius: '$md',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    border: '1px solid transparent',
+                    '&:hover': { 
+                      backgroundColor: '$neutral50',
+                      border: '1px solid $neutral200'
+                    },
+                    ...(selectedUser?.id === user.id ? {
+                      backgroundColor: '$primary50',
+                      border: '1px solid $primary200',
+                      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)'
+                    } : {})
+                  }}
                   onClick={() => handleUserSelect(user)}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <Avatar className="w-10 h-10">
-                        <AvatarFallback>
-                          {user.first_name.charAt(0)}{user.last_name?.charAt(0) || ''}
-                        </AvatarFallback>
-                      </Avatar>
+                  <Box css={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Box css={{ display: 'flex', alignItems: 'center', gap: '$3' }}>
+                      <Avatar
+                        size="md"
+                        name={`${user.first_name} ${user.last_name || ''}`}
+                      />
                       <div>
-                        <div className="font-medium">
+                        <div className="font-medium text-gray-900 mb-1">
                           {user.first_name} {user.last_name}
                         </div>
-                        <div className="text-sm text-gray-500">{user.email}</div>
+                        <div className="text-sm text-gray-500">
+                          {user.email}
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant={getRoleBadgeVariant(user.role)} className="text-xs">
+                    </Box>
+                    <Box css={{ display: 'flex', alignItems: 'center', gap: '$2' }}>
+                      <Chip 
+                        color={getRoleChipColor(user.role)}
+                        size="sm"
+                      >
                         {formatRole(user.role)}
-                      </Badge>
+                      </Chip>
                       {!user.is_active && (
-                        <Badge variant="outline" className="text-xs">
+                        <Chip color="neutral" size="sm">
                           Inactive
-                        </Badge>
+                        </Chip>
                       )}
-                    </div>
-                  </div>
-                </div>
+                    </Box>
+                  </Box>
+                </Box>
               ))}
-              {filteredUsers.length === 0 && (
-                <div className="p-8 text-center text-gray-500">
+            </Box>
+            {filteredUsers.length === 0 && (
+              <div className="p-8 text-center">
+                <p className="text-gray-500">
                   No users found matching your search
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                </p>
+              </div>
+            )}
+          </Box>
+        </Box>
 
         {/* User Details & Job Assignments */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>
+        <Box css={{ 
+          backgroundColor: 'white', 
+          borderRadius: '$md', 
+          boxShadow: '$sm',
+          border: '1px solid $neutral200',
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100%', // Take full height of grid cell
+          minHeight: 0
+        }}>
+          <Box css={{ padding: '$4', borderBottom: '1px solid $neutral200', flexShrink: 0 }}>
+            <Box css={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <h2 className="text-lg font-semibold text-gray-900">
                 {selectedUser ? `${selectedUser.first_name}'s Job Assignments` : 'Select a User'}
-              </CardTitle>
+              </h2>
               {selectedUser && (
-                <div className="flex gap-2">
+                <Box css={{ display: 'flex', gap: '$2' }}>
                   <Button
                     variant="outline"
                     size="sm"
+                    leftIcon={<Settings size={16} />}
                     onClick={handleManageJobAssignments}
                   >
-                    <Settings className="w-4 h-4 mr-2" />
                     Manage Access
                   </Button>
                   {selectedUser.role !== 'admin' && (
                     <Button
-                      variant="destructive"
+                      variant="solid"
+                      color="error"
                       size="sm"
+                      leftIcon={<Trash2 size={16} />}
                       onClick={() => handleDeleteUser(selectedUser.id)}
                     >
-                      <Trash2 className="w-4 h-4 mr-2" />
                       Delete
                     </Button>
                   )}
-                </div>
+                </Box>
               )}
-            </div>
-          </CardHeader>
-          <CardContent>
-            {selectedUser ? (
-              <div>
-                {/* Job Assignments */}
-                <div>
-                  <h4 className="font-medium mb-3">Job Access ({userJobs.length})</h4>
+            </Box>
+          </Box>
+          <Box css={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <Box css={{ padding: '$4', flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+              {selectedUser ? (
+                <Box css={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                  {/* Job Assignments */}
+                  <Box css={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                    <h3 className="text-md font-medium text-gray-900 mb-3">
+                      Job Access ({userJobs.length})
+                    </h3>
                   {selectedUser.role === 'admin' ? (
                     <div className="p-4 bg-blue-50 rounded-lg text-center">
-                      <div className="text-blue-800 font-medium">Admin Access</div>
-                      <div className="text-blue-600 text-sm">
+                      <div className="font-medium text-blue-800 mb-1">
+                        Admin Access
+                      </div>
+                      <div className="text-sm text-blue-600">
                         This user has admin privileges and can access all jobs
                       </div>
                     </div>
                   ) : userJobs.length > 0 ? (
-                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                    <div className="flex flex-col gap-2 flex-1 overflow-y-auto" style={{ minHeight: 0 }}>
                       {userJobs.map((jobAccess) => (
                         <div
                           key={jobAccess.id}
-                          className="flex items-center justify-between p-3 border rounded-lg"
+                          className="flex items-center justify-between p-3 border border-gray-200 rounded-lg"
                         >
-                          <div>
-                            <div className="font-medium">{jobAccess.job_title}</div>
-                          </div>
+                          <div className="font-medium text-gray-900">{jobAccess.job_title}</div>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <div className="p-8 text-center text-gray-500 border-2 border-dashed rounded-lg">
-                      <Eye className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                      <div>No job assignments</div>
-                      <div className="text-sm">Click "Manage Access" to assign jobs</div>
+                    <div className="p-8 text-center border-2 border-dashed border-gray-300 rounded-lg">
+                      <Eye size={32} className="mx-auto mb-2 text-gray-400" />
+                      <div className="text-gray-500 mb-1">
+                        No job assignments
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        Click "Manage Access" to assign jobs
+                      </div>
                     </div>
-                  )}
+                    )}
+                  </Box>
+                </Box>
+              ) : (
+                <div className="flex flex-col items-center justify-center flex-1 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+                  <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+                    <Search size={32} className="text-gray-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-700 mb-2">
+                    Select a User
+                  </h3>
+                  <p className="text-gray-500 text-center max-w-sm">
+                    Choose a user from the list to view and manage their job assignments
+                  </p>
                 </div>
-              </div>
-            ) : (
-              <div className="p-8 text-center text-gray-500">
-                <Search className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                <div className="text-lg font-medium mb-2">Select a User</div>
-                <div>Choose a user from the list to view and manage their job assignments</div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+              )}
+            </Box>
+          </Box>
+        </Box>
+      </Box>
 
       {/* Modals */}
       <AddUserModal
@@ -381,6 +463,6 @@ export function UserManagementView() {
           onUpdate={handleJobAssignmentsUpdate}
         />
       )}
-    </div>
+    </Box>
   )
 }

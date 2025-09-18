@@ -1,11 +1,16 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Checkbox } from '@/components/ui/checkbox'
+import { 
+  Button, 
+  Chip, 
+  Input, 
+  FormLabel, 
+  Checkbox,
+  Box,
+  Text,
+  Heading
+} from '@sparrowengg/twigs-react'
 import {
   Dialog,
   DialogContent,
@@ -21,6 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Label } from '@/components/ui/label'
 import { Search, Settings, Trash2, Plus, Briefcase } from 'lucide-react'
 import { UserJobAccessApi, type UserJobAccess } from '@/lib/api/user-job-access'
 import { type User } from '@/lib/api/users'
@@ -204,12 +210,12 @@ export function UserJobAssignmentsModal({
     }
   }
 
-  const getAccessBadgeVariant = (accessType: string) => {
+  const getAccessChipColor = (accessType: string) => {
     switch (accessType) {
-      case 'admin': return 'destructive'
-      case 'write': return 'default'
+      case 'admin': return 'error'
+      case 'write': return 'primary'
       case 'read': return 'secondary'
-      default: return 'outline'
+      default: return 'neutral'
     }
   }
 
@@ -220,7 +226,7 @@ export function UserJobAssignmentsModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[800px] w-[95vw] max-h-[90vh] min-h-[600px] flex flex-col">
+      <DialogContent className="sm:max-w-[900px] w-[95vw] max-h-[90vh] min-h-[700px] flex flex-col">
         <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Settings className="w-5 h-5" />
@@ -244,21 +250,21 @@ export function UserJobAssignmentsModal({
             <div className="flex-1 overflow-hidden flex flex-col space-y-4">
               {/* Current Assignments */}
               <div className="flex-shrink-0">
-                <div className="flex items-center justify-between mb-3">
-                  <Label className="text-sm font-medium">Current Job Assignments ({currentUserJobs.length})</Label>
+                <Box css={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '$3' }}>
+                  <Text size="sm" weight="medium">Current Job Assignments ({currentUserJobs.length})</Text>
                   <Button
-                    variant="outline"
+                    variant="solid"
+                    color="primary"
                     size="sm"
+                    leftIcon={<Plus size={16} />}
                     onClick={() => setShowAddJobs(true)}
-                    className="flex items-center gap-2"
                   >
-                    <Plus className="w-4 h-4" />
                     Add Jobs
                   </Button>
-                </div>
+                </Box>
                 
                 {currentUserJobs.length > 0 ? (
-                  <div className="space-y-2 max-h-32 overflow-y-auto border rounded-lg p-3">
+                  <div className="space-y-2 max-h-80 overflow-y-auto border rounded-lg p-3">
                   {currentUserJobs.map((jobAccess) => (
                     <div key={jobAccess.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                       <div className="flex items-center gap-3 flex-1">
@@ -322,8 +328,8 @@ export function UserJobAssignmentsModal({
                     <Input
                       placeholder="Search available jobs..."
                       value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-10"
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
+                      css={{ paddingLeft: '$18' }}
                     />
                   </div>
 
@@ -337,7 +343,7 @@ export function UserJobAssignmentsModal({
                           <div key={job.id} className="flex items-center gap-3 p-3 border-b last:border-b-0 hover:bg-gray-50">
                             <Checkbox
                               checked={isSelected}
-                              onCheckedChange={(checked) => handleNewJobToggle(job.id, checked as boolean)}
+                              onCheckedChange={(checked: boolean) => handleNewJobToggle(job.id, checked)}
                             />
                             <div className="flex-1">
                               <div className="text-sm font-medium">{job.posting_title}</div>
@@ -345,9 +351,9 @@ export function UserJobAssignmentsModal({
                                 {job.job_status} • {job.employment_type.replace('_', ' ')}
                               </div>
                             </div>
-                            <Badge variant="outline" className="text-xs">
+                            <Chip color="neutral" size="sm">
                               {job.job_status}
-                            </Badge>
+                            </Chip>
                           </div>
                         )
                       })}

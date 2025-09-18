@@ -1,12 +1,17 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { 
+  Button, 
+  Chip, 
+  Input, 
+  FormLabel, 
+  Checkbox,
+  Avatar,
+  Box,
+  Text,
+  Heading
+} from '@sparrowengg/twigs-react'
 import {
   Dialog,
   DialogContent,
@@ -22,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Label } from '@/components/ui/label'
 import { Search, Settings, Trash2, Plus, Users } from 'lucide-react'
 import { UserJobAccessApi, type UserJobAccess } from '@/lib/api/user-job-access'
 import { type User } from '@/lib/api/users'
@@ -244,7 +250,7 @@ export function JobUserAssignmentsModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[800px] w-[95vw] max-h-[90vh] min-h-[600px] flex flex-col">
+      <DialogContent className="sm:max-w-[900px] w-[95vw] max-h-[90vh] min-h-[700px] flex flex-col">
         <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Settings className="w-5 h-5" />
@@ -263,28 +269,28 @@ export function JobUserAssignmentsModal({
             <Input
               placeholder="Search users..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
+              css={{ paddingLeft: '$18' }}
             />
           </div>
 
             {/* Current Assignments */}
             <div className="flex-shrink-0">
-              <div className="flex items-center justify-between mb-3">
-                <Label className="text-sm font-medium">Current User Assignments ({currentJobUsers.length})</Label>
+              <Box css={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '$3' }}>
+                <Text size="sm" weight="medium">Current User Assignments ({currentJobUsers.length})</Text>
                 <Button
-                  variant="outline"
+                  variant="solid"
+                  color="primary"
                   size="sm"
+                  leftIcon={<Plus size={16} />}
                   onClick={() => setShowAddUsers(true)}
-                  className="flex items-center gap-2"
                 >
-                  <Plus className="w-4 h-4" />
                   Add Users
                 </Button>
-              </div>
+              </Box>
               
               {currentJobUsers.length > 0 ? (
-                <div className="space-y-2 max-h-32 overflow-y-auto border rounded-lg p-3">
+                <div className="space-y-2 max-h-80 overflow-y-auto border rounded-lg p-3">
                   {currentJobUsers.map((userAccess) => (
                     <div key={userAccess.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                       <div className="flex items-center gap-3 flex-1">
@@ -349,8 +355,8 @@ export function JobUserAssignmentsModal({
                   <Input
                     placeholder="Search available users..."
                     value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
+                    css={{ paddingLeft: '$18' }}
                   />
                 </div>
 
@@ -364,22 +370,24 @@ export function JobUserAssignmentsModal({
                         <div key={user.id} className="flex items-center gap-3 p-3 border-b last:border-b-0 hover:bg-gray-50">
                           <Checkbox
                             checked={isSelected}
-                            onCheckedChange={(checked) => handleUserToggle(user.id, checked as boolean)}
+                            onCheckedChange={(checked: boolean) => handleUserToggle(user.id, checked)}
                           />
-                          <Avatar className="w-8 h-8">
-                            <AvatarFallback>
-                              {user.first_name.charAt(0)}{user.last_name?.charAt(0) || ''}
-                            </AvatarFallback>
-                          </Avatar>
+                          <Avatar 
+                            size="sm" 
+                            name={`${user.first_name} ${user.last_name || ''}`}
+                          />
                           <div className="flex-1">
                             <div className="text-sm font-medium">
                               {user.first_name} {user.last_name}
                             </div>
                             <div className="text-xs text-gray-500">{user.email}</div>
                           </div>
-                          <Badge variant={getRoleBadgeVariant(user.role)} className="text-xs">
+                          <Chip 
+                            color={getRoleBadgeVariant(user.role) === 'destructive' ? 'error' : 'default'} 
+                            size="sm"
+                          >
                             {formatRole(user.role)}
-                          </Badge>
+                          </Chip>
                         </div>
                       )
                     })}

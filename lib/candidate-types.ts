@@ -141,6 +141,16 @@ export interface CandidateDisplay {
   notes: string | null
   created_at: string
   overall_score?: number // Overall evaluation score from rounds
+  overall_evaluation?: {
+    round_scores: Record<string, {
+      order: number
+      score: number
+      round_name: string
+      round_type: string
+    }>
+    overall_score: number
+    total_possible_score?: number
+  }
   custom_field_values?: Array<{
     id: string
     field_value: string

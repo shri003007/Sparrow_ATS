@@ -26,6 +26,7 @@ export class CandidateTransformer {
       notes: apiCandidate.notes,
       created_at: apiCandidate.created_at,
       overall_score: apiCandidate.overall_evaluation?.overall_score,
+      overall_evaluation: apiCandidate.overall_evaluation,
       custom_field_values: (apiCandidate as any).custom_field_values || []
     }
   }

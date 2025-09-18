@@ -1,13 +1,19 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { 
+  Button, 
+  Input, 
+  Chip, 
+  Box, 
+  Text, 
+  Heading, 
+  Avatar, 
+  CircleLoader 
+} from '@sparrowengg/twigs-react'
 import { Search, Settings, Trash2, Eye, Briefcase, Users } from 'lucide-react'
-import { JobOpeningsApi, type JobOpeningListItem } from '@/lib/api/job-openings'
+import { JobOpeningsApi } from '@/lib/api/job-openings'
+import { type JobOpeningListItem } from '@/lib/job-types'
 import { UserJobAccessApi, type UserJobAccess } from '@/lib/api/user-job-access'
 import { UsersApi, type User } from '@/lib/api/users'
 import { toast } from '@/hooks/use-toast'
@@ -97,22 +103,22 @@ export function JobManagementView() {
     setShowUserAssignmentsModal(false)
   }
 
-  const getStatusBadgeVariant = (status: string) => {
+  const getStatusChipColor = (status: string) => {
     switch (status) {
-      case 'active': return 'default'
+      case 'active': return 'primary'
       case 'draft': return 'secondary'
-      case 'closed': return 'outline'
-      case 'paused': return 'destructive'
-      default: return 'outline'
+      case 'closed': return 'neutral'
+      case 'paused': return 'error'
+      default: return 'neutral'
     }
   }
 
-  const getAccessBadgeVariant = (accessType: string) => {
+  const getAccessChipColor = (accessType: string) => {
     switch (accessType) {
-      case 'admin': return 'destructive'
-      case 'write': return 'default'
+      case 'admin': return 'error'
+      case 'write': return 'primary'
       case 'read': return 'secondary'
-      default: return 'outline'
+      default: return 'neutral'
     }
   }
 
@@ -138,136 +144,216 @@ export function JobManagementView() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-      </div>
+      <Box css={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '16rem' }}>
+        <CircleLoader size="lg" />
+      </Box>
     )
   }
 
   return (
-    <div className="p-6">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <Box css={{ padding: '$4', height: '100%', overflow: 'hidden' }}>
+      <Box css={{ 
+        display: 'grid', 
+        gridTemplateColumns: '1fr',
+        '@media (min-width: 1024px)': {
+          gridTemplateColumns: 'repeat(2, 1fr)'
+        },
+        gap: '$4',
+        height: 'calc(100% - 32px)' // Fixed height minus reduced padding
+      }}>
         {/* Jobs List */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <Briefcase className="w-5 h-5" />
-                Jobs ({filteredJobs.length})
-              </CardTitle>
-            </div>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+        <Box css={{ 
+          backgroundColor: 'white', 
+          borderRadius: '$md', 
+          boxShadow: '$sm',
+          border: '1px solid $neutral200',
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100%', // Take full height of grid cell
+          minHeight: 0
+        }}>
+          <Box css={{ padding: '$4', borderBottom: '1px solid $neutral200', flexShrink: 0 }}>
+            <Box css={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '$4' }}>
+              <div className="flex items-center gap-2">
+                <Briefcase size={20} />
+                <h2 className="text-lg font-semibold text-gray-900">
+                  Jobs ({filteredJobs.length})
+                </h2>
+              </div>
+            </Box>
+            <Box css={{ position: 'relative' }}>
+              <Search 
+                size={16} 
+                style={{ 
+                  position: 'absolute', 
+                  left: '12px', 
+                  top: '50%', 
+                  transform: 'translateY(-50%)',
+                  color: 'var(--colors-neutral400)'
+                }} 
+              />
               <Input
                 placeholder="Search jobs..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
+                css={{ paddingLeft: '$18' }}
               />
-            </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="max-h-96 overflow-y-auto">
+            </Box>
+          </Box>
+          <Box css={{ flex: 1, overflowY: 'auto', padding: '$2', minHeight: 0 }}>
+            <Box css={{ display: 'flex', flexDirection: 'column', gap: '$2' }}>
               {filteredJobs.map((job) => (
-                <div
+                <Box
                   key={job.id}
-                  className={`p-4 border-b cursor-pointer hover:bg-gray-50 transition-colors ${
-                    selectedJob?.id === job.id ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''
-                  }`}
+                  css={{ 
+                    padding: '$4', 
+                    borderRadius: '$md',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    border: '1px solid transparent',
+                    '&:hover': { 
+                      backgroundColor: '$neutral50',
+                      border: '1px solid $neutral200'
+                    },
+                    ...(selectedJob?.id === job.id ? {
+                      backgroundColor: '$primary50',
+                      border: '1px solid $primary200',
+                      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)'
+                    } : {})
+                  }}
                   onClick={() => handleJobSelect(job)}
                 >
-                  <div className="flex items-start justify-between">
+                  <Box css={{ display: 'flex', alignItems: 'start', justifyContent: 'space-between' }}>
                     <div className="flex-1">
-                      <div className="font-medium mb-1">{job.posting_title}</div>                      
+                      <div className="font-medium text-gray-900 mb-2">
+                        {job.posting_title}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        {job.employment_type.replace('_', ' ')}
+                      </div>
                     </div>
-                    <div className="flex flex-col items-end gap-1">
-                      <Badge variant={getStatusBadgeVariant(job.job_status)} className="text-xs">
+                    <Box css={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '$1' }}>
+                      <Chip 
+                        color={getStatusChipColor(job.job_status)}
+                        size="sm"
+                      >
                         {job.job_status.charAt(0).toUpperCase() + job.job_status.slice(1)}
-                      </Badge>
-                    </div>
-                  </div>
-                </div>
+                      </Chip>
+                    </Box>
+                  </Box>
+                </Box>
               ))}
-              {filteredJobs.length === 0 && (
-                <div className="p-8 text-center text-gray-500">
+            </Box>
+            {filteredJobs.length === 0 && (
+              <div className="p-8 text-center">
+                <p className="text-gray-500">
                   No jobs found matching your search
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                </p>
+              </div>
+            )}
+          </Box>
+        </Box>
 
         {/* Job Details & User Assignments */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>
+        <Box css={{ 
+          backgroundColor: 'white', 
+          borderRadius: '$md', 
+          boxShadow: '$sm',
+          border: '1px solid $neutral200',
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100%', // Take full height of grid cell
+          minHeight: 0
+        }}>
+          <Box css={{ padding: '$4', borderBottom: '1px solid $neutral200', flexShrink: 0 }}>
+            <Box css={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <h2 className="text-lg font-semibold text-gray-900">
                 {selectedJob ? `${selectedJob.posting_title} - User Access` : 'Select a Job'}
-              </CardTitle>
+              </h2>
               {selectedJob && (
                 <Button
                   variant="outline"
                   size="sm"
+                  leftIcon={<Settings size={16} />}
                   onClick={handleManageUserAssignments}
                 >
-                  <Settings className="w-4 h-4 mr-2" />
                   Manage Users
                 </Button>
               )}
-            </div>
-          </CardHeader>
-          <CardContent>
-            {selectedJob ? (
-              <div>
-                {/* User Assignments */}
-                <div>
-                  <h4 className="font-medium mb-3 flex items-center gap-2">
-                    <Users className="w-4 h-4" />
-                    User Access ({jobUsers.length})
-                  </h4>
+            </Box>
+          </Box>
+          <Box css={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <Box css={{ padding: '$4', flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+              {selectedJob ? (
+                <Box css={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                  {/* User Assignments */}
+                  <Box css={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                    <div className="flex items-center gap-2 mb-3">
+                      <Users size={16} />
+                      <h3 className="text-md font-medium text-gray-900">
+                        User Access ({jobUsers.length})
+                      </h3>
+                    </div>
                   {jobUsers.length > 0 ? (
-                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                    <div className="flex flex-col gap-2 flex-1 overflow-y-auto" style={{ minHeight: 0 }}>
                       {jobUsers.map((userAccess) => (
                         <div
                           key={userAccess.id}
-                          className="flex items-center justify-between p-3 border rounded-lg"
+                          className="flex items-center justify-between p-3 border border-gray-200 rounded-lg"
                         >
                           <div className="flex items-center gap-3">
-                            <Avatar className="w-8 h-8">
-                              <AvatarFallback className="text-xs">
-                                {userAccess.user_name?.split(' ').map(n => n.charAt(0)).join('') || 'U'}
-                              </AvatarFallback>
-                            </Avatar>
+                            <Avatar
+                              size="sm"
+                              name={userAccess.user_name || 'User'}
+                            />
                             <div>
-                              <div className="font-medium text-sm">{userAccess.user_name}</div>
-                              <div className="text-xs text-gray-500">{userAccess.user_email}</div>
+                              <div className="font-medium text-sm text-gray-900">
+                                {userAccess.user_name}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                {userAccess.user_email}
+                              </div>
                             </div>
                           </div>
-                          <Badge variant={getAccessBadgeVariant(userAccess.access_type)} className="text-xs">
+                          <Chip 
+                            color={getAccessChipColor(userAccess.access_type)}
+                            size="sm"
+                          >
                             {userAccess.access_type.charAt(0).toUpperCase() + userAccess.access_type.slice(1)}
-                          </Badge>
+                          </Chip>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <div className="p-8 text-center text-gray-500 border-2 border-dashed rounded-lg">
-                      <Users className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                      <div>No user assignments</div>
-                      <div className="text-sm">Click "Manage Users" to assign users to this job</div>
+                    <div className="p-8 text-center border-2 border-dashed border-gray-300 rounded-lg">
+                      <Users size={32} className="mx-auto mb-2 text-gray-400" />
+                      <div className="text-gray-500 mb-1">
+                        No user assignments
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        Click "Manage Users" to assign users to this job
+                      </div>
                     </div>
-                  )}
+                    )}
+                  </Box>
+                </Box>
+              ) : (
+                <div className="flex flex-col items-center justify-center flex-1 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+                  <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+                    <Briefcase size={32} className="text-gray-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-700 mb-2">
+                    Select a Job
+                  </h3>
+                  <p className="text-gray-500 text-center max-w-sm">
+                    Choose a job from the list to view and manage user assignments
+                  </p>
                 </div>
-              </div>
-            ) : (
-              <div className="p-8 text-center text-gray-500">
-                <Briefcase className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                <div className="text-lg font-medium mb-2">Select a Job</div>
-                <div>Choose a job from the list to view and manage user assignments</div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+              )}
+            </Box>
+          </Box>
+        </Box>
+      </Box>
 
       {/* Modal */}
       {selectedJob && (
@@ -280,6 +366,6 @@ export function JobManagementView() {
           onUpdate={handleUserAssignmentsUpdate}
         />
       )}
-    </div>
+    </Box>
   )
 }

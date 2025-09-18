@@ -116,6 +116,41 @@ export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsSta
     return customValue?.field_value || '-'
   }
 
+  // Extract unique rounds from all candidates based on order
+  const rounds = useMemo(() => {
+    const roundMap = new Map<number, { round_name: string; order: number }>()
+    
+    localCandidates.forEach(candidate => {
+      if (candidate.overall_evaluation?.round_scores) {
+        Object.values(candidate.overall_evaluation.round_scores).forEach(roundScore => {
+          if (roundScore && typeof roundScore === 'object' && 'order' in roundScore && 'round_name' in roundScore) {
+            const order = Math.floor(roundScore.order) // Use floor to handle decimal orders
+            if (!roundMap.has(order) || !roundMap.get(order)?.round_name) {
+              roundMap.set(order, {
+                round_name: roundScore.round_name || `Round ${order}`,
+                order
+              })
+            }
+          }
+        })
+      }
+    })
+    
+    // Sort by order
+    return Array.from(roundMap.values()).sort((a, b) => a.order - b.order)
+  }, [localCandidates])
+
+  // Get round score for a specific candidate and order
+  const getRoundScore = (candidate: CandidateDisplay, order: number) => {
+    if (!candidate.overall_evaluation?.round_scores) return null
+    
+    const roundScore = Object.values(candidate.overall_evaluation.round_scores).find(
+      score => score && typeof score === 'object' && 'order' in score && Math.floor(score.order) === order
+    )
+    
+    return roundScore && 'score' in roundScore ? roundScore.score : null
+  }
+
   // Extract unique custom fields from candidates
   const customFields = useMemo(() => {
     const fieldMap = new Map<string, { field_name: string; field_label: string; field_type: string }>()
@@ -310,6 +345,27 @@ export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsSta
                 </div>
               </th>
             )}
+            {/* Round Score Columns - Only show when rounds have started */}
+            {hasRoundsStarted && rounds.map((round) => (
+              <th
+                key={`round-${round.order}`}
+                style={{
+                  background: "#f6f7f8",
+                  borderBottom: "none",
+                  height: "48px",
+                  fontSize: "12px",
+                  color: "#6B7280",
+                  padding: "8px 16px",
+                  fontWeight: "500",
+                  verticalAlign: "center",
+                  fontFamily,
+                  textAlign: "left",
+                  minWidth: "120px"
+                }}
+              >
+                {round.round_name}
+              </th>
+            ))}
             <th
               style={{
                 background: "#f6f7f8",
@@ -497,6 +553,50 @@ export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsSta
                     )}
                   </td>
                 )}
+
+                {/* Round Scores - Only show when rounds have started */}
+                {hasRoundsStarted && rounds.map((round) => (
+                  <td key={`round-${round.order}`} style={{ minWidth: "120px", padding: "12px" }}>
+                    {(() => {
+                      const score = getRoundScore(candidate, round.order)
+                      if (score !== null && score !== undefined) {
+                        return (
+                          <div className="flex items-center">
+                            <div
+                              className="px-2 py-1 rounded-full text-xs font-medium"
+                              style={{
+                                backgroundColor: (() => {
+                                  if (score >= 80) return '#DCFCE7' // green-100
+                                  if (score >= 60) return '#FEF3C7' // yellow-100  
+                                  if (score >= 40) return '#FED7AA' // orange-100
+                                  return '#FEE2E2' // red-100
+                                })(),
+                                color: (() => {
+                                  if (score >= 80) return '#16A34A' // green-600
+                                  if (score >= 60) return '#D97706' // yellow-600
+                                  if (score >= 40) return '#EA580C' // orange-600
+                                  return '#DC2626' // red-600
+                                })(),
+                                fontFamily
+                              }}
+                            >
+                              {Math.round(score)}%
+                            </div>
+                          </div>
+                        )
+                      } else {
+                        return (
+                          <div 
+                            className="text-sm text-gray-400"
+                            style={{ fontFamily }}
+                          >
+                            -
+                          </div>
+                        )
+                      }
+                    })()}
+                  </td>
+                ))}
 
                 {/* Contact */}
                 <td style={{ minWidth: "140px", padding: "12px" }}>

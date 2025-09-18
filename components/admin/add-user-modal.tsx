@@ -1,16 +1,20 @@
 'use client'
 
 import { useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { 
+  Button, 
+  Input, 
+  FormLabel,
+  Box,
+  Text
+} from '@sparrowengg/twigs-react'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
+  DialogFooter,
 } from '@/components/ui/dialog'
 import { UserPlus } from 'lucide-react'
 
@@ -69,19 +73,23 @@ export function AddUserModal({ isOpen, onClose, onAdd }: AddUserModalProps) {
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <UserPlus className="w-5 h-5" />
-            Add New User
+          <DialogTitle>
+            <Box css={{ display: 'flex', alignItems: 'center', gap: '$2' }}>
+              <UserPlus size={20} />
+              Add New User
+            </Box>
           </DialogTitle>
           <DialogDescription>
-            Add a new recruiter to the system. They will be created with recruiter role by default.
+            <Text color="$neutral600" size="sm">
+              Add a new recruiter to the system. They will be created with recruiter role by default.
+            </Text>
           </DialogDescription>
         </DialogHeader>
         
         <form onSubmit={handleSubmit}>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="email">Email Address *</Label>
+          <Box css={{ display: 'flex', flexDirection: 'column', gap: '$4', padding: '$4 0' }}>
+            <Box css={{ display: 'flex', flexDirection: 'column', gap: '$2' }}>
+              <FormLabel htmlFor="email">Email Address *</FormLabel>
               <Input
                 id="email"
                 type="email"
@@ -90,10 +98,10 @@ export function AddUserModal({ isOpen, onClose, onAdd }: AddUserModalProps) {
                 onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
                 required
               />
-            </div>
+            </Box>
             
-            <div className="grid gap-2">
-              <Label htmlFor="first_name">First Name *</Label>
+            <Box css={{ display: 'flex', flexDirection: 'column', gap: '$2' }}>
+              <FormLabel htmlFor="first_name">First Name *</FormLabel>
               <Input
                 id="first_name"
                 placeholder="John"
@@ -101,18 +109,18 @@ export function AddUserModal({ isOpen, onClose, onAdd }: AddUserModalProps) {
                 onChange={(e) => setFormData(prev => ({ ...prev, first_name: e.target.value }))}
                 required
               />
-            </div>
+            </Box>
             
-            <div className="grid gap-2">
-              <Label htmlFor="last_name">Last Name</Label>
+            <Box css={{ display: 'flex', flexDirection: 'column', gap: '$2' }}>
+              <FormLabel htmlFor="last_name">Last Name</FormLabel>
               <Input
                 id="last_name"
                 placeholder="Doe"
                 value={formData.last_name}
                 onChange={(e) => setFormData(prev => ({ ...prev, last_name: e.target.value }))}
               />
-            </div>
-          </div>
+            </Box>
+          </Box>
           
           <DialogFooter>
             <Button type="button" variant="outline" onClick={handleClose}>
@@ -120,6 +128,8 @@ export function AddUserModal({ isOpen, onClose, onAdd }: AddUserModalProps) {
             </Button>
             <Button 
               type="submit" 
+              variant="solid"
+              color="primary"
               disabled={isSubmitting || !formData.email || !formData.first_name}
             >
               {isSubmitting ? 'Adding...' : 'Add User'}
