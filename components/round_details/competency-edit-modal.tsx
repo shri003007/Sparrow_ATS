@@ -21,13 +21,18 @@ interface CompetencyEditModalProps {
   onClose: () => void
   candidate: RoundCandidate | null
   onSave: (updatedCandidate: RoundCandidate) => void
+  templateInfo?: {
+    evaluation_criteria: string | null
+    competencies: any | null
+  } | null
 }
 
 export function CompetencyEditModal({ 
   isOpen, 
   onClose, 
   candidate,
-  onSave 
+  onSave,
+  templateInfo 
 }: CompetencyEditModalProps) {
   const fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
   
@@ -45,8 +50,22 @@ export function CompetencyEditModal({
     if (isOpen && candidate?.candidate_rounds?.[0]) {
       const candidateRound = candidate.candidate_rounds[0]
       
+      // Use candidate-level data if available, otherwise fall back to template_info
+      const hasCompetencies = candidateRound.competencies && Array.isArray(candidateRound.competencies) && candidateRound.competencies.length > 0
+      const hasEvaluationCriteria = candidateRound.evaluation_criteria && candidateRound.evaluation_criteria.trim() !== ''
+      
+      // Determine which competencies to use
+      const competenciesToUse = hasCompetencies 
+        ? candidateRound.competencies 
+        : (templateInfo?.competencies || [])
+      
+      // Determine which evaluation criteria to use
+      const evaluationCriteriaToUse = hasEvaluationCriteria 
+        ? candidateRound.evaluation_criteria 
+        : (templateInfo?.evaluation_criteria || '')
+      
       // Convert competencies to have IDs for editing
-      const competenciesWithIds = candidateRound.competencies?.map((comp, index) => ({
+      const competenciesWithIds = competenciesToUse?.map((comp: any, index: number) => ({
         id: `comp-${index}-${Date.now()}`,
         name: comp.name,
         description: comp.description,
@@ -54,12 +73,12 @@ export function CompetencyEditModal({
       })) || []
       
       setCompetencies(competenciesWithIds)
-      setEvaluationCriteria(candidateRound.evaluation_criteria || '')
+      setEvaluationCriteria(evaluationCriteriaToUse || '')
       setError(null)
       setShowJsonView(false) // Reset JSON view when reopening
       setJsonError(null)
     }
-  }, [isOpen, candidate?.candidate_rounds?.[0]?.competencies, candidate?.candidate_rounds?.[0]?.evaluation_criteria])
+  }, [isOpen, candidate?.candidate_rounds?.[0]?.competencies, candidate?.candidate_rounds?.[0]?.evaluation_criteria, templateInfo?.competencies, templateInfo?.evaluation_criteria])
 
   const handleClose = () => {
     if (!saving) {

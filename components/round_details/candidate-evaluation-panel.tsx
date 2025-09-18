@@ -81,6 +81,11 @@ interface CandidateEvaluationPanelProps {
   brandId?: string
   // Current round name for fallback mapping
   currentRoundName?: string
+  // Template info for fallback competencies and evaluation criteria
+  templateInfo?: {
+    evaluation_criteria: string | null
+    competencies: any | null
+  } | null
 }
 
 export function CandidateEvaluationPanel({ 
@@ -95,7 +100,8 @@ export function CandidateEvaluationPanel({
   onReEvaluationStateChange = () => {},
   sparrowRoundId = '',
   brandId = 'surveysparrow',
-  currentRoundName = ''
+  currentRoundName = '',
+  templateInfo = null
 }: CandidateEvaluationPanelProps) {
   const [selectedCompetency, setSelectedCompetency] = useState<string>('')
   const [uploadingFile, setUploadingFile] = useState<boolean>(false)
@@ -1525,6 +1531,7 @@ export function CandidateEvaluationPanel({
         onClose={() => setShowCompetencyEditModal(false)}
         candidate={candidate}
         onSave={handleCompetenciesSaved}
+        templateInfo={templateInfo}
       />
 
       {/* Asset Evaluation Modal */}

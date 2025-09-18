@@ -96,9 +96,9 @@ export function ModernScreeningCandidatesTable({
       const newSet = new Set<string>()
       candidates.forEach(candidate => {
         const hasEvaluation = candidate.candidate_rounds?.[0]?.is_evaluation
-        const hasScore = candidate.candidate_rounds?.[0]?.evaluations?.[0]?.evaluation_result?.overall_percentage_score
-        // Only keep candidates that already have evaluation/score to prevent re-processing
-        if (hasEvaluation && hasScore !== undefined) {
+        // Only keep candidates that already have evaluation to prevent re-processing
+        // Don't check score as 0 is a valid score and should not trigger re-evaluation
+        if (hasEvaluation) {
           newSet.add(candidate.id)
         }
       })
@@ -111,10 +111,11 @@ export function ModernScreeningCandidatesTable({
     if (roundInfo?.round_type === 'SCREENING' && jobOpeningId && candidates.length > 0 && !batchEvaluationProgress.isActive) {
       const candidatesNeedingEvaluation = candidates.filter(candidate => {
         const hasEvaluation = candidate.candidate_rounds?.[0]?.is_evaluation
-        const hasScore = candidate.candidate_rounds?.[0]?.evaluations?.[0]?.evaluation_result?.overall_percentage_score
         // CRITICAL: Don't process candidates that have already been processed (including failures)
         const notProcessed = !processedCandidates.has(candidate.id)
-        return (!hasEvaluation || !hasScore) && notProcessed
+        // Only check is_evaluation field - if it's false, candidate needs evaluation
+        // Don't check score as 0 is a valid score and should not trigger re-evaluation
+        return !hasEvaluation && notProcessed
       })
 
       if (candidatesNeedingEvaluation.length > 0) {
@@ -811,6 +812,7 @@ export function ModernScreeningCandidatesTable({
           isOpen={isPanelOpen}
           onClose={closeEvaluationPanel}
           roundType={roundInfo?.round_type || 'SCREENING'}
+          templateInfo={roundInfo || null}
           isEvaluating={selectedCandidate ? evaluatingCandidates.has(selectedCandidate.id) : false}
           onCandidateUpdated={(updatedCandidate) => {
             setLocalCandidates(prev =>

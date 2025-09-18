@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Settings, Plus, Users, Calendar, DollarSign, Clock, MapPin, Play, Loader2, Eye } from "lucide-react"
+import { useState, useEffect, useRef } from "react"
+import { Settings, Plus, Users, Calendar, DollarSign, Clock, MapPin, Play, Loader2, Eye, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { CSVImportFlow } from "@/components/candidates/csv-import-flow"
 import { ModernCandidatesTable } from "@/components/candidates/modern-candidates-table"
@@ -10,7 +10,12 @@ import { CandidateTransformer } from "@/lib/transformers/candidate-transformer"
 import { JobRoundTemplatesApi, CandidateRoundsApi } from "@/lib/api/rounds"
 import { RoundCandidatesApi } from "@/lib/api/round-candidates"
 import { UnsavedChangesDialog } from "@/components/candidates/unsaved-changes-dialog"
+import { JobSettingsModal } from "./job-settings-modal"
 import { useAuth } from "@/contexts/auth-context"
+import { useBulkEvaluation, type JobBulkEvaluationState } from "@/contexts/bulk-evaluation-context"
+import { useToast } from "@/hooks/use-toast"
+import { getSparrowAssessmentMapping } from "@/lib/api/sparrow-assessment-mapping"
+import { evaluateInterviewCandidateFromSparrowInterviewer, evaluateSalesCandidate, type SparrowInterviewerEvaluationRequest, type SalesEvaluationRequest } from "@/lib/api/evaluation"
 import type { JobOpeningListItem } from "@/lib/job-types"
 import type { CandidateDisplay, CandidateUIStatus } from "@/lib/candidate-types"
 import type { 
@@ -20,18 +25,32 @@ import type {
   CandidateRoundCreateRequest,
   BulkCandidateRoundsCreateRequest 
 } from "@/lib/round-types"
+import type { RoundCandidate } from "@/lib/round-candidate-types"
 
 interface JobDetailsViewProps {
   job: JobOpeningListItem | null
-  onSettings?: () => void
+  onSettings?: () => void // Keep for backward compatibility, but not used internally anymore
   onAddCandidates?: () => void
   onNavigationCheck?: (hasUnsavedChanges: boolean, checkFunction: (callback: () => void) => void) => void
   onGoToRounds?: () => void
   isLoadingJobs?: boolean
 }
 
+
+interface RoundEvaluationData {
+  roundTemplate: JobRoundTemplate
+  candidates: RoundCandidate[]
+  mappings: {
+    primaryId?: string
+    secondaryId?: string
+    candidateMappings?: Record<string, { primaryId?: string; secondaryId?: string }>
+  }
+}
+
 export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationCheck, onGoToRounds, isLoadingJobs = false }: JobDetailsViewProps) {
   const { apiUser } = useAuth()
+  const { getEvaluationState, updateEvaluationState } = useBulkEvaluation()
+  const { toast } = useToast()
   const [showImportFlow, setShowImportFlow] = useState(false)
   const [candidates, setCandidates] = useState<CandidateDisplay[]>([])
   const [candidatesCount, setCandidatesCount] = useState(0)
@@ -53,6 +72,19 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
     }
   })
 
+  // Job-level bulk evaluation state - now managed globally
+  const jobBulkEvaluation = job?.id ? getEvaluationState(job.id) : {
+    isEvaluating: false,
+    currentStep: 'idle' as const,
+    progress: {
+      roundsProcessed: 0,
+      totalRounds: 0,
+      candidatesEvaluated: 0,
+      totalCandidates: 0
+    },
+    error: null
+  }
+
   // Track pending status changes (not yet saved to API)
   const [pendingStatusChanges, setPendingStatusChanges] = useState<Record<string, CandidateUIStatus>>({})
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
@@ -60,6 +92,10 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
   // Unsaved changes dialog state
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false)
   const [pendingNavigation, setPendingNavigation] = useState<(() => void) | null>(null)
+
+  // Settings modal state
+  const [showSettingsModal, setShowSettingsModal] = useState(false)
+
 
   const fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
 
@@ -647,6 +683,374 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
     }
   }
 
+  const getBulkEvaluationLoadingText = (step: JobBulkEvaluationState['currentStep']): string => {
+    switch (step) {
+      case 'fetching-rounds':
+        return 'Fetching rounds...'
+      case 'fetching-candidates':
+        return 'Loading candidates...'
+      case 'fetching-mappings':
+        return 'Loading mappings...'
+      case 'evaluating':
+        return 'Evaluating candidates...'
+      case 'completed':
+        return 'Completed!'
+      case 'error':
+        return 'Error occurred'
+      default:
+        return 'Processing...'
+    }
+  }
+
+  // Job-level bulk evaluation logic
+  const handleJobBulkEvaluation = async () => {
+    if (!job?.id) {
+      toast({
+        title: "Error",
+        description: "No job selected for bulk evaluation",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!job.has_rounds_started) {
+      toast({
+        title: "Cannot Bulk Evaluate",
+        description: "Rounds must be started before bulk evaluation. Please start rounds first.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    updateEvaluationState(job.id, {
+      isEvaluating: true,
+      currentStep: 'fetching-rounds',
+      progress: { roundsProcessed: 0, totalRounds: 0, candidatesEvaluated: 0, totalCandidates: 0 },
+      error: null,
+      jobTitle: job.posting_title
+    })
+
+    try {
+      // Step 1: Fetch all round templates for the job
+      console.log(`🚀 [JOB BULK EVAL] Starting bulk evaluation for job ${job.id}`)
+      const templatesResponse = await JobRoundTemplatesApi.getJobRoundTemplates(job.id)
+      
+      if (!templatesResponse.job_round_templates || templatesResponse.job_round_templates.length === 0) {
+        throw new Error('No round templates found for this job')
+      }
+
+      // Filter for evaluable round types
+      const evaluableRoundTypes = ['INTERVIEW', 'RAPID_FIRE', 'TALK_ON_A_TOPIC', 'GAMES_ARENA']
+      const evaluableRounds = templatesResponse.job_round_templates.filter(round => 
+        evaluableRoundTypes.includes(round.round_type)
+      )
+
+      if (evaluableRounds.length === 0) {
+        throw new Error('No evaluable rounds found. Only INTERVIEW and sales rounds (RAPID_FIRE, TALK_ON_A_TOPIC, GAMES_ARENA) can be bulk evaluated.')
+      }
+
+      console.log(`📋 [JOB BULK EVAL] Found ${evaluableRounds.length} evaluable rounds:`, 
+        evaluableRounds.map(r => `${r.round_name} (${r.round_type})`))
+
+      updateEvaluationState(job.id, {
+        currentStep: 'fetching-candidates',
+        progress: { ...jobBulkEvaluation.progress, totalRounds: evaluableRounds.length }
+      })
+
+      // Step 2: Fetch candidates and mappings for all evaluable rounds in parallel
+      const roundDataPromises = evaluableRounds.map(async (round): Promise<RoundEvaluationData> => {
+        try {
+          // Fetch candidates and mappings in parallel
+          const [candidatesResponse, mappingsResponse] = await Promise.all([
+            RoundCandidatesApi.getCandidatesByRoundTemplate(round.id),
+            getSparrowAssessmentMapping(round.id).catch(error => {
+              console.warn(`Failed to fetch mappings for round ${round.id}:`, error)
+              return { job_round_template_id: round.id, template_info: { round_name: round.round_name, round_type: round.round_type }, mappings_count: 0, mappings: [] }
+            })
+          ])
+
+          // Process mappings to extract primary and secondary IDs
+          const mappings: RoundEvaluationData['mappings'] = {}
+          const candidateMappings: Record<string, { primaryId?: string; secondaryId?: string }> = {}
+
+          if (mappingsResponse.mappings && mappingsResponse.mappings.length > 0) {
+            // Use first mapping as default
+            const defaultMapping = mappingsResponse.mappings[0]
+            mappings.primaryId = defaultMapping.sparrow_assessment_id
+            mappings.secondaryId = defaultMapping.filter_column || 'surveysparrow'
+
+            // Create candidate-specific mappings
+            mappingsResponse.mappings.forEach(mapping => {
+              // For now, we'll use the mapping for all candidates
+              // In a more complex scenario, you might have candidate-specific logic here
+              candidateMappings[mapping.sparrow_assessment_id] = {
+                primaryId: mapping.sparrow_assessment_id,
+                secondaryId: mapping.filter_column || 'surveysparrow'
+              }
+            })
+          }
+
+          mappings.candidateMappings = candidateMappings
+
+          console.log(`📊 [JOB BULK EVAL] Round ${round.round_name}: ${candidatesResponse.candidates?.length || 0} candidates, ${mappingsResponse.mappings_count} mappings`)
+
+          return {
+            roundTemplate: round,
+            candidates: candidatesResponse.candidates || [],
+            mappings
+          }
+        } catch (error) {
+          console.error(`Failed to fetch data for round ${round.id}:`, error)
+          return {
+            roundTemplate: round,
+            candidates: [],
+            mappings: {}
+          }
+        }
+      })
+
+      updateEvaluationState(job.id, { currentStep: 'fetching-mappings' })
+      const roundsData = await Promise.all(roundDataPromises)
+
+      // Step 3: Filter candidates that need evaluation and prepare for bulk processing
+      const evaluationTasks: Array<{
+        round: JobRoundTemplate
+        candidate: RoundCandidate
+        primaryId: string
+        secondaryId?: string
+      }> = []
+
+      roundsData.forEach(({ roundTemplate, candidates, mappings }) => {
+        const candidatesNeedingEvaluation = candidates.filter(candidate => {
+          const hasEvaluation = candidate.candidate_rounds?.[0]?.is_evaluation
+          // Only check is_evaluation field - if it's false, candidate needs evaluation
+          // Don't check score as 0 is a valid score and should not trigger re-evaluation
+          return !hasEvaluation
+        })
+
+        console.log(`🔍 [JOB BULK EVAL] Round ${roundTemplate.round_name}: ${candidatesNeedingEvaluation.length}/${candidates.length} candidates need evaluation`)
+
+        candidatesNeedingEvaluation.forEach(candidate => {
+          // Use candidate-specific mapping if available, otherwise use round default
+          const candidateMapping = mappings.candidateMappings?.[candidate.id]
+          const primaryId = candidateMapping?.primaryId || mappings.primaryId
+          const secondaryId = candidateMapping?.secondaryId || mappings.secondaryId
+
+          if (primaryId) {
+            evaluationTasks.push({
+              round: roundTemplate,
+              candidate,
+              primaryId,
+              secondaryId
+            })
+          } else {
+            console.warn(`⚠️ [JOB BULK EVAL] No primary ID found for candidate ${candidate.id} in round ${roundTemplate.round_name}`)
+          }
+        })
+      })
+
+      if (evaluationTasks.length === 0) {
+        updateEvaluationState(job.id, {
+          isEvaluating: false,
+          currentStep: 'completed',
+          progress: { roundsProcessed: evaluableRounds.length, totalRounds: evaluableRounds.length, candidatesEvaluated: 0, totalCandidates: 0 },
+          error: null
+        })
+        
+        toast({
+          title: "Bulk Evaluation Complete",
+          description: "All candidates already have evaluations",
+        })
+        return
+      }
+
+      console.log(`🎯 [JOB BULK EVAL] Starting evaluation of ${evaluationTasks.length} candidates across ${evaluableRounds.length} rounds`)
+
+      updateEvaluationState(job.id, {
+        currentStep: 'evaluating',
+        progress: { ...jobBulkEvaluation.progress, totalCandidates: evaluationTasks.length }
+      })
+
+      // Show initial toast
+      toast({
+        title: "Job Bulk Evaluation Started",
+        description: `Evaluating ${evaluationTasks.length} candidates across ${evaluableRounds.length} rounds...`,
+        duration: 10000,
+      })
+
+      // Step 4: Process evaluations in parallel batches
+      const BATCH_SIZE = 50 // Process 50 evaluations in parallel
+      const results: Array<{ success: boolean; candidate: string; round: string; error?: string; missedRound?: boolean }> = []
+      let completed = 0
+
+      // Split tasks into batches
+      const batches = []
+      for (let i = 0; i < evaluationTasks.length; i += BATCH_SIZE) {
+        batches.push(evaluationTasks.slice(i, i + BATCH_SIZE))
+      }
+
+      console.log(`⚡ [JOB BULK EVAL] Processing ${evaluationTasks.length} evaluations in ${batches.length} batches of up to ${BATCH_SIZE}`)
+
+      // Process each batch
+      for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+        const batch = batches[batchIndex]
+        
+        try {
+          // Process current batch in parallel
+          const batchPromises = batch.map(async ({ round, candidate, primaryId, secondaryId }) => {
+            try {
+              if (!candidate.candidate_rounds?.[0]?.id) {
+                return { 
+                  success: false, 
+                  candidate: candidate.id, 
+                  round: round.round_name,
+                  error: 'Missing candidate_round_id',
+                  missedRound: false
+                }
+              }
+
+              let result: any
+              let errorMessage: string = ''
+              let evaluationSuccess = false
+
+              try {
+                if (round.round_type === 'INTERVIEW') {
+                  // Interview evaluation
+                  const request: SparrowInterviewerEvaluationRequest = {
+                    email: candidate.email,
+                    job_round_template_id: round.id,
+                    candidate_round_id: candidate.candidate_rounds[0].id,
+                    job_opening_id: candidate.job_opening_id
+                  }
+
+                  result = await evaluateInterviewCandidateFromSparrowInterviewer(request)
+                  evaluationSuccess = result.success
+                  errorMessage = result.error_message || ''
+                } else {
+                  // Sales evaluation
+                  const request: SalesEvaluationRequest = {
+                    email: candidate.email,
+                    sparrow_assessment_id: primaryId,
+                    candidate_round_id: candidate.candidate_rounds[0].id,
+                    account_id: 'salesai',
+                    brand_id: secondaryId || 'surveysparrow'
+                  }
+
+                  result = await evaluateSalesCandidate(request, round.round_type as 'RAPID_FIRE' | 'TALK_ON_A_TOPIC' | 'GAMES_ARENA')
+                  evaluationSuccess = result.success
+                  errorMessage = result.error_message || ''
+                }
+              } catch (error) {
+                // Handle thrown errors from the evaluation functions
+                evaluationSuccess = false
+                errorMessage = error instanceof Error ? error.message : 'Unknown error'
+                console.log(`🔍 [EVAL ERROR] Caught error for candidate ${candidate.id} in round ${round.round_name}:`, errorMessage)
+              }
+
+              // Check if candidate missed the round (404 error or assessment not found)
+              const missedRound = !evaluationSuccess && !!errorMessage && (
+                errorMessage.includes('404') ||
+                errorMessage.includes('not found') ||
+                errorMessage.includes('Assessment retrieval failed') ||
+                errorMessage.includes('Assessment API request failed: 404') ||
+                errorMessage.includes('Rapid-fire evaluation failed: Assessment retrieval failed') ||
+                errorMessage.includes('Games arena evaluation failed: Assessment retrieval failed') ||
+                errorMessage.includes('Assessment data not available') ||
+                errorMessage.includes('Games Arena evaluation failed') ||
+                errorMessage.includes('Rapid-fire evaluation failed')
+              )
+              
+              return { 
+                success: evaluationSuccess, 
+                candidate: candidate.id, 
+                round: round.round_name,
+                error: errorMessage,
+                missedRound: missedRound
+              }
+            } catch (error) {
+              console.error(`Error evaluating candidate ${candidate.id} in round ${round.round_name}:`, error)
+              return { 
+                success: false, 
+                candidate: candidate.id, 
+                round: round.round_name,
+                error: error instanceof Error ? error.message : 'Unknown error',
+                missedRound: false
+              }
+            }
+          })
+
+          // Wait for all promises in the batch to complete
+          const batchResults = await Promise.all(batchPromises)
+          results.push(...batchResults)
+
+          // Update progress
+          completed += batch.length
+          updateEvaluationState(job.id, {
+            progress: { 
+              ...jobBulkEvaluation.progress, 
+              candidatesEvaluated: completed,
+              roundsProcessed: Math.min(jobBulkEvaluation.progress.totalRounds, Math.ceil(completed / (evaluationTasks.length / evaluableRounds.length)))
+            }
+          })
+
+          // Progress toast is handled by the context on completion
+
+          // Add delay between batches to avoid overwhelming the server
+          if (batchIndex < batches.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 1000)) // 1 second delay
+          }
+
+        } catch (error) {
+          console.error(`Failed to process batch ${batchIndex + 1}:`, error)
+          // Continue with next batch instead of failing entirely
+        }
+      }
+
+      // Calculate final results
+      const successCount = results.filter(r => r.success).length
+      const missedRoundCount = results.filter(r => !r.success && r.missedRound).length
+      const actualFailureCount = results.filter(r => !r.success && !r.missedRound).length
+
+      console.log(`✅ [JOB BULK EVAL] Completed: ${successCount} successful, ${missedRoundCount} missed rounds, ${actualFailureCount} failed`)
+
+      updateEvaluationState(job.id, {
+        isEvaluating: false,
+        currentStep: 'completed',
+        progress: { 
+          roundsProcessed: evaluableRounds.length, 
+          totalRounds: evaluableRounds.length, 
+          candidatesEvaluated: completed, 
+          totalCandidates: evaluationTasks.length 
+        },
+        error: null,
+        results: {
+          successCount,
+          failedCount: actualFailureCount,
+          missedRoundCount
+        }
+      })
+
+      // Final toast is handled by the context automatically
+
+    } catch (error) {
+      console.error('Job bulk evaluation failed:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
+      
+      updateEvaluationState(job.id, {
+        isEvaluating: false,
+        currentStep: 'error',
+        progress: { roundsProcessed: 0, totalRounds: 0, candidatesEvaluated: 0, totalCandidates: 0 },
+        error: errorMessage
+      })
+
+      toast({
+        title: "Bulk Evaluation Failed",
+        description: errorMessage,
+        variant: "destructive",
+      })
+    }
+  }
+
   if (!job) {
     if (isLoadingJobs) {
       return (
@@ -712,6 +1116,7 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
   const statusColor = getStatusColor(job.job_status)
 
   return (
+    <>
     <div className="flex-1 flex flex-col bg-white min-w-0 overflow-hidden">
       {/* Header */}
       <div className="p-6 border-b" style={{ borderColor: "#E5E7EB" }}>
@@ -752,9 +1157,17 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
             </div>
           </div>
           <div className="flex items-center gap-3">
+            {/* Bulk Evaluation Status Indicator */}
+            {jobBulkEvaluation.isEvaluating && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-full text-sm" style={{ fontFamily }}>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Evaluating in background...</span>
+              </div>
+            )}
+            
             <Button
               variant="outline"
-              onClick={onSettings}
+              onClick={() => setShowSettingsModal(true)}
               className="flex items-center gap-2"
               style={{
                 borderColor: "#E5E7EB",
@@ -772,10 +1185,10 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
                 {job?.has_rounds_started ? (
                   <Button
                     onClick={hasUnsavedChanges ? handleSaveChangesAndGoToRounds : onGoToRounds}
-                    disabled={startRoundsFlow.isLoading}
+                    disabled={startRoundsFlow.isLoading || jobBulkEvaluation.isEvaluating}
                     className="flex items-center gap-2 relative"
                     style={{
-                      backgroundColor: startRoundsFlow.isLoading ? "#6B7280" : hasUnsavedChanges ? "#059669" : "#3B82F6",
+                      backgroundColor: (startRoundsFlow.isLoading || jobBulkEvaluation.isEvaluating) ? "#6B7280" : hasUnsavedChanges ? "#059669" : "#3B82F6",
                       color: "#FFFFFF",
                       fontFamily,
                     }}
@@ -944,5 +1357,17 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
         pendingChangesCount={Object.keys(pendingStatusChanges).length}
       />
     </div>
+
+    {/* Job Settings Modal - Outside main container like RoundSettingsModal */}
+    <JobSettingsModal
+      isOpen={showSettingsModal}
+      onClose={() => setShowSettingsModal(false)}
+      jobTitle={job?.posting_title || 'Unknown Job'}
+      hasRoundsStarted={job?.has_rounds_started || false}
+      candidatesCount={candidates.length}
+      bulkEvaluationState={jobBulkEvaluation}
+      onBulkEvaluation={handleJobBulkEvaluation}
+    />
+  </>
   )
 }

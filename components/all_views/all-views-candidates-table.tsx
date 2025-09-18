@@ -307,7 +307,7 @@ export function AllViewsCandidatesTable({
                 position: "sticky",
                 left: 0,
                 top: 0,
-                zIndex: 101
+                zIndex: 40
               }}
             >
               <div className="flex items-center gap-2">

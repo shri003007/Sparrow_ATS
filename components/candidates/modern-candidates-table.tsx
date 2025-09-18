@@ -199,7 +199,7 @@ export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsSta
                 minWidth: "220px",
                 position: "sticky",
                 left: 0,
-                zIndex: 100
+                zIndex: 40
               }}
             >
               <div className="flex items-center gap-2">

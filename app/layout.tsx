@@ -3,6 +3,7 @@ import { GeistSans } from 'geist/font/sans'
 import { GeistMono } from 'geist/font/mono'
 import './globals.css'
 import { AuthProvider } from '@/contexts/auth-context'
+import { BulkEvaluationProvider } from '@/contexts/bulk-evaluation-context'
 import { Toaster } from '@/components/ui/toaster'
 import { RefreshCacheManager } from '@/components/refresh-cache-manager'
 
@@ -34,9 +35,11 @@ html {
       </head>
       <body>
         <AuthProvider>
-          <RefreshCacheManager />
-          {children}
-          <Toaster />
+          <BulkEvaluationProvider>
+            <RefreshCacheManager />
+            {children}
+            <Toaster />
+          </BulkEvaluationProvider>
         </AuthProvider>
       </body>
     </html>

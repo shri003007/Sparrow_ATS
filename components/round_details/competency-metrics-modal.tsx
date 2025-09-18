@@ -113,13 +113,32 @@ export function CompetencyMetricsModal({
             <TrendingUp className="w-5 h-5 text-indigo-600" />
             Competency Performance Analysis
           </DialogTitle>
-          <DialogDescription style={{ fontFamily }}>
-            Compare multiple candidates performance across all competencies using interactive radar charts
-          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6">
-          {/* Filters Section */}
+          {/* Chart Section - Now at the top */}
+          {selectedCandidates.length > 0 && competencyData.length > 0 ? (
+            <div className="bg-white border rounded-lg p-6">
+              <CompetencyRadarChart
+                data={competencyData}
+                selectedCandidates={selectedCandidates}
+                competencies={availableCompetencies}
+                evaluatedCandidates={evaluatedCandidates}
+              />
+            </div>
+          ) : (
+            <div className="bg-gray-50 rounded-lg p-8 text-center">
+              <BarChart3 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2" style={{ fontFamily }}>
+                Select Candidates to View Metrics
+              </h3>
+              <p className="text-gray-500" style={{ fontFamily }}>
+                Choose candidates using the checkboxes below to compare their performance across all competencies
+              </p>
+            </div>
+          )}
+
+          {/* Candidate Selection Section - Now below the chart */}
           <div className="bg-gray-50 rounded-lg p-4">
             <h3 className="text-sm font-medium text-gray-900 mb-3" style={{ fontFamily }}>
               Select Candidates ({selectedCandidates.length}/{evaluatedCandidates.length})
@@ -168,28 +187,6 @@ export function CompetencyMetricsModal({
               </div>
             </div>
           </div>
-
-          {/* Chart Section */}
-          {selectedCandidates.length > 0 && competencyData.length > 0 ? (
-            <div className="bg-white border rounded-lg p-6">
-              <CompetencyRadarChart
-                data={competencyData}
-                selectedCandidates={selectedCandidates}
-                competencies={availableCompetencies}
-                evaluatedCandidates={evaluatedCandidates}
-              />
-            </div>
-          ) : (
-            <div className="bg-gray-50 rounded-lg p-8 text-center">
-              <BarChart3 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2" style={{ fontFamily }}>
-                Select Candidates to View Metrics
-              </h3>
-              <p className="text-gray-500" style={{ fontFamily }}>
-                Choose candidates using the checkboxes to compare their performance across all competencies
-              </p>
-            </div>
-          )}
         </div>
 
         <div className="flex justify-end gap-3 pt-4 border-t">

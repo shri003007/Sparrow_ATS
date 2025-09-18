@@ -596,6 +596,7 @@ export function ModernProjectCandidatesTable({
           isOpen={isPanelOpen}
           onClose={closeEvaluationPanel}
           roundType={roundInfo?.round_type || 'PROJECT'}
+          templateInfo={roundInfo || null}
           onCandidateUpdated={(updatedCandidate) => {
             setLocalCandidates(prev =>
               prev.map(candidate =>

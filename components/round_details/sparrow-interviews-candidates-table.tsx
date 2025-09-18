@@ -715,6 +715,7 @@ export function SparrowInterviewsCandidatesTable({
           return candidateSpecificBrandId
         })()}
         currentRoundName={currentRoundName || `${roundType} Round`}
+        templateInfo={roundInfo || null}
         onCandidateUpdated={(updatedCandidate) => {
           setLocalCandidates(prev => 
             prev.map(candidate => 
