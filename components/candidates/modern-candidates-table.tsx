@@ -41,9 +41,10 @@ interface ModernCandidatesTableProps {
   candidates: CandidateDisplay[]
   onStatusChange: (candidateId: string, newStatus: CandidateUIStatus) => void
   hasRoundsStarted?: boolean
+  onCandidateClick?: (candidate: CandidateDisplay) => void
 }
 
-export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsStarted = false }: ModernCandidatesTableProps) {
+export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsStarted = false, onCandidateClick }: ModernCandidatesTableProps) {
   const fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
 
   const [sortOrder, setSortOrder] = useState<{[key: string]: 'asc' | 'desc'}>({
@@ -449,10 +450,16 @@ export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsSta
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <div 
-                              className="text-sm font-medium text-gray-900 truncate"
+                              className={`text-sm font-medium text-gray-900 truncate ${onCandidateClick ? 'cursor-pointer hover:text-blue-600 hover:underline' : ''}`}
                               style={{ 
                                 fontFamily,
                                 maxWidth: "140px"
+                              }}
+                              onClick={(e) => {
+                                if (onCandidateClick) {
+                                  e.stopPropagation()
+                                  onCandidateClick(candidate)
+                                }
                               }}
                             >
                               {candidate.name}

@@ -15,7 +15,7 @@ import type { CandidateCustomFieldDefinition, CustomFieldType } from "@/lib/cust
 interface CandidateFormData {
   name: string
   email: string
-  mobilePhone: string
+  mobilePhone?: string
   resumeUrl: string
   experienceYears: string
   currentSalary: string
@@ -127,7 +127,10 @@ export function ManualEntryModal({
     if (!candidate.name.trim()) errors.push('Name is required')
     if (!candidate.email.trim()) errors.push('Email is required')
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidate.email)) errors.push('Invalid email format')
-    if (!candidate.mobilePhone.trim()) errors.push('Mobile phone is required')
+    // Mobile phone is optional, but if provided, validate format
+    if (candidate.mobilePhone && candidate.mobilePhone.trim() !== '' && !/^[\+]?[1-9][\d]{0,15}$/.test(candidate.mobilePhone.replace(/[\s\-\(\)]/g, ''))) {
+      errors.push('Invalid mobile phone format')
+    }
     
     // Validate custom fields using the API service
     const customFieldValidation = CustomFieldValuesApi.validateAllCustomFieldValues(
@@ -161,7 +164,7 @@ export function ManualEntryModal({
         resume_url: candidate.resumeUrl || '',
         name: candidate.name,
         email: candidate.email,
-        mobile_phone: candidate.mobilePhone,
+        mobile_phone: candidate.mobilePhone || '',
         experience_months: candidate.experienceYears ? Math.round(parseFloat(candidate.experienceYears) * 12) : undefined,
         current_salary: candidate.currentSalary ? parseFloat(candidate.currentSalary) : undefined,
         current_salary_currency: candidate.currentSalaryCurrency,
@@ -463,11 +466,11 @@ export function ManualEntryModal({
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1" style={{ fontFamily }}>
-            Mobile Phone <span className="text-red-500">*</span>
+            Mobile Phone
           </label>
           <input
             type="tel"
-            value={candidate.mobilePhone}
+            value={candidate.mobilePhone || ''}
             onChange={(e) => handleCandidateChange(index, 'mobilePhone', e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
             style={{ fontFamily }}

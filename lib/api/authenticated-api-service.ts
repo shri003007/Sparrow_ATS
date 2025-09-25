@@ -71,6 +71,7 @@ export class AuthenticatedApiService {
     const authRequiredUrls = [
       API_CONFIG.BASE_URL,
       API_CONFIG.CANDIDATES_BASE_URL,
+      API_CONFIG.CANDIDATES_DASHBOARD_BASE_URL,
       API_CONFIG.ALL_VIEWS_API_URL,
       API_CONFIG.GET_ANSWERS_API_URL
     ]

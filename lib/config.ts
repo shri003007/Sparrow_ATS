@@ -1,6 +1,8 @@
 export const API_CONFIG = {
   BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL ,
   CANDIDATES_BASE_URL: process.env.NEXT_PUBLIC_CANDIDATES_API_BASE_URL,
+  // Candidate Dashboard API
+  CANDIDATES_DASHBOARD_BASE_URL: process.env.NEXT_PUBLIC_CANDIDATES_DASHBOARD,
   // All Views Management API
   ALL_VIEWS_API_URL: process.env.NEXT_PUBLIC_ALL_VIEWS_API_URL,
   // AI Evaluation APIs

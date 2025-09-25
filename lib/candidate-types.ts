@@ -26,7 +26,7 @@ export interface CandidateCreateRequest {
   resume_url: string
   name: string
   email: string
-  mobile_phone: string
+  mobile_phone?: string
   experience_months?: number
   current_salary?: number
   current_salary_currency?: string
@@ -140,6 +140,7 @@ export interface CandidateDisplay {
   source: string | null
   notes: string | null
   created_at: string
+  updated_at: string
   overall_score?: number // Overall evaluation score from rounds
   overall_evaluation?: {
     round_scores: Record<string, {
@@ -174,7 +175,7 @@ export interface CSVData {
 export interface CandidatePreview {
   name: string
   email: string
-  mobilePhone: string
+  mobilePhone?: string
   resumeUrl?: string
   experienceMonths?: number
   currentSalary?: number

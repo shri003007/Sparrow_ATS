@@ -6,7 +6,11 @@ import { JobDetailsView } from "./job-details-view"
 import { RoundDetailsView } from "./round-details-view"
 import { AllViewsCombinedView } from "../all_views/combined-view"
 import { AllViewsCreationPage } from "../all_views/all-views-creation-page"
+import { CandidateDetailsView } from "./candidate-details-view"
+import { CandidatesApi } from "@/lib/api/candidates"
+import { CandidateTransformer } from "@/lib/transformers/candidate-transformer"
 import type { JobOpeningListItem } from "@/lib/job-types"
+import type { CandidateDisplay, CandidateUIStatus } from "@/lib/candidate-types"
 
 interface JobListingsAppProps {
   onCreateJob?: () => void
@@ -14,7 +18,7 @@ interface JobListingsAppProps {
   onSettingsClick?: () => void
 }
 
-type JobView = 'candidates' | 'rounds'
+type JobView = 'candidates' | 'rounds' | 'candidate-details'
 type AppMode = 'single-job' | 'all-views' | 'all-views-creation'
 
 export function JobListingsApp({ onCreateJob, newlyCreatedJobId, onSettingsClick }: JobListingsAppProps) {
@@ -28,6 +32,16 @@ export function JobListingsApp({ onCreateJob, newlyCreatedJobId, onSettingsClick
   const [selectedViewId, setSelectedViewId] = useState<string | null>(null)
   const [refreshViewsTrigger, setRefreshViewsTrigger] = useState<number>(0)
   const [isLoadingViewJobs, setIsLoadingViewJobs] = useState(false)
+  const [selectedCandidate, setSelectedCandidate] = useState<CandidateDisplay | null>(null)
+  
+  // Candidates state (moved from JobDetailsView)
+  const [candidates, setCandidates] = useState<CandidateDisplay[]>([])
+  const [candidatesCount, setCandidatesCount] = useState(0)
+  const [isLoadingCandidates, setIsLoadingCandidates] = useState(false)
+  const [originalCandidatesState, setOriginalCandidatesState] = useState<Record<string, CandidateUIStatus>>({})
+  const [pendingStatusChanges, setPendingStatusChanges] = useState<Record<string, CandidateUIStatus>>({})
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  
   const navigationCheckRef = useRef<((callback: () => void) => void) | null>(null)
 
   // Constants for localStorage keys
@@ -79,6 +93,8 @@ export function JobListingsApp({ onCreateJob, newlyCreatedJobId, onSettingsClick
         setAppMode('single-job')
         setSelectedViewId(null) // Clear selected view when selecting a job
         setIsLoadingViewJobs(false) // Clear view loading state
+        setSelectedCandidate(null) // Clear selected candidate when switching jobs
+        setCandidates([]) // Clear candidates when switching jobs to force fresh fetch
         setSelectedJob(job)
         // Always set view based on has_rounds_started flag (like the previous working version)
         setCurrentView(job.has_rounds_started ? 'rounds' : 'candidates')
@@ -93,6 +109,8 @@ export function JobListingsApp({ onCreateJob, newlyCreatedJobId, onSettingsClick
       setAppMode('single-job')
       setSelectedViewId(null) // Clear selected view when selecting a job
       setIsLoadingViewJobs(false) // Clear view loading state
+      setSelectedCandidate(null) // Clear selected candidate when switching jobs
+      setCandidates([]) // Clear candidates when switching jobs to force fresh fetch
       setSelectedJob(job)
       // Always set view based on has_rounds_started flag (like the previous working version)
       setCurrentView(job.has_rounds_started ? 'rounds' : 'candidates')
@@ -104,6 +122,15 @@ export function JobListingsApp({ onCreateJob, newlyCreatedJobId, onSettingsClick
       }
     }
   }, [CURRENT_ROUND_INDEX_KEY])
+
+  const handleJobSelectById = useCallback((jobId: string) => {
+    const job = jobsList.find(j => j.id === jobId)
+    if (job) {
+      handleJobSelect(job)
+    } else {
+      console.warn(`Job with ID ${jobId} not found in jobsList`)
+    }
+  }, [jobsList, handleJobSelect])
 
   const handleJobsLoaded = useCallback((jobs: JobOpeningListItem[]) => {
     setIsLoadingJobs(false)
@@ -189,8 +216,170 @@ export function JobListingsApp({ onCreateJob, newlyCreatedJobId, onSettingsClick
     }
   }, [selectedJob, appMode, newlyCreatedJobId])
 
+  // Fetch candidates when selected job changes
+  useEffect(() => {
+    const abortController = new AbortController()
+    
+    if (selectedJob?.id) {
+      // Force refresh when job changes to ensure fresh data
+      fetchCandidates(selectedJob.id, abortController.signal, true)
+    }
+    
+    // Cleanup function to cancel request when job changes or component unmounts
+    return () => {
+      abortController.abort()
+    }
+  }, [selectedJob?.id])
+
+  const fetchCandidates = async (jobId: string, abortSignal?: AbortSignal, forceRefresh: boolean = false) => {
+    setIsLoadingCandidates(true)
+    try {
+      // Force refresh to bypass cache for new job selections
+      const response = await CandidatesApi.getCandidatesByJob(jobId, forceRefresh)
+      
+      // Check if request was cancelled
+      if (abortSignal?.aborted) {
+        return
+      }
+      
+      const displayCandidates = CandidateTransformer.transformApiListToDisplay(response.candidates)
+      setCandidates(displayCandidates)
+      setCandidatesCount(response.candidate_count)
+      
+      // Store original API state as baseline for change tracking
+      const originalState: Record<string, CandidateUIStatus> = {}
+      displayCandidates.forEach(candidate => {
+        originalState[candidate.id] = candidate.status
+      })
+      setOriginalCandidatesState(originalState)
+      
+      // Clear pending changes when fresh data is loaded (reset baseline)
+      setPendingStatusChanges({})
+      setHasUnsavedChanges(false)
+      
+      console.log('Fetched candidates with original state:', {
+        candidateCount: displayCandidates.length,
+        originalState: Object.keys(originalState).length
+      })
+    } catch (error) {
+      // Don't show errors for cancelled requests
+      if (abortSignal?.aborted) {
+        return
+      }
+      
+      console.error('Failed to fetch candidates:', error)
+      
+      // Check if this is a 404/500 error indicating the job might be deleted
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch candidates'
+      if (errorMessage.includes('500') || errorMessage.includes('404')) {
+        console.warn('Job may have been deleted, clearing localStorage')
+        // Clear localStorage to prevent repeated errors
+        try {
+          localStorage.removeItem('ats_selected_job')
+          localStorage.removeItem('ats_current_view')
+          localStorage.removeItem('ats_current_round_index')
+        } catch (storageError) {
+          console.warn('Failed to clear localStorage:', storageError)
+        }
+      }
+      
+      setCandidates([])
+      setCandidatesCount(0)
+      setOriginalCandidatesState({})
+    } finally {
+      if (!abortSignal?.aborted) {
+        setIsLoadingCandidates(false)
+      }
+    }
+  }
+
   const handleNavigationCheck = (hasUnsavedChanges: boolean, checkFunction: (callback: () => void) => void) => {
     navigationCheckRef.current = hasUnsavedChanges ? checkFunction : null
+  }
+
+  const handleStatusChange = (candidateId: string, newStatus: CandidateUIStatus) => {
+    // Use the original API state as baseline for comparison
+    const originalStatus = originalCandidatesState[candidateId] || 'action_pending'
+    
+    // Update local UI state immediately
+    setCandidates(prev => 
+      prev.map(candidate => 
+        candidate.id === candidateId 
+          ? { ...candidate, status: newStatus }
+          : candidate
+      )
+    )
+
+    // Track this change as pending (not saved to API yet)
+    setPendingStatusChanges(prev => {
+      const updated = { ...prev }
+      
+      // If the new status matches the original API status, remove from pending changes
+      if (newStatus === originalStatus) {
+        delete updated[candidateId]
+      } else {
+        updated[candidateId] = newStatus
+      }
+      
+      // Update hasUnsavedChanges based on the new pending changes
+      setHasUnsavedChanges(Object.keys(updated).length > 0)
+      
+      return updated
+    })
+    
+    console.log(`Status change tracked: candidate ${candidateId}: ${originalStatus} → ${newStatus}`, {
+      isActualChange: newStatus !== originalStatus,
+      pendingChangesCount: Object.keys(pendingStatusChanges).length + (newStatus !== originalStatus ? 1 : 0)
+    })
+  }
+
+  const savePendingChanges = async (): Promise<boolean> => {
+    if (Object.keys(pendingStatusChanges).length === 0) {
+      return true // Nothing to save
+    }
+
+    try {
+      const { CandidateRoundsApi } = await import('@/lib/api/rounds')
+      const candidateStatusUpdates = Object.entries(pendingStatusChanges).map(([candidateId, status]) => {
+        const roundStatus = CandidateTransformer.mapUIStatusToRoundStatus(status)
+        return {
+          candidate_id: candidateId,
+          round_status: roundStatus as 'action_pending' | 'selected' | 'rejected'
+        }
+      })
+
+      await CandidateRoundsApi.bulkUpdateRoundStatus({ candidates: candidateStatusUpdates })
+      
+      // Update the original state baseline with the saved changes
+      setOriginalCandidatesState(prev => {
+        const updated = { ...prev }
+        Object.entries(pendingStatusChanges).forEach(([candidateId, status]) => {
+          updated[candidateId] = status
+        })
+        return updated
+      })
+      
+      // Clear pending changes
+      setPendingStatusChanges({})
+      setHasUnsavedChanges(false)
+      
+      console.log(`Successfully saved ${candidateStatusUpdates.length} status changes and updated baseline`)
+      return true
+    } catch (error) {
+      console.error('Failed to save status changes:', error)
+      alert('Failed to save status changes. Please try again.')
+      return false
+    }
+  }
+
+  const updateCandidateStatus = (candidateId: string, status: CandidateUIStatus) => {
+    setCandidates(prev => 
+      prev.map(candidate => 
+        candidate.id === candidateId 
+          ? { ...candidate, status }
+          : candidate
+      )
+    )
   }
 
   const handleCreateJob = useCallback(() => {
@@ -228,12 +417,23 @@ export function JobListingsApp({ onCreateJob, newlyCreatedJobId, onSettingsClick
 
   const handleBackToCandidates = () => {
     setCurrentView('candidates')
+    setSelectedCandidate(null) // Clear selected candidate
     // Clear round index when going back to candidates
     try {
       localStorage.removeItem(CURRENT_ROUND_INDEX_KEY)
     } catch (error) {
       console.warn('Failed to clear round index:', error)
     }
+  }
+
+  const handleCandidateClick = (candidate: CandidateDisplay) => {
+    setSelectedCandidate(candidate)
+    setCurrentView('candidate-details')
+  }
+
+  const handleBackToCandidatesFromDetails = () => {
+    setSelectedCandidate(null)
+    setCurrentView('candidates')
   }
 
   const handleCreateAllViews = useCallback(() => {
@@ -332,11 +532,32 @@ export function JobListingsApp({ onCreateJob, newlyCreatedJobId, onSettingsClick
         currentView === 'candidates' ? (
           <JobDetailsView
             job={selectedJob}
+            candidates={candidates}
+            candidatesCount={candidatesCount}
+            isLoadingCandidates={isLoadingCandidates}
+            onStatusChange={handleStatusChange}
+            hasUnsavedChanges={hasUnsavedChanges}
+            pendingStatusChanges={pendingStatusChanges}
+            onRefreshCandidates={(forceRefresh = false) => {
+              if (selectedJob?.id) {
+                fetchCandidates(selectedJob.id, undefined, forceRefresh)
+              }
+            }}
+            onSavePendingChanges={savePendingChanges}
+            onUpdateCandidateStatus={updateCandidateStatus}
             onSettings={handleSettings}
             onAddCandidates={handleAddCandidates}
             onNavigationCheck={handleNavigationCheck}
             onGoToRounds={handleGoToRounds}
+            onCandidateClick={handleCandidateClick}
             isLoadingJobs={isLoadingJobs}
+          />
+        ) : currentView === 'candidate-details' && selectedCandidate ? (
+          <CandidateDetailsView
+            candidate={selectedCandidate}
+            onBack={handleBackToCandidatesFromDetails}
+            onJobSelect={handleJobSelectById}
+            currentJobId={selectedJob?.id}
           />
         ) : (
           <RoundDetailsView

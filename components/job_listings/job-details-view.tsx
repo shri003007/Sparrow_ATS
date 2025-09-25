@@ -5,7 +5,6 @@ import { Settings, Plus, Users, Calendar, DollarSign, Clock, MapPin, Play, Loade
 import { Button } from "@/components/ui/button"
 import { CSVImportFlow } from "@/components/candidates/csv-import-flow"
 import { ModernCandidatesTable } from "@/components/candidates/modern-candidates-table"
-import { CandidatesApi } from "@/lib/api/candidates"
 import { CandidateTransformer } from "@/lib/transformers/candidate-transformer"
 import { JobRoundTemplatesApi, CandidateRoundsApi } from "@/lib/api/rounds"
 import { RoundCandidatesApi } from "@/lib/api/round-candidates"
@@ -29,10 +28,20 @@ import type { RoundCandidate } from "@/lib/round-candidate-types"
 
 interface JobDetailsViewProps {
   job: JobOpeningListItem | null
+  candidates: CandidateDisplay[]
+  candidatesCount: number
+  isLoadingCandidates: boolean
+  onStatusChange: (candidateId: string, newStatus: CandidateUIStatus) => void
+  hasUnsavedChanges: boolean
+  pendingStatusChanges: Record<string, CandidateUIStatus>
+  onRefreshCandidates: (forceRefresh?: boolean) => void
+  onSavePendingChanges: () => Promise<boolean>
+  onUpdateCandidateStatus: (candidateId: string, status: CandidateUIStatus) => void
   onSettings?: () => void // Keep for backward compatibility, but not used internally anymore
   onAddCandidates?: () => void
   onNavigationCheck?: (hasUnsavedChanges: boolean, checkFunction: (callback: () => void) => void) => void
   onGoToRounds?: () => void
+  onCandidateClick?: (candidate: CandidateDisplay) => void
   isLoadingJobs?: boolean
 }
 
@@ -47,17 +56,28 @@ interface RoundEvaluationData {
   }
 }
 
-export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationCheck, onGoToRounds, isLoadingJobs = false }: JobDetailsViewProps) {
+export function JobDetailsView({ 
+  job, 
+  candidates, 
+  candidatesCount, 
+  isLoadingCandidates, 
+  onStatusChange, 
+  hasUnsavedChanges, 
+  pendingStatusChanges, 
+  onRefreshCandidates,
+  onSavePendingChanges,
+  onUpdateCandidateStatus,
+  onSettings, 
+  onAddCandidates, 
+  onNavigationCheck, 
+  onGoToRounds, 
+  onCandidateClick, 
+  isLoadingJobs = false 
+}: JobDetailsViewProps) {
   const { apiUser } = useAuth()
   const { getEvaluationState, updateEvaluationState } = useBulkEvaluation()
   const { toast } = useToast()
   const [showImportFlow, setShowImportFlow] = useState(false)
-  const [candidates, setCandidates] = useState<CandidateDisplay[]>([])
-  const [candidatesCount, setCandidatesCount] = useState(0)
-  const [isLoadingCandidates, setIsLoadingCandidates] = useState(false)
-  
-  // Store original API state separately from UI state for accurate comparison
-  const [originalCandidatesState, setOriginalCandidatesState] = useState<Record<string, CandidateUIStatus>>({})
   
   // Start Rounds flow state
   const [startRoundsFlow, setStartRoundsFlow] = useState<StartRoundsFlowState>({
@@ -84,10 +104,6 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
     },
     error: null
   }
-
-  // Track pending status changes (not yet saved to API)
-  const [pendingStatusChanges, setPendingStatusChanges] = useState<Record<string, CandidateUIStatus>>({})
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   
   // Unsaved changes dialog state
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false)
@@ -98,21 +114,6 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
 
 
   const fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
-
-  // Fetch candidates when job changes
-  useEffect(() => {
-    const abortController = new AbortController()
-    
-    if (job?.id) {
-      // Force refresh when job changes to ensure fresh data
-      fetchCandidates(job.id, abortController.signal, true)
-    }
-    
-    // Cleanup function to cancel request when job changes or component unmounts
-    return () => {
-      abortController.abort()
-    }
-  }, [job?.id])
 
   // Notify parent about unsaved changes state
   useEffect(() => {
@@ -141,142 +142,7 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
     }
   }, [hasUnsavedChanges, pendingStatusChanges])
 
-  const fetchCandidates = async (jobId: string, abortSignal?: AbortSignal, forceRefresh: boolean = false) => {
-    setIsLoadingCandidates(true)
-    try {
-      // Force refresh to bypass cache for new job selections
-      const response = await CandidatesApi.getCandidatesByJob(jobId, forceRefresh)
-      
-      // Check if request was cancelled
-      if (abortSignal?.aborted) {
-        return
-      }
-      
-      const displayCandidates = CandidateTransformer.transformApiListToDisplay(response.candidates)
-      setCandidates(displayCandidates)
-      setCandidatesCount(response.candidate_count)
-      
-      // Store original API state as baseline for change tracking
-      const originalState: Record<string, CandidateUIStatus> = {}
-      displayCandidates.forEach(candidate => {
-        originalState[candidate.id] = candidate.status
-      })
-      setOriginalCandidatesState(originalState)
-      
-      // Clear pending changes when fresh data is loaded (reset baseline)
-      setPendingStatusChanges({})
-      setHasUnsavedChanges(false)
-      
-      console.log('Fetched candidates with original state:', {
-        candidateCount: displayCandidates.length,
-        originalState: Object.keys(originalState).length
-      })
-    } catch (error) {
-      // Don't show errors for cancelled requests
-      if (abortSignal?.aborted) {
-        return
-      }
-      
-      console.error('Failed to fetch candidates:', error)
-      
-      // Check if this is a 404/500 error indicating the job might be deleted
-      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch candidates'
-      if (errorMessage.includes('500') || errorMessage.includes('404')) {
-        console.warn('Job may have been deleted, clearing localStorage')
-        // Clear localStorage to prevent repeated errors
-        try {
-          localStorage.removeItem('ats_selected_job')
-          localStorage.removeItem('ats_current_view')
-          localStorage.removeItem('ats_current_round_index')
-        } catch (storageError) {
-          console.warn('Failed to clear localStorage:', storageError)
-        }
-      }
-      
-      setCandidates([])
-      setCandidatesCount(0)
-      setOriginalCandidatesState({})
-    } finally {
-      if (!abortSignal?.aborted) {
-        setIsLoadingCandidates(false)
-      }
-    }
-  }
 
-  const handleStatusChange = (candidateId: string, newStatus: CandidateUIStatus) => {
-    // Use the original API state as baseline for comparison
-    const originalStatus = originalCandidatesState[candidateId] || 'action_pending'
-    
-    // Update local UI state immediately
-    setCandidates(prev => 
-      prev.map(candidate => 
-        candidate.id === candidateId 
-          ? { ...candidate, status: newStatus }
-          : candidate
-      )
-    )
-
-    // Track this change as pending (not saved to API yet)
-    setPendingStatusChanges(prev => {
-      const updated = { ...prev }
-      
-      // If the new status matches the original API status, remove from pending changes
-      if (newStatus === originalStatus) {
-        delete updated[candidateId]
-      } else {
-        updated[candidateId] = newStatus
-      }
-      
-      // Update hasUnsavedChanges based on the new pending changes
-      setHasUnsavedChanges(Object.keys(updated).length > 0)
-      
-      return updated
-    })
-    
-    console.log(`Status change tracked: candidate ${candidateId}: ${originalStatus} → ${newStatus}`, {
-      isActualChange: newStatus !== originalStatus,
-      pendingChangesCount: Object.keys(pendingStatusChanges).length + (newStatus !== originalStatus ? 1 : 0)
-    })
-  }
-
-  // Save only the pending status changes
-  const savePendingChanges = async (): Promise<boolean> => {
-    if (Object.keys(pendingStatusChanges).length === 0) {
-      return true // Nothing to save
-    }
-
-    try {
-      const candidateStatusUpdates: CandidateRoundStatusUpdate[] = Object.entries(pendingStatusChanges).map(([candidateId, status]) => {
-        const roundStatus = CandidateTransformer.mapUIStatusToRoundStatus(status)
-        return {
-          candidate_id: candidateId,
-          round_status: roundStatus as 'action_pending' | 'selected' | 'rejected'
-        }
-      })
-
-      await CandidateRoundsApi.bulkUpdateRoundStatus({ candidates: candidateStatusUpdates })
-      
-      // Update the original state baseline with the saved changes
-      setOriginalCandidatesState(prev => {
-        const updated = { ...prev }
-        Object.entries(pendingStatusChanges).forEach(([candidateId, status]) => {
-          updated[candidateId] = status
-        })
-        return updated
-      })
-      
-      // Clear pending changes
-      setPendingStatusChanges({})
-      setHasUnsavedChanges(false)
-      
-      console.log(`Successfully saved ${candidateStatusUpdates.length} status changes and updated baseline`)
-      return true
-    } catch (error) {
-      console.error('Failed to save status changes:', error)
-      alert('Failed to save status changes. Please try again.')
-      return false
-    }
-  }
 
   // Handle navigation with unsaved changes check
   const handleNavigationWithCheck = (navigationAction: () => void) => {
@@ -290,7 +156,7 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
 
   // Dialog handlers
   const handleSaveAndContinue = async () => {
-    const saved = await savePendingChanges()
+    const saved = await onSavePendingChanges()
     if (saved && pendingNavigation) {
       setShowUnsavedDialog(false)
       pendingNavigation()
@@ -300,13 +166,7 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
 
   const handleDiscardChanges = async () => {
     // Revert to original status by refetching from API
-    if (job?.id) {
-      await fetchCandidates(job.id, undefined, true) // Force refresh to reset to API state and clear pending changes
-    } else {
-      // Fallback: just clear pending changes
-      setPendingStatusChanges({})
-      setHasUnsavedChanges(false)
-    }
+    onRefreshCandidates(true) // Force refresh to reset to API state and clear pending changes
     
     // Execute navigation
     if (pendingNavigation) {
@@ -368,14 +228,7 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
       if (candidateStatusUpdates.length > 0) {
         bulkUpdateResponse = await CandidateRoundsApi.bulkUpdateRoundStatus({ candidates: candidateStatusUpdates })
         
-        // Update the original state baseline with the saved changes
-        setOriginalCandidatesState(prev => {
-          const updated = { ...prev }
-          Object.entries(pendingStatusChanges).forEach(([candidateId, status]) => {
-            updated[candidateId] = status
-          })
-          return updated
-        })
+        // State is managed at parent level - no need to update local state
       }
       
       setStartRoundsFlow(prev => ({ 
@@ -423,9 +276,7 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
         isLoading: false
       }))
 
-      // Clear pending changes since they've been saved
-      setPendingStatusChanges({})
-      setHasUnsavedChanges(false)
+      // Pending changes are managed at parent level
 
       // Clear caches to ensure fresh data when viewing rounds
       console.log('🔄 Clearing caches after start rounds completion...')
@@ -531,16 +382,7 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
       if (candidateStatusUpdates.length > 0) {
         bulkUpdateResponse = await CandidateRoundsApi.bulkUpdateRoundStatus({ candidates: candidateStatusUpdates })
         
-        // Update the original state baseline with the saved changes
-        setOriginalCandidatesState(prev => {
-          const updated = { ...prev }
-          // Update with both pending changes and current statuses
-          candidates.forEach(candidate => {
-            const finalStatus = pendingStatusChanges[candidate.id] || candidate.status
-            updated[candidate.id] = finalStatus
-          })
-          return updated
-        })
+        // State is managed at parent level - no need to update local state
         
         console.log('Bulk status update completed:', {
           totalProcessed: bulkUpdateResponse.total_processed,
@@ -619,9 +461,7 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
         isLoading: false
       }))
 
-      // Clear pending changes since they've been saved
-      setPendingStatusChanges({})
-      setHasUnsavedChanges(false)
+      // Pending changes are managed at parent level
 
       // Clear caches to ensure fresh data when viewing rounds
       console.log('🔄 Clearing caches after start rounds completion...')
@@ -1327,8 +1167,9 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
         ) : (
           <ModernCandidatesTable 
             candidates={candidates} 
-            onStatusChange={handleStatusChange}
+            onStatusChange={onStatusChange}
             hasRoundsStarted={job?.has_rounds_started || false}
+            onCandidateClick={onCandidateClick}
           />
         )}
       </div>
@@ -1339,12 +1180,9 @@ export function JobDetailsView({ job, onSettings, onAddCandidates, onNavigationC
         onClose={() => setShowImportFlow(false)}
         jobOpeningId={job.id}
         onImportComplete={(count) => {
-          setCandidatesCount(prev => prev + count)
           setShowImportFlow(false)
           // Refresh candidates list
-          if (job?.id) {
-            fetchCandidates(job.id, undefined, true) // Force refresh after import
-          }
+          onRefreshCandidates(true) // Force refresh after import
         }}
       />
 

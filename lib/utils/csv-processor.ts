@@ -291,9 +291,8 @@ export class CSVProcessor {
       issues.push('Invalid email format')
     }
 
-    if (!candidate.mobilePhone || candidate.mobilePhone.trim() === '') {
-      issues.push('Mobile phone is required')
-    } else if (!this.isValidPhone(candidate.mobilePhone)) {
+    // Mobile phone is optional, but if provided, validate format
+    if (candidate.mobilePhone && candidate.mobilePhone.trim() !== '' && !this.isValidPhone(candidate.mobilePhone)) {
       issues.push('Invalid phone format')
     }
 

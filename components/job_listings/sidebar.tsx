@@ -37,6 +37,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { SurveySparrowIcon } from "@/utils/icons";
 import RocketIcon from "@/components/ui/rocket-icon";
+import CandidatesIcon from "@/components/ui/candidates-icon";
 
 interface AppSidebarProps {
   onCreateJob?: () => void;
@@ -232,6 +233,13 @@ export function AppSidebar({
   }, []);
 
   const navigationItems = [
+    {
+      icon: CandidatesIcon,
+      label: "Candidates",
+      href: "/candidates",
+      isActive: false,
+      hasSubmenu: false,
+    },
     {
       icon: RocketIcon,
       label: "All roles",

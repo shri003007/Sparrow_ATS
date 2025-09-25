@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 interface CandidatePreview {
   name: string
   email: string
-  mobilePhone: string
+  mobilePhone?: string
   experience?: string
   currentSalary?: string
   expectedSalary?: string

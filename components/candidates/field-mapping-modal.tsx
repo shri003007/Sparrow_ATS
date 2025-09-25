@@ -40,10 +40,10 @@ export function FieldMappingModal({
   const requiredFields: FieldMapping[] = [
     { fieldName: "Name", csvColumn: "", isRequired: true, fieldType: "text" },
     { fieldName: "Email", csvColumn: "", isRequired: true, fieldType: "email" },
-    { fieldName: "Mobile Phone", csvColumn: "", isRequired: true, fieldType: "phone" },
   ]
 
   const optionalFields: FieldMapping[] = [
+    { fieldName: "Mobile Phone", csvColumn: "", isRequired: false, fieldType: "phone" },
     { fieldName: "Resume URL", csvColumn: "", isRequired: false, fieldType: "text" },
     { fieldName: "Experience (Years)", csvColumn: "", isRequired: false, fieldType: "number" },
     { fieldName: "Current Salary", csvColumn: "", isRequired: false, fieldType: "number" },
