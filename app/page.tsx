@@ -27,6 +27,8 @@ import { NavigationWarningDialog } from "@/components/job_opening/navigation-war
 import { useNavigationPrevention } from "@/hooks/use-navigation-prevention"
 import { JobListingsApp } from "@/components/job_listings/job-listings-app"
 import { AdminSettingsPage } from "@/components/admin/admin-settings-page"
+import { SparrowAssessmentTestsApi } from "@/lib/api/sparrow-assessment-tests"
+import { toast } from "@/hooks/use-toast"
 
 
 type AppView = "job-listings" | "job-creation" | "admin-settings"
@@ -270,13 +272,18 @@ export default function ATSInterface() {
   const handleConfirmPublish = async () => {
     try {
       setIsPublishing(true)
+      let roundTemplatesResponse: any = null
+
       // Save rounds to job opening if we have a job ID and rounds
       if (currentJobId && selectedRounds.length > 0) {
         const roundTemplatesRequest = JobRoundTemplatesTransformer.transformRoundsWithTemplateContext(
           selectedRounds, 
           selectedOriginalTemplates
         )
-        const roundTemplatesResponse = await JobRoundTemplatesApi.createJobRoundTemplates(currentJobId, roundTemplatesRequest)
+        roundTemplatesResponse = await JobRoundTemplatesApi.createJobRoundTemplates(currentJobId, roundTemplatesRequest)
+        
+        // Create Sparrow Assessment mappings for rounds that have them enabled
+        await createSparrowAssessmentMappings(selectedRounds, roundTemplatesResponse)
         
         // After successfully creating round templates, confirm the job opening
         const confirmationResponse = await JobOpeningsApi.confirmJobOpening(currentJobId)
@@ -299,8 +306,12 @@ export default function ATSInterface() {
       }, 2000)
     } catch (error) {
       console.error('Failed to publish job:', error)
-      // TODO: Show error notification to user
-      // For now, continue with the flow even if publishing fails
+      toast({
+        title: "Job Publishing Error",
+        description: error instanceof Error ? error.message : "Failed to publish job. Please try again.",
+        variant: "destructive"
+      })
+      // Continue with the flow even if publishing fails
       setShowPublishConfirmation(false)
       setNewlyCreatedJobId(currentJobId) // Store the newly created job ID even on error
       setAppView("job-listings")
@@ -315,6 +326,57 @@ export default function ATSInterface() {
       }, 2000)
     } finally {
       setIsPublishing(false)
+    }
+  }
+
+  // Helper function to create Sparrow Assessment mappings
+  const createSparrowAssessmentMappings = async (rounds: HiringRound[], roundTemplatesResponse: any) => {
+    const mappingPromises: Promise<void>[] = []
+
+    for (const round of rounds) {
+      if (round.sparrowAssessmentEnabled && round.sparrowAssessmentId) {
+        // Find the corresponding round template ID from the response
+        const roundTemplate = roundTemplatesResponse?.job_round_templates?.find((template: any) => 
+          template.round_name === round.name || template.order === round.order
+        )
+
+        if (roundTemplate?.id) {
+          const mappingPromise = SparrowAssessmentTestsApi.createAssessmentMapping({
+            sparrow_assessment_id: round.sparrowAssessmentId,
+            job_round_template_id: roundTemplate.id
+          }).then(() => {
+            console.log(`✅ Created Sparrow Assessment mapping for round: ${round.name}`)
+          }).catch((error) => {
+            console.error(`❌ Failed to create Sparrow Assessment mapping for round: ${round.name}`, error)
+            // Don't throw error to prevent job publishing failure
+            toast({
+              title: "Sparrow Assessment Mapping Warning",
+              description: `Failed to link ${round.name} to Sparrow Assessment. The round was created successfully.`,
+              variant: "destructive"
+            })
+          })
+
+          mappingPromises.push(mappingPromise)
+        } else {
+          console.warn(`No round template ID found for round: ${round.name}`)
+        }
+      }
+    }
+
+    // Wait for all mappings to complete (but don't fail if they don't)
+    if (mappingPromises.length > 0) {
+      try {
+        await Promise.allSettled(mappingPromises)
+        const successfulMappings = rounds.filter(r => r.sparrowAssessmentEnabled && r.sparrowAssessmentId).length
+        if (successfulMappings > 0) {
+          toast({
+            title: "Sparrow Assessment Integration",
+            description: `Successfully linked ${successfulMappings} round(s) to Sparrow Assessments.`,
+          })
+        }
+      } catch (error) {
+        console.error('Error in Sparrow Assessment mappings:', error)
+      }
     }
   }
 

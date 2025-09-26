@@ -18,6 +18,8 @@ export const API_CONFIG = {
   SALES_EVALUATION_FROM_SPARROWINTERVIEWER_URL: process.env.NEXT_PUBLIC_SALES_EVALUATION_FROM_SPARROWINTERVIEWER_URL,
   // Sparrow Assessment Get Answers API
   GET_ANSWERS_API_URL: process.env.NEXT_PUBLIC_GET_ANSWERS,
+  // Sparrow Assessment API
+  SPARROW_ASSESSMENT_API_URL: process.env.NEXT_PUBLIC_SPARROW_ASSESSMENT,
   ENDPOINTS: {
     JOB_TEMPLATES: '/job-templates',
     JOB_OPENINGS: '/job-openings',
@@ -25,6 +27,7 @@ export const API_CONFIG = {
     JOB_ROUND_TEMPLATES: '/job-openings',
     JOB_CONFIRM: '/job-openings',
     AI_GENERATE_JOB: '/generate-job-description',
+    AI_GENERATE_ROUND_COMPETENCY: '/generate-round-competency',
     // Job rounds management (BASE_URL)
     JOB_ROUND_TEMPLATES_GET: '/job-openings', // /{job_opening_id}/round-templates
     START_ROUNDS: '/job-openings', // /{job_opening_id}/start-rounds
@@ -37,6 +40,10 @@ export const API_CONFIG = {
     CANDIDATES_BULK_ROUND_STATUS_UPDATE: '/candidates/bulk-round-status-update',
     UPDATE_CANDIDATE_ROUND_STATUS: '/update-candidate-round-status',
     CANDIDATE_ROUNDS_BULK_CREATE: '/candidate-rounds/bulk-create',
+    // Sparrow Assessment endpoints
+    SPARROW_TESTS: '/tests',
+    SPARROW_ASSESSMENTS: '/assessments/test',
+    SPARROW_ASSESSMENT_MAPPING: '/sparrow-assessment-mapping/create',
     // AI Evaluation endpoints
     RESUME_EVALUATION: '/evaluate' // This will be appended to RESUME_EVALUATION_API_URL
   }

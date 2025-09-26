@@ -8,6 +8,10 @@ import { RoundTemplateSelectionModal } from "./round-template-selection-modal"
 import { RoundAICreationModal } from "./round-ai-creation-modal"
 import { RoundAILoadingModal } from "./round-ai-loading-modal"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { AIRoundGenerationApi } from "@/lib/api/ai-round-generation"
+import { useAuth } from "@/contexts/auth-context"
+import { toast } from "@/hooks/use-toast"
+import { SparrowAssessmentSelector } from "./sparrow-assessment-selector"
 
 interface HiringProcessCanvasProps {
   rounds: HiringRound[]
@@ -19,6 +23,7 @@ interface HiringProcessCanvasProps {
 }
 
 export function HiringProcessCanvas({ rounds, onUpdateRounds, onPublish, onBack, jobTitle, isPublishing = false }: HiringProcessCanvasProps) {
+  const { apiUser } = useAuth()
   const [activeRoundId, setActiveRoundId] = useState<string | null>(rounds[0]?.id || null)
   const [draggedRoundId, setDraggedRoundId] = useState<string | null>(null)
   const [hoveredInsertIndex, setHoveredInsertIndex] = useState<number | null>(null)
@@ -166,47 +171,60 @@ export function HiringProcessCanvas({ rounds, onUpdateRounds, onPublish, onBack,
     setShowRoundAIModal(true)
   }
 
-  const handleAIGenerateRound = (prompt: string) => {
+  const handleAIGenerateRound = async (prompt: string) => {
+    if (!apiUser?.id) {
+      toast({
+        title: "Authentication Error",
+        description: "User authentication required to generate AI rounds.",
+        variant: "destructive"
+      })
+      return
+    }
+
     setShowRoundAIModal(false)
     setShowRoundAILoading(true)
 
-    setTimeout(() => {
+    try {
+      const response = await AIRoundGenerationApi.generateRoundCompetency({
+        user_input: prompt,
+        created_by: apiUser.id
+      })
+
+      if (!response.success || !response.is_valid) {
+        throw new Error(response.message || "Failed to generate round competency")
+      }
+
+      const { round_details } = response
       const newRoundId = `ai-${Date.now()}`
+      
+      // Transform API competencies to UI format
+      const competencies: Competency[] = round_details.competencies.map((comp, index) => {
+        // Convert rubric_scorecard entries to questions
+        const questions: Question[] = Object.entries(comp.rubric_scorecard).map(([level, question]) => ({
+          id: `q-ai-${Date.now()}-${index}-${level}`,
+          text: question
+        }))
+
+        return {
+          id: `comp-ai-${Date.now()}-${index}`,
+          name: comp.name,
+          description: comp.description,
+          rubricScorecard: comp.rubric_scorecard,
+          questions
+        }
+      })
+
       const newRound: HiringRound = {
         id: newRoundId,
-        name: "",
-        type: "interview", // Changed from "custom" to "interview" for proper validation
+        name: round_details.round_name,
+        type: "interview",
         isSelected: true,
         order: insertIndex!,
-        description: `An AI-generated round to assess candidate alignment with company culture for the ${jobTitle} role.`,
+        description: `AI-generated round for ${jobTitle} position`,
         duration: "45 min",
         difficulty: "Intermediate",
-        evaluationCriteria:
-          "Assess candidate's alignment with company values (e.g., collaboration, innovation, ownership). Evaluate their long-term career aspirations and how they align with the company's growth. Look for genuine enthusiasm and proactive communication.",
-        competencies: [
-          {
-            id: `comp-ai-${Date.now()}-1`,
-            name: "Team Collaboration",
-            questions: [
-              {
-                id: `q-ai-${Date.now()}-1`,
-                text: "Describe a time you had a disagreement with a coworker. How did you handle it?",
-              },
-              { id: `q-ai-${Date.now()}-2`, text: "How do you prefer to receive feedback?" },
-            ],
-          },
-          {
-            id: `comp-ai-${Date.now()}-2`,
-            name: "Value Alignment",
-            questions: [
-              { id: `q-ai-${Date.now()}-3`, text: "What kind of work environment helps you do your best work?" },
-              {
-                id: `q-ai-${Date.now()}-4`,
-                text: "What are your long-term career goals and how does this role fit into them?",
-              },
-            ],
-          },
-        ],
+        evaluationCriteria: round_details.evaluation_criteria,
+        competencies
       }
 
       addRound(newRound, insertIndex!)
@@ -218,7 +236,23 @@ export function HiringProcessCanvas({ rounds, onUpdateRounds, onPublish, onBack,
       setTimeout(() => {
         setEditingId(`round-name-${newRoundId}`)
       }, 100)
-    }, 2500)
+
+      toast({
+        title: "Round Generated Successfully",
+        description: `Generated "${round_details.round_name}" with ${competencies.length} competencies.`,
+      })
+
+    } catch (error) {
+      console.error('AI round generation failed:', error)
+      setShowRoundAILoading(false)
+      setInsertIndex(null)
+      
+      toast({
+        title: "Generation Failed",
+        description: error instanceof Error ? error.message : "Failed to generate AI round. Please try again.",
+        variant: "destructive"
+      })
+    }
   }
 
   const handleUpdateRoundField = (roundId: string, field: keyof HiringRound, value: string) => {
@@ -228,6 +262,33 @@ export function HiringProcessCanvas({ rounds, onUpdateRounds, onPublish, onBack,
     }
     
     const updatedRounds = rounds.map((r) => (r.id === roundId ? { ...r, [field]: value } : r))
+    onUpdateRounds(updatedRounds)
+  }
+
+  const handleSparrowAssessmentToggle = (roundId: string, enabled: boolean) => {
+    const updatedRounds = rounds.map((r) => 
+      r.id === roundId 
+        ? { 
+            ...r, 
+            sparrowAssessmentEnabled: enabled,
+            sparrowAssessmentId: enabled ? r.sparrowAssessmentId : undefined
+          } 
+        : r
+    )
+    onUpdateRounds(updatedRounds)
+  }
+
+  const handleSparrowAssessmentSelect = (roundId: string, assessmentId: string | undefined, testName?: string, assessmentName?: string) => {
+    const updatedRounds = rounds.map((r) => 
+      r.id === roundId 
+        ? { 
+            ...r, 
+            sparrowAssessmentId: assessmentId,
+            sparrowTestName: testName,
+            sparrowAssessmentName: assessmentName
+          } 
+        : r
+    )
     onUpdateRounds(updatedRounds)
   }
 
@@ -750,6 +811,19 @@ export function HiringProcessCanvas({ rounds, onUpdateRounds, onPublish, onBack,
                     className="w-full p-4 border rounded-lg text-sm text-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
                     placeholder="Define the rubric for this round..."
                     style={{ borderColor: "#E5E7EB" }}
+                  />
+                </div>
+
+                {/* Sparrow Assessment Integration */}
+                <div className="border-t pt-6">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4">Sparrow Assessment Integration</h3>
+                  <SparrowAssessmentSelector
+                    isEnabled={activeRound.sparrowAssessmentEnabled || false}
+                    selectedAssessmentId={activeRound.sparrowAssessmentId}
+                    selectedTestName={activeRound.sparrowTestName}
+                    selectedAssessmentName={activeRound.sparrowAssessmentName}
+                    onToggle={(enabled) => handleSparrowAssessmentToggle(activeRound.id, enabled)}
+                    onAssessmentSelect={(assessmentId, testName, assessmentName) => handleSparrowAssessmentSelect(activeRound.id, assessmentId, testName, assessmentName)}
                   />
                 </div>
                 </div>

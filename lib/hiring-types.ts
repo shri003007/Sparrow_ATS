@@ -33,6 +33,11 @@ export interface HiringRound {
   duration?: string
   difficulty?: "Easy" | "Intermediate" | "Hard"
   evaluationCriteria: string // Added to the round level
+  // Sparrow Assessment integration
+  sparrowAssessmentEnabled?: boolean
+  sparrowAssessmentId?: string
+  sparrowTestName?: string
+  sparrowAssessmentName?: string
 }
 
 export interface Competency {
