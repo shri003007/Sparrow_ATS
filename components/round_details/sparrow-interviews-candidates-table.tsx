@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -160,6 +160,40 @@ export function SparrowInterviewsCandidatesTable({
     return -1 // Return -1 for candidates without scores so they appear at the bottom
   }
 
+  // Extract unique competencies from all candidates
+  const competencies = useMemo(() => {
+    const competencyMap = new Map<string, string>()
+    
+    localCandidates.forEach(candidate => {
+      if (candidate.candidate_rounds && candidate.candidate_rounds.length > 0) {
+        const evaluation = candidate.candidate_rounds[0].evaluations?.[0]
+        if (evaluation?.evaluation_result?.competency_evaluation?.competency_scores) {
+          evaluation.evaluation_result.competency_evaluation.competency_scores.forEach((comp: any) => {
+            if (comp.competency_name) {
+              competencyMap.set(comp.competency_name, comp.competency_name)
+            }
+          })
+        }
+      }
+    })
+    
+    return Array.from(competencyMap.values())
+  }, [localCandidates])
+
+  // Get competency score for a specific candidate and competency
+  const getCompetencyScore = (candidate: RoundCandidate, competencyName: string): number | null => {
+    if (candidate.candidate_rounds && candidate.candidate_rounds.length > 0) {
+      const evaluation = candidate.candidate_rounds[0].evaluations?.[0]
+      if (evaluation?.evaluation_result?.competency_evaluation?.competency_scores) {
+        const competencyScore = evaluation.evaluation_result.competency_evaluation.competency_scores.find(
+          (comp: any) => comp.competency_name === competencyName
+        )
+        return competencyScore?.percentage_score ?? null
+      }
+    }
+    return null
+  }
+
   const openEvaluationPanel = (candidate: RoundCandidate) => {
     setSelectedCandidate(candidate)
     setIsPanelOpen(true)
@@ -237,7 +271,14 @@ export function SparrowInterviewsCandidatesTable({
           bValue = getCandidateScoreValue(b)
           break
         default:
-          return 0
+          // Handle competency-specific sorting
+          if (column.startsWith('competency-')) {
+            const competencyName = column.replace('competency-', '')
+            aValue = getCompetencyScore(a, competencyName) ?? -1
+            bValue = getCompetencyScore(b, competencyName) ?? -1
+          } else {
+            return 0
+          }
       }
 
       if (newOrder === 'asc') {
@@ -425,16 +466,17 @@ export function SparrowInterviewsCandidatesTable({
                   height: "48px",
                   fontSize: "12px",
                   color: "#6B7280",
-                  padding: "8px 16px",
+                  padding: "8px 20px",
                   fontWeight: "500",
                   verticalAlign: "center",
                   fontFamily,
                   textAlign: "left",
-                  minWidth: "120px"
+                  minWidth: "160px",
+                  whiteSpace: "nowrap"
                 }}
               >
-                <div className="flex items-center gap-2">
-                  Score
+                <div className="flex items-center gap-2" style={{ whiteSpace: "nowrap" }}>
+                  Overall Score
                   <Button
                     variant="ghost"
                     size="sm"
@@ -448,6 +490,61 @@ export function SparrowInterviewsCandidatesTable({
                   </Button>
                 </div>
               </th>
+              {/* Competency Score Columns */}
+              {competencies.map((competency) => (
+                <th
+                  key={`competency-${competency}`}
+                  style={{
+                    background: "#f6f7f8",
+                    borderBottom: "none",
+                    height: "48px",
+                    fontSize: "12px",
+                    color: "#6B7280",
+                    padding: "8px 20px",
+                    fontWeight: "500",
+                    verticalAlign: "center",
+                    fontFamily,
+                    textAlign: "left",
+                    width: "160px",
+                    minWidth: "160px",
+                    maxWidth: "160px"
+                  }}
+                >
+                  <div className="flex items-center gap-2">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div
+                            style={{
+                              whiteSpace: "nowrap",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              maxWidth: "100px", // Account for padding and sort button
+                              cursor: "help"
+                            }}
+                          >
+                            {competency}
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>{competency}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0"
+                      onClick={() => handleSort(`competency-${competency}`)}
+                    >
+                      {sortOrder[`competency-${competency}`] === 'asc' ? 
+                        <ChevronUp className="w-4 h-4" /> : 
+                        <ChevronDown className="w-4 h-4" />
+                      }
+                    </Button>
+                  </div>
+                </th>
+              ))}
               <th
                 style={{
                   background: "#f6f7f8",
@@ -455,7 +552,7 @@ export function SparrowInterviewsCandidatesTable({
                   height: "48px",
                   fontSize: "12px",
                   color: "#6B7280",
-                  padding: "8px 16px",
+                  padding: "8px 20px",
                   fontWeight: "500",
                   verticalAlign: "center",
                   fontFamily,
@@ -522,7 +619,7 @@ export function SparrowInterviewsCandidatesTable({
                       position: "sticky",
                       left: 0,
                       zIndex: 10,
-                      padding: "12px"
+                      padding: "12px 20px"
                     }}
                     className="bg-white group-hover:bg-gray-50 transition-colors"
                   >
@@ -556,7 +653,7 @@ export function SparrowInterviewsCandidatesTable({
                   </td>
 
                   {/* Email */}
-                  <td style={{ minWidth: "200px", padding: "12px" }}>
+                  <td style={{ minWidth: "200px", padding: "12px 20px" }}>
                     <div 
                       className="text-sm font-medium text-gray-900"
                       style={{ fontFamily }}
@@ -567,7 +664,7 @@ export function SparrowInterviewsCandidatesTable({
 
                   {/* Job Column - Only show in multi-job mode */}
                   {isMultiJobMode && (
-                    <td style={{ minWidth: "200px", padding: "12px" }}>
+                    <td style={{ minWidth: "200px", padding: "12px 20px" }}>
                       <div 
                         className="text-sm font-medium text-gray-900"
                         style={{ fontFamily }}
@@ -578,7 +675,7 @@ export function SparrowInterviewsCandidatesTable({
                   )}
 
                   {/* Status */}
-                  <td style={{ minWidth: "180px", padding: "12px" }}>
+                  <td style={{ minWidth: "180px", padding: "12px 20px" }}>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button
@@ -620,7 +717,7 @@ export function SparrowInterviewsCandidatesTable({
                   </td>
 
                   {/* Score with Color Coding */}
-                  <td style={{ minWidth: "120px", padding: "12px" }}>
+                  <td style={{ minWidth: "160px", padding: "12px 20px" }}>
                     {score !== '-' ? (
                       <div className="flex items-center">
                         <div
@@ -656,8 +753,52 @@ export function SparrowInterviewsCandidatesTable({
                     )}
                   </td>
 
+                  {/* Competency Scores */}
+                  {competencies.map((competency) => (
+                    <td key={`competency-${competency}`} style={{ width: "160px", minWidth: "160px", maxWidth: "160px", padding: "12px 20px" }}>
+                      {(() => {
+                        const score = getCompetencyScore(candidate, competency)
+                        if (score !== null && score !== undefined) {
+                          return (
+                            <div className="flex items-center">
+                              <div
+                                className="px-2 py-1 rounded-full text-xs font-medium"
+                                style={{
+                                  backgroundColor: (() => {
+                                    if (score >= 80) return '#DCFCE7' // green-100
+                                    if (score >= 60) return '#FEF3C7' // yellow-100  
+                                    if (score >= 40) return '#FED7AA' // orange-100
+                                    return '#FEE2E2' // red-100
+                                  })(),
+                                  color: (() => {
+                                    if (score >= 80) return '#16A34A' // green-600
+                                    if (score >= 60) return '#D97706' // yellow-600
+                                    if (score >= 40) return '#EA580C' // orange-600
+                                    return '#DC2626' // red-600
+                                  })(),
+                                  fontFamily
+                                }}
+                              >
+                                {Math.round(score)}%
+                              </div>
+                            </div>
+                          )
+                        } else {
+                          return (
+                            <div 
+                              className="text-sm text-gray-400"
+                              style={{ fontFamily }}
+                            >
+                              -
+                            </div>
+                          )
+                        }
+                      })()}
+                    </td>
+                  ))}
+
                   {/* Contact */}
-                  <td style={{ minWidth: "140px", padding: "12px" }}>
+                  <td style={{ minWidth: "140px", padding: "12px 20px" }}>
                     <div className="flex items-center gap-2 text-sm text-gray-600" style={{ fontFamily }}>
                       <Phone className="w-3 h-3" />
                       {candidate.mobile_phone || '-'}
@@ -666,7 +807,7 @@ export function SparrowInterviewsCandidatesTable({
 
                   {/* Custom Fields */}
                   {customFieldDefinitions.map((field) => (
-                    <td key={field.id} style={{ minWidth: "260px", padding: "16px" }}>
+                    <td key={field.id} style={{ minWidth: "260px", padding: "12px 20px" }}>
                       <div 
                         className="text-sm text-gray-600"
                         style={{ fontFamily }}

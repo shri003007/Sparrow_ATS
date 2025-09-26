@@ -253,7 +253,7 @@ export function CompetencyRadarChart({
                   <g>
                     {textLines.map((line, lineIndex) => (
                       <text
-                        key={lineIndex}
+                        key={`${competencyName}-line-${lineIndex}`}
                         x={textX}
                         y={startY + (lineIndex * lineHeight)}
                         textAnchor={textAnchor}
@@ -301,7 +301,7 @@ export function CompetencyRadarChart({
                     <div className="rounded-lg border bg-background p-3 shadow-lg" style={{ fontFamily }}>
                       <p className="font-medium mb-2">{label}</p>
                       {payload.map((entry, index) => (
-                        <p key={index} className="text-sm">
+                        <p key={`${entry.name}-${index}`} className="text-sm">
                           <span style={{ color: entry.color }}>{entry.name}</span>:{" "}
                           <span className="font-semibold">{entry.value}%</span>
                         </p>
@@ -556,7 +556,7 @@ export function CompetencyRadarChart({
                 Competency Scores
               </h4>
               {clickedCandidateData.scores.map((score, index) => (
-                <div key={score.competency} className="flex items-center justify-between">
+                <div key={`${score.competency}-${index}`} className="flex items-center justify-between">
                   <span className="text-sm text-gray-600 flex-1 pr-2">
                     {score.competency}
                   </span>

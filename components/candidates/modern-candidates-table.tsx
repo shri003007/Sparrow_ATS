@@ -97,7 +97,14 @@ export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsSta
           bVal = b.overall_score ?? -1
           break
         default:
-          return 0
+          // Handle round-specific sorting
+          if (field.startsWith('round-')) {
+            const roundOrder = parseInt(field.replace('round-', ''))
+            aVal = getRoundScore(a, roundOrder) ?? -1
+            bVal = getRoundScore(b, roundOrder) ?? -1
+          } else {
+            return 0
+          }
       }
       
       if (newOrder === 'asc') {
@@ -206,15 +213,39 @@ export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsSta
         fontFamily,
         backgroundColor: "#FFFFFF",
         borderRadius: "8px",
-        overflow: "hidden"
+        overflow: "hidden",
+        height: "calc(100vh - 160px)", // Fixed height based on viewport with maximum available space
+        display: "flex",
+        flexDirection: "column"
       }}
     >
-      {/* Table Header */}
-      <table className="w-full" style={{ borderCollapse: "separate", borderSpacing: 0 }}>
+      {/* Horizontal Scroll Container */}
+      <div 
+        className="flex-1 overflow-auto"
+        style={{
+          maxWidth: "100%",
+          scrollbarWidth: "thin",
+          scrollbarColor: "#CBD5E0 #F7FAFC",
+          paddingBottom: "60px" // Add substantial bottom padding to ensure last row is fully visible
+        }}
+      >
+        {/* Table Header */}
+        <table 
+          className="w-full" 
+          style={{ 
+            borderCollapse: "separate", 
+            borderSpacing: "0 0",
+            minWidth: "1200px", // Ensure minimum width to force horizontal scroll when needed
+            marginBottom: "40px" // Extra margin to ensure last row is fully visible
+          }}
+        >
         <thead
           style={{
             backgroundColor: "#f6f7f8",
-            borderRadius: "8px"
+            borderRadius: "8px",
+            position: "sticky",
+            top: 0,
+            zIndex: 20
           }}
         >
           <tr>
@@ -225,17 +256,19 @@ export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsSta
                 height: "48px",
                 fontSize: "12px",
                 color: "#6B7280",
-                padding: "8px 16px",
+                padding: "8px 20px",
                 fontWeight: "500",
                 verticalAlign: "center",
                 borderTopLeftRadius: "8px",
                 borderBottomLeftRadius: "8px",
                 fontFamily,
                 textAlign: "left",
+                width: "220px",
                 minWidth: "220px",
+                maxWidth: "220px",
                 position: "sticky",
                 left: 0,
-                zIndex: 40
+                zIndex: 30
               }}
             >
               <div className="flex items-center gap-2">
@@ -260,12 +293,14 @@ export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsSta
                 height: "48px",
                 fontSize: "12px",
                 color: "#6B7280",
-                padding: "8px 16px",
+                padding: "8px 20px",
                 fontWeight: "500",
                 verticalAlign: "center",
                 fontFamily,
                 textAlign: "left",
-                minWidth: "200px"
+                width: "200px",
+                minWidth: "200px",
+                maxWidth: "200px"
               }}
             >
               <div className="flex items-center gap-2">
@@ -290,12 +325,14 @@ export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsSta
                 height: "48px",
                 fontSize: "12px",
                 color: "#6B7280",
-                padding: "8px 16px",
+                padding: "8px 20px",
                 fontWeight: "500",
                 verticalAlign: "center",
                 fontFamily,
                 textAlign: "left",
-                minWidth: "180px"
+                width: "160px",
+                minWidth: "160px",
+                maxWidth: "160px"
               }}
             >
               <div className="flex items-center gap-2">
@@ -322,16 +359,19 @@ export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsSta
                   height: "48px",
                   fontSize: "12px",
                   color: "#6B7280",
-                  padding: "8px 16px",
+                  padding: "8px 20px",
                   fontWeight: "500",
                   verticalAlign: "center",
                   fontFamily,
                   textAlign: "left",
-                  minWidth: "120px"
+                  width: "140px",
+                  minWidth: "140px",
+                  maxWidth: "140px",
+                  whiteSpace: "nowrap"
                 }}
               >
-                <div className="flex items-center gap-2">
-                  Score
+                <div className="flex items-center gap-2" style={{ whiteSpace: "nowrap" }}>
+                  Overall Score
                   <Button
                     variant="ghost"
                     size="sm"
@@ -356,15 +396,49 @@ export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsSta
                   height: "48px",
                   fontSize: "12px",
                   color: "#6B7280",
-                  padding: "8px 16px",
+                  padding: "8px 20px",
                   fontWeight: "500",
                   verticalAlign: "center",
                   fontFamily,
                   textAlign: "left",
-                  minWidth: "120px"
+                  width: "140px",
+                  minWidth: "140px",
+                  maxWidth: "140px"
                 }}
               >
-                {round.round_name}
+                <div className="flex items-center gap-2">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div
+                          style={{
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            maxWidth: "80px", // Account for padding and sort button
+                            cursor: "help"
+                          }}
+                        >
+                          {round.round_name}
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>{round.round_name}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0"
+                    onClick={() => handleSort(`round-${round.order}`)}
+                  >
+                    {sortOrder[`round-${round.order}`] === 'asc' ? 
+                      <ChevronUp className="w-4 h-4" /> : 
+                      <ChevronDown className="w-4 h-4" />
+                    }
+                  </Button>
+                </div>
               </th>
             ))}
             <th
@@ -374,12 +448,14 @@ export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsSta
                 height: "48px",
                 fontSize: "12px",
                 color: "#6B7280",
-                padding: "8px 16px",
+                padding: "8px 20px",
                 fontWeight: "500",
                 verticalAlign: "center",
                 fontFamily,
                 textAlign: "left",
-                minWidth: "140px"
+                width: "140px",
+                minWidth: "140px",
+                maxWidth: "140px"
               }}
             >
               Contact
@@ -394,12 +470,14 @@ export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsSta
                   height: "48px",
                   fontSize: "12px",
                   color: "#6B7280",
-                  padding: "8px 16px",
+                  padding: "8px 20px",
                   fontWeight: "500",
                   verticalAlign: "center",
                   fontFamily,
                   textAlign: "left",
-                  minWidth: "260px",
+                  width: "200px",
+                  minWidth: "200px",
+                  maxWidth: "200px",
                   ...(index === customFields.length - 1 && {
                     borderTopRightRadius: "8px",
                     borderBottomRightRadius: "8px"
@@ -413,13 +491,7 @@ export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsSta
         </thead>
         
         {/* Table Body */}
-        <tbody
-          style={{
-            maxHeight: "calc(100vh - 154px - 32px - 47px - 14px)",
-            position: "relative",
-            height: "100%"
-          }}
-        >
+        <tbody>
           {localCandidates.map((candidate) => {
             const statusConfig = STATUS_CONFIG[candidate.status]
             
@@ -431,11 +503,13 @@ export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsSta
                 {/* Candidate Info - Sticky */}
                 <td
                   style={{
+                    width: "220px",
                     minWidth: "220px",
+                    maxWidth: "220px",
                     position: "sticky",
                     left: 0,
                     zIndex: 10,
-                    padding: "12px"
+                    padding: "12px 20px"
                   }}
                   className="bg-white group-hover:bg-gray-50 transition-colors"
                 >
@@ -475,7 +549,7 @@ export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsSta
                 </td>
 
                 {/* Email */}
-                <td style={{ minWidth: "200px", padding: "12px" }}>
+                <td style={{ width: "200px", minWidth: "200px", maxWidth: "200px", padding: "12px 20px" }}>
                   <div 
                     className="text-sm font-medium text-gray-900"
                     style={{ fontFamily }}
@@ -485,7 +559,7 @@ export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsSta
                 </td>
 
                 {/* Status */}
-                <td style={{ minWidth: "180px", padding: "12px" }}>
+                <td style={{ width: "160px", minWidth: "160px", maxWidth: "160px", padding: "12px 20px" }}>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
@@ -524,7 +598,7 @@ export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsSta
 
                 {/* Score - Only show when rounds have started */}
                 {hasRoundsStarted && (
-                  <td style={{ minWidth: "120px", padding: "12px" }}>
+                  <td style={{ width: "140px", minWidth: "140px", maxWidth: "140px", padding: "12px 20px" }}>
                     {candidate.overall_score !== undefined && candidate.overall_score !== null ? (
                       <div className="flex items-center">
                         <div
@@ -563,7 +637,7 @@ export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsSta
 
                 {/* Round Scores - Only show when rounds have started */}
                 {hasRoundsStarted && rounds.map((round) => (
-                  <td key={`round-${round.order}`} style={{ minWidth: "120px", padding: "12px" }}>
+                  <td key={`round-${round.order}`} style={{ width: "140px", minWidth: "140px", maxWidth: "140px", padding: "12px 20px" }}>
                     {(() => {
                       const score = getRoundScore(candidate, round.order)
                       if (score !== null && score !== undefined) {
@@ -606,7 +680,7 @@ export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsSta
                 ))}
 
                 {/* Contact */}
-                <td style={{ minWidth: "140px", padding: "12px" }}>
+                <td style={{ width: "140px", minWidth: "140px", maxWidth: "140px", padding: "12px 20px" }}>
                   <div className="flex items-center gap-2 text-sm text-gray-600" style={{ fontFamily }}>
                     <Phone className="w-3 h-3" />
                     {candidate.mobile_phone || '-'}
@@ -615,7 +689,7 @@ export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsSta
 
                 {/* Custom Fields */}
                 {customFields.map((field) => (
-                  <td key={field.field_name} style={{ minWidth: "260px", padding: "16px" }}>
+                  <td key={field.field_name} style={{ width: "200px", minWidth: "200px", maxWidth: "200px", padding: "12px 20px" }}>
                     <div 
                       className="text-sm text-gray-600"
                       style={{ fontFamily }}
@@ -629,6 +703,7 @@ export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsSta
           })}
         </tbody>
       </table>
+      </div>
     </div>
   )
 }
