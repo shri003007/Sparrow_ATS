@@ -65,6 +65,17 @@ export function JobListingsApp({ onCreateJob, newlyCreatedJobId, onSettingsClick
     }
   }, [])
 
+  // Sync view with job's has_rounds_started flag whenever selectedJob changes
+  useEffect(() => {
+    if (selectedJob) {
+      const correctView = selectedJob.has_rounds_started ? 'rounds' : 'candidates'
+      if (currentView !== correctView && currentView !== 'candidate-details') {
+        console.log(`🔄 Syncing view: job.has_rounds_started=${selectedJob.has_rounds_started}, setting view to '${correctView}'`)
+        setCurrentView(correctView)
+      }
+    }
+  }, [selectedJob?.has_rounds_started, currentView])
+
   // Save selected job and view to localStorage whenever they change
   useEffect(() => {
     try {
@@ -174,11 +185,15 @@ export function JobListingsApp({ onCreateJob, newlyCreatedJobId, onSettingsClick
 
         if (savedJob && jobs && Array.isArray(jobs)) {
           const jobData = JSON.parse(savedJob)
-          const jobStillExists = jobs.some(job => job.id === jobData.id)
-          if (jobStillExists) {
-            setSelectedJob(jobData)
+          // Find the current job data from the API (fresh data)
+          const currentJobData = jobs.find(job => job.id === jobData.id)
+          if (currentJobData) {
+            console.log(`🔄 Restoring job with fresh data: ${currentJobData.posting_title}`)
+            console.log(`   Saved has_rounds_started: ${jobData.has_rounds_started}`)
+            console.log(`   Current has_rounds_started: ${currentJobData.has_rounds_started}`)
+            setSelectedJob(currentJobData) // Use fresh data, not stale localStorage data
             // Always set view based on job's has_rounds_started flag
-            setCurrentView(jobData.has_rounds_started ? 'rounds' : 'candidates')
+            setCurrentView(currentJobData.has_rounds_started ? 'rounds' : 'candidates')
           } else {
             // Saved job was deleted, clear localStorage and select most recent job
             console.warn('Saved job no longer exists, selecting most recent job as fallback')

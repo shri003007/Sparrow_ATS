@@ -1,7 +1,7 @@
 "use client"
 
 import React from "react"
-import { Loader2, Users } from "lucide-react"
+import { Loader2, Users, ArrowRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -38,6 +38,12 @@ interface RoundSettingsModalProps {
   bulkStatusError: string | null
   onBulkStatusUpdate: () => void
   
+  // Next Round functionality
+  hasNextRound?: boolean
+  selectedCandidatesCount?: number
+  isProgressingCandidates?: boolean
+  onNextRound?: () => void
+  
   // Save/Cancel
   onSave: () => void
   onCancel: () => void
@@ -68,6 +74,10 @@ export function RoundSettingsModal({
   isBulkStatusUpdate,
   bulkStatusError,
   onBulkStatusUpdate,
+  hasNextRound = false,
+  selectedCandidatesCount = 0,
+  isProgressingCandidates = false,
+  onNextRound,
   onSave,
   onCancel,
   hasValidConfiguration
@@ -164,7 +174,7 @@ export function RoundSettingsModal({
         }
       }}
     >
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto mx-4">
         <DialogHeader>
           <DialogTitle style={{ fontFamily }}>{getSettingsTitle()}</DialogTitle>
           <DialogDescription style={{ fontFamily }}>
@@ -325,6 +335,47 @@ export function RoundSettingsModal({
             </div>
           </div>
         </div>
+
+        {/* Next Round Section */}
+        {hasNextRound && onNextRound && (
+          <div className="pt-4 border-t border-gray-200">
+            <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-green-900" style={{ fontFamily }}>
+                    Next Round
+                  </div>
+                  
+                </div>
+                <Button
+                  onClick={onNextRound}
+                  disabled={isProgressingCandidates || isBulkStatusUpdate}
+                  size="sm"
+                  className="flex items-center gap-1.5 flex-shrink-0"
+                  style={{
+                    backgroundColor: "#10B981",
+                    color: "#FFFFFF",
+                    fontFamily,
+                    fontSize: "12px"
+                  }}
+                >
+                  {isProgressingCandidates ? (
+                    <>
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <Users className="w-3 h-3" />
+                      Advance
+                      <ArrowRight className="w-3 h-3" />
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
         
         <DialogFooter>
           <Button

@@ -1135,37 +1135,6 @@ export function SparrowInterviewsRoundContent({
                   </Button>
                 )}
 
-                {/* Next Round Button - Hide in multi-job mode */}
-                {hasNextRound && !isMultiJobMode && (
-                  <div className="flex flex-col items-end gap-2">
-                    <div className="text-sm text-gray-600" style={{ fontFamily }}>
-                      {selectedCandidatesCount} selected for next round
-                    </div>
-                    <Button
-                      onClick={handleProgressToNextRound}
-                      disabled={isProgressingCandidates}
-                      className="flex items-center gap-2"
-                      style={{
-                        backgroundColor: "#10B981",
-                        color: "#FFFFFF",
-                        fontFamily
-                      }}
-                    >
-                      {isProgressingCandidates ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Next round...
-                        </>
-                      ) : (
-                        <>
-                          <Users className="w-4 h-4" />
-                          Next round
-                          <ArrowRight className="w-4 h-4" />
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                )}
               </div>
             </div>
           </div>
@@ -1226,6 +1195,10 @@ export function SparrowInterviewsRoundContent({
         isBulkStatusUpdate={isBulkStatusUpdate}
         bulkStatusError={bulkStatusError}
         onBulkStatusUpdate={handleBulkStatusUpdate}
+        hasNextRound={hasNextRound}
+        selectedCandidatesCount={selectedCandidatesCount}
+        isProgressingCandidates={isProgressingCandidates}
+        onNextRound={handleProgressToNextRound}
         onSave={() => {
           saveSettings(tempPrimaryId, tempSecondaryId)
           setShowSettingsModal(false)
