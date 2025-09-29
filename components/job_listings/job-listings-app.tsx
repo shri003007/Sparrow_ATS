@@ -65,16 +65,23 @@ export function JobListingsApp({ onCreateJob, newlyCreatedJobId, onSettingsClick
     }
   }, [])
 
-  // Sync view with job's has_rounds_started flag whenever selectedJob changes
+  // Sync view with job's has_rounds_started flag only when job changes, not on manual navigation
   useEffect(() => {
     if (selectedJob) {
       const correctView = selectedJob.has_rounds_started ? 'rounds' : 'candidates'
-      if (currentView !== correctView && currentView !== 'candidate-details') {
-        console.log(`🔄 Syncing view: job.has_rounds_started=${selectedJob.has_rounds_started}, setting view to '${correctView}'`)
-        setCurrentView(correctView)
+      // Only sync if the current view doesn't make sense for the job state
+      // Allow manual navigation between candidates and rounds regardless of has_rounds_started
+      if (currentView === 'candidate-details') {
+        // Don't interfere with candidate details view
+        return
+      }
+      // Only force sync if we're in an invalid state (e.g., rounds view but no rounds started)
+      if (!selectedJob.has_rounds_started && currentView === 'rounds') {
+        console.log(`🔄 Job has no rounds started, switching from rounds to candidates view`)
+        setCurrentView('candidates')
       }
     }
-  }, [selectedJob?.has_rounds_started, currentView])
+  }, [selectedJob?.id, selectedJob?.has_rounds_started]) // Remove currentView from dependencies to prevent interference
 
   // Save selected job and view to localStorage whenever they change
   useEffect(() => {
