@@ -689,7 +689,7 @@ export function SparrowInterviewsRoundContent({
     })
     bulkEvaluationToastRef.current = initialToast
 
-    const BATCH_SIZE = roundType === 'INTERVIEW' ? 33 : 20 // Different batch sizes for different round types
+    const BATCH_SIZE = roundType === 'INTERVIEW' ? 33 : 60 // Different batch sizes for different round types
     const results = []
     let completed = 0
 

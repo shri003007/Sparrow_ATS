@@ -206,7 +206,7 @@ interface BatchResumeEvaluationRequest {
 }
 
 // Configuration
-const BATCH_SIZE = 20
+const BATCH_SIZE = 60
 const MAX_RETRIES = 3 // Maximum 3 retries per candidate
 const RETRY_DELAY = 1000 // 1 second
 
