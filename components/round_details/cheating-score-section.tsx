@@ -72,7 +72,7 @@ export function CheatingScoreSection({ cheatingScore }: CheatingScoreSectionProp
                 <Shield className={`w-6 h-6 ${riskColors.text}`} />
               </div>
               <div>
-                <h4 className="font-medium text-gray-900 text-sm">Integrity Status</h4>
+                <h4 className="font-medium text-gray-900 text-sm">Cheating Risk</h4>
                 <span className={`px-3 py-1 rounded-full text-sm font-medium ${riskColors.badge}`}>
                   {cheatingScore.risk_level} 
                 </span>
