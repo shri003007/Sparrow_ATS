@@ -75,7 +75,52 @@ export interface CandidateRound {
   status: 'selected' | 'rejected' | 'action_pending'
   is_evaluation: boolean
   is_deleted: boolean
-  evaluations: any[]
+  evaluations: CandidateEvaluation[]
+}
+
+export interface CandidateEvaluation {
+  id: string
+  candidate_round_id: string
+  created_at: string
+  updated_at: string
+  evaluation_result: EvaluationResult
+}
+
+export interface EvaluationResult {
+  evaluation_summary?: string
+  competency_evaluation?: {
+    competency_scores: Array<{
+      competency_name: string
+      questions: Array<{
+        question_id: string
+        question: string
+        score: number
+        explanation: string
+      }>
+      percentage_score: number
+    }>
+    overall_percentage_score: number
+  }
+  overall_percentage_score?: number
+  comprehensive_evaluation?: string
+  rapid_fire_evaluation?: string
+  transcript_text?: string
+  qa_pairs?: any
+  grounding_results?: any[]
+  cheating_score?: {
+    cheating_score: number
+    risk_level: string
+    delayed_response_count: number
+    question_repetition_count: number
+    visual_score: number
+    suspicious_indicators: string[]
+    image_analysis_summary: string
+    images_analyzed?: number
+    batches_processed?: number
+    analyzed_at?: string
+    user_email?: string
+    assessment_id?: string
+  }
 }
 
 export interface CustomFieldDefinition {

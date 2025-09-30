@@ -1,8 +1,7 @@
 "use client"
 
 import React from 'react'
-import { Shield, AlertTriangle, Eye, Clock, RotateCcw, FileText } from 'lucide-react'
-import { EvaluationScoreChart } from './evaluation-score-chart'
+import { Shield, AlertTriangle, FileText, Clock, RotateCcw, Eye } from 'lucide-react'
 
 interface CheatingScoreData {
   cheating_score: number
@@ -51,17 +50,6 @@ const getRiskLevelColor = (riskLevel: string) => {
   }
 }
 
-const getScoreColor = (score: number) => {
-  if (score <= 30) return '#10B981' // Green
-  if (score <= 70) return '#F59E0B' // Yellow
-  return '#EF4444' // Red
-}
-
-const getScoreTextColor = (score: number) => {
-  if (score <= 30) return 'text-green-600'
-  if (score <= 70) return 'text-yellow-600'
-  return 'text-red-600'
-}
 
 export function CheatingScoreSection({ cheatingScore }: CheatingScoreSectionProps) {
   const riskColors = getRiskLevelColor(cheatingScore.risk_level)
@@ -77,54 +65,45 @@ export function CheatingScoreSection({ cheatingScore }: CheatingScoreSectionProp
         </div>
         
         <div className="p-6">
-          {/* Cheating Score and Metrics Layout */}
-          <div className="grid grid-cols-2 gap-8 mb-6">
-            {/* Left Side - Circular Cheating Score */}
-            <div className="flex items-center justify-center">
-              <div className="text-center">
-                <div className="flex items-center justify-center mb-4">
-                  <div className="relative">
-                    <EvaluationScoreChart 
-                      score={cheatingScore.cheating_score} 
-                      size="large"
-                    />
-                  </div>
-                </div>
-                <h4 className="font-bold text-gray-900 text-lg mb-2">Cheating Score</h4>
+          {/* Simple Risk Level Display */}
+          <div className="flex items-center justify-center mb-4">
+            <div className="flex items-center gap-4">
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center ${riskColors.bg} ${riskColors.border} border-2`}>
+                <Shield className={`w-6 h-6 ${riskColors.text}`} />
+              </div>
+              <div>
+                <h4 className="font-medium text-gray-900 text-sm">Integrity Status</h4>
                 <span className={`px-3 py-1 rounded-full text-sm font-medium ${riskColors.badge}`}>
-                  {cheatingScore.risk_level} RISK
+                  {cheatingScore.risk_level} 
                 </span>
               </div>
             </div>
+          </div>
 
-            {/* Right Side - Metrics Vertically Stacked */}
-            <div className="space-y-3">
-              <div className="bg-gray-50 border border-gray-100 rounded-lg p-3">
-                <div className="flex items-center gap-2 mb-1">
-                  <Clock className="w-4 h-4 text-orange-600" />
-                  <span className="text-sm font-medium text-gray-700">Delayed Responses</span>
-                </div>
-                <div className="text-xl font-bold text-gray-900">{cheatingScore.delayed_response_count}</div>
-                <div className="text-xs text-gray-500">instances detected</div>
+          {/* Horizontal Metrics */}
+          <div className="flex items-center justify-center gap-8 mb-6">
+            <div className="text-center bg-gray-50 rounded-lg p-3 min-w-[100px]">
+              <div className="flex items-center justify-center mb-2">
+                <Clock className="w-5 h-5 text-orange-600" />
               </div>
+              <div className="text-xl font-bold text-gray-900">{cheatingScore.delayed_response_count}</div>
+              <div className="text-sm text-gray-600">Delayed Responses</div>
+            </div>
 
-              <div className="bg-gray-50 border border-gray-100 rounded-lg p-3">
-                <div className="flex items-center gap-2 mb-1">
-                  <RotateCcw className="w-4 h-4 text-purple-600" />
-                  <span className="text-sm font-medium text-gray-700">Question Repetitions</span>
-                </div>
-                <div className="text-xl font-bold text-gray-900">{cheatingScore.question_repetition_count}</div>
-                <div className="text-xs text-gray-500">repetitions found</div>
+            <div className="text-center bg-gray-50 rounded-lg p-3 min-w-[100px]">
+              <div className="flex items-center justify-center mb-2">
+                <RotateCcw className="w-5 h-5 text-purple-600" />
               </div>
+              <div className="text-xl font-bold text-gray-900">{cheatingScore.question_repetition_count}</div>
+              <div className="text-sm text-gray-600">Question Repeats</div>
+            </div>
 
-              <div className="bg-gray-50 border border-gray-100 rounded-lg p-3">
-                <div className="flex items-center gap-2 mb-1">
-                  <Eye className="w-4 h-4 text-blue-600" />
-                  <span className="text-sm font-medium text-gray-700">Visual Score</span>
-                </div>
-                <div className="text-xl font-bold text-gray-900">{cheatingScore.visual_score}%</div>
-                <div className="text-xs text-gray-500">visual analysis</div>
+            <div className="text-center bg-gray-50 rounded-lg p-3 min-w-[100px]">
+              <div className="flex items-center justify-center mb-2">
+                <Eye className="w-5 h-5 text-blue-600" />
               </div>
+              <div className="text-xl font-bold text-gray-900">{cheatingScore.visual_score}%</div>
+              <div className="text-sm text-gray-600">Visual Analysis</div>
             </div>
           </div>
 

@@ -159,7 +159,7 @@ export function CandidateEvaluationPanel({
   
   // Initialize selected competency with first competency
   React.useEffect(() => {
-    if (evaluation?.competency_evaluation?.competency_scores?.length > 0 && !selectedCompetency) {
+    if (evaluation?.competency_evaluation?.competency_scores?.length && evaluation.competency_evaluation.competency_scores.length > 0 && !selectedCompetency) {
       setSelectedCompetency(evaluation.competency_evaluation.competency_scores[0].competency_name)
     }
   }, [evaluation, selectedCompetency])
@@ -1006,16 +1006,16 @@ export function CandidateEvaluationPanel({
                             <div className="flex items-center justify-center mb-4">
                               <div className="relative">
                                 <EvaluationScoreChart 
-                                  score={evaluation.overall_percentage_score} 
+                                  score={evaluation.overall_percentage_score || 0} 
                                   size="large"
                                 />
                               </div>
                             </div>
                             <h3 className="text-lg font-bold text-gray-900 mb-2">Overall Assessment Score</h3>
-                            <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border ${getScoreBadgeColor(evaluation.overall_percentage_score)}`}>
+                            <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border ${getScoreBadgeColor(evaluation.overall_percentage_score || 0)}`}>
                               <Award className="w-4 h-4" />
-                              <span className="font-medium">{getScoreLabel(evaluation.overall_percentage_score)}</span>
-                              <span className="font-bold">{evaluation.overall_percentage_score}%</span>
+                              <span className="font-medium">{getScoreLabel(evaluation.overall_percentage_score || 0)}</span>
+                              <span className="font-bold">{evaluation.overall_percentage_score || 0}%</span>
                             </div>
                           </div>
                         </div>
@@ -1024,8 +1024,8 @@ export function CandidateEvaluationPanel({
                   )}
 
                   {/* Cheating Score Section - Only show if cheating analysis data exists */}
-                  {sparrowAssessmentData?.data?.cheating_score && (
-                    <CheatingScoreSection cheatingScore={sparrowAssessmentData.data.cheating_score} />
+                  {evaluation?.cheating_score && (
+                    <CheatingScoreSection cheatingScore={evaluation.cheating_score} />
                   )}
 
                   {/* Section Scores */}

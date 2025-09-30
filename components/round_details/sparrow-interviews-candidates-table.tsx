@@ -108,7 +108,8 @@ export function SparrowInterviewsCandidatesTable({
     email: 'asc',
     created_at: 'desc',
     status: 'asc',
-    score: 'desc' // Default to descending for scores (highest first)
+    score: 'desc', // Default to descending for scores (highest first)
+    risk_status: 'asc' // Default to ascending for risk status (LOW, MEDIUM, HIGH)
   })
 
   // Update local candidates when prop changes and sort by score by default
@@ -158,6 +159,41 @@ export function SparrowInterviewsCandidatesTable({
       }
     }
     return -1 // Return -1 for candidates without scores so they appear at the bottom
+  }
+
+  const getCandidateRiskStatus = (candidate: RoundCandidate): string | null => {
+    if (candidate.candidate_rounds && candidate.candidate_rounds.length > 0) {
+      const evaluation = candidate.candidate_rounds[0].evaluations?.[0]
+      if (evaluation?.evaluation_result?.cheating_score?.risk_level) {
+        return evaluation.evaluation_result.cheating_score.risk_level
+      }
+    }
+    return null
+  }
+
+  const getRiskStatusColor = (riskLevel: string) => {
+    switch (riskLevel.toUpperCase()) {
+      case 'LOW':
+        return {
+          bg: '#DCFCE7', // green-100
+          text: '#16A34A' // green-600
+        }
+      case 'MEDIUM':
+        return {
+          bg: '#FEF3C7', // yellow-100
+          text: '#D97706' // yellow-600
+        }
+      case 'HIGH':
+        return {
+          bg: '#FEE2E2', // red-100
+          text: '#DC2626' // red-600
+        }
+      default:
+        return {
+          bg: '#F3F4F6', // gray-100
+          text: '#6B7280' // gray-500
+        }
+    }
   }
 
   // Extract unique competencies from all candidates
@@ -269,6 +305,21 @@ export function SparrowInterviewsCandidatesTable({
         case 'score':
           aValue = getCandidateScoreValue(a)
           bValue = getCandidateScoreValue(b)
+          break
+        case 'risk_status':
+          // Sort by risk level: LOW (1), MEDIUM (2), HIGH (3), others (4)
+          const getRiskValue = (candidate: RoundCandidate) => {
+            const risk = getCandidateRiskStatus(candidate)
+            if (!risk) return 4 // No risk data goes to end
+            switch (risk.toUpperCase()) {
+              case 'LOW': return 1
+              case 'MEDIUM': return 2
+              case 'HIGH': return 3
+              default: return 4
+            }
+          }
+          aValue = getRiskValue(a)
+          bValue = getRiskValue(b)
           break
         default:
           // Handle competency-specific sorting
@@ -471,7 +522,7 @@ export function SparrowInterviewsCandidatesTable({
                   verticalAlign: "center",
                   fontFamily,
                   textAlign: "left",
-                  minWidth: "160px",
+                  minWidth: "120px",
                   whiteSpace: "nowrap"
                 }}
               >
@@ -490,6 +541,40 @@ export function SparrowInterviewsCandidatesTable({
                   </Button>
                 </div>
               </th>
+              
+              {/* Risk Status Column Header */}
+              <th
+                style={{
+                  background: "#f6f7f8",
+                  borderBottom: "none",
+                  height: "48px",
+                  fontSize: "12px",
+                  color: "#6B7280",
+                  padding: "8px 20px",
+                  fontWeight: "500",
+                  verticalAlign: "center",
+                  fontFamily,
+                  textAlign: "left",
+                  minWidth: "120px",
+                  whiteSpace: "nowrap"
+                }}
+              >
+                <div className="flex items-center gap-2" style={{ whiteSpace: "nowrap" }}>
+                  Risk Status
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0"
+                    onClick={() => handleSort('risk_status')}
+                  >
+                    {sortOrder.risk_status === 'asc' ? 
+                      <ChevronUp className="w-4 h-4" /> : 
+                      <ChevronDown className="w-4 h-4" />
+                    }
+                  </Button>
+                </div>
+              </th>
+              
               {/* Competency Score Columns */}
               {competencies.map((competency) => (
                 <th
@@ -602,6 +687,7 @@ export function SparrowInterviewsCandidatesTable({
               const status = getCandidateRoundStatus(candidate)
               const statusConfig = ROUND_STATUS_CONFIG[status]
               const score = getCandidateScore(candidate)
+              const riskStatus = getCandidateRiskStatus(candidate)
               
               return (
                 <tr
@@ -717,7 +803,7 @@ export function SparrowInterviewsCandidatesTable({
                   </td>
 
                   {/* Score with Color Coding */}
-                  <td style={{ minWidth: "160px", padding: "12px 20px" }}>
+                  <td style={{ minWidth: "120px", padding: "12px 20px" }}>
                     {score !== '-' ? (
                       <div className="flex items-center">
                         <div
@@ -741,6 +827,34 @@ export function SparrowInterviewsCandidatesTable({
                           }}
                         >
                           {score}
+                        </div>
+                      </div>
+                    ) : (
+                      <div 
+                        className="text-sm text-gray-400"
+                        style={{ fontFamily }}
+                      >
+                        -
+                      </div>
+                    )}
+                  </td>
+
+                  {/* Risk Status Column */}
+                  <td style={{ minWidth: "120px", padding: "12px 20px" }}>
+                    {riskStatus ? (
+                      <div className="flex items-center">
+                        <div
+                          className="px-2 py-1 rounded-full text-xs font-medium"
+                          style={{
+                            backgroundColor: getRiskStatusColor(riskStatus).bg,
+                            color: getRiskStatusColor(riskStatus).text,
+                            fontFamily
+                          }}
+                        >
+                          {['LOW', 'MEDIUM', 'HIGH'].includes(riskStatus.toUpperCase()) 
+                            ? riskStatus.toUpperCase() 
+                            : riskStatus
+                          }
                         </div>
                       </div>
                     ) : (
