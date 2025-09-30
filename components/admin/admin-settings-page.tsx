@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Tabs, TabsContent, TabsList, TabsTrigger, Box, Heading, Text, Button } from '@sparrowengg/twigs-react'
+import { Tabs, TabsContent, TabsList, TabsTrigger, Box, Heading, Text, Button, CircleLoader } from '@sparrowengg/twigs-react'
 import { Users, Briefcase, ArrowLeft } from 'lucide-react'
 import { UserManagementView } from './user-management-view'
 import { JobManagementView } from './job-management-view'
@@ -97,11 +97,11 @@ export function AdminSettingsPage({ onClose }: AdminSettingsPageProps) {
               </TabsTrigger>
             </TabsList>
               
-              <TabsContent value="users" css={{ margin: '0', flex: 1, overflow: 'hidden' }}>
+              <TabsContent value="users" css={{ margin: '0', flex: 1, overflow: 'hidden', height: '100%' }}>
                 <UserManagementView />
               </TabsContent>
               
-              <TabsContent value="jobs" css={{ margin: '0', flex: 1, overflow: 'hidden' }}>
+              <TabsContent value="jobs" css={{ margin: '0', flex: 1, overflow: 'hidden', height: '100%' }}>
                 <JobManagementView />
               </TabsContent>
             </Tabs>

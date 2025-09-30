@@ -10,7 +10,8 @@ import {
   Avatar,
   Box,
   Text,
-  Heading
+  Heading,
+  CircleLoader
 } from '@sparrowengg/twigs-react'
 import {
   Dialog,
@@ -55,6 +56,7 @@ export function JobUserAssignmentsModal({
   const [selectedUsers, setSelectedUsers] = useState<{ [userId: string]: string }>({}) // userId -> access_type
   const [currentJobUsers, setCurrentJobUsers] = useState<UserJobAccess[]>([]) // Local copy that we can modify
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [removingAccess, setRemovingAccess] = useState<string | null>(null)
   const [showAddUsers, setShowAddUsers] = useState(false)
 
   // Initialize selected users and current job users when modal opens
@@ -112,6 +114,7 @@ export function JobUserAssignmentsModal({
   }
 
   const handleRemoveAccess = async (accessId: string, userId: string) => {
+    setRemovingAccess(accessId)
     try {
       await UserJobAccessApi.deleteUserJobAccess(accessId)
       
@@ -139,6 +142,8 @@ export function JobUserAssignmentsModal({
         description: "Failed to remove user access",
         variant: "destructive"
       })
+    } finally {
+      setRemovingAccess(null)
     }
   }
 
@@ -319,8 +324,13 @@ export function JobUserAssignmentsModal({
                           size="sm"
                           onClick={() => handleRemoveAccess(userAccess.id, userAccess.user_id)}
                           className="h-8 w-8 p-0 text-red-500 hover:text-red-700"
+                          disabled={removingAccess === userAccess.id}
                         >
-                          <Trash2 className="w-3 h-3" />
+                          {removingAccess === userAccess.id ? (
+                            <CircleLoader size="xs" />
+                          ) : (
+                            <Trash2 className="w-3 h-3" />
+                          )}
                         </Button>
                       </div>
                     </div>

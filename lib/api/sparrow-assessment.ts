@@ -46,6 +46,20 @@ export interface SparrowAssessmentResponse {
         }
       }
     }
+    cheating_score?: {
+      cheating_score: number
+      risk_level: string
+      delayed_response_count: number
+      question_repetition_count: number
+      visual_score: number
+      suspicious_indicators: string[]
+      image_analysis_summary: string
+      images_analyzed?: number
+      batches_processed?: number
+      analyzed_at?: string
+      user_email?: string
+      assessment_id?: string
+    }
   }
 }
 

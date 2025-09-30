@@ -11,7 +11,7 @@ import {
   Avatar, 
   CircleLoader 
 } from '@sparrowengg/twigs-react'
-import { Search, Plus, Settings, Trash2, Eye } from 'lucide-react'
+import { Search, Plus, Settings, Trash2, Eye, RefreshCw } from 'lucide-react'
 import { UsersApi, type User } from '@/lib/api/users'
 import { UserJobAccessApi, type UserJobAccess } from '@/lib/api/user-job-access'
 import { JobOpeningsApi } from '@/lib/api/job-openings'
@@ -27,6 +27,10 @@ export function UserManagementView() {
   const [allUserJobAccess, setAllUserJobAccess] = useState<UserJobAccess[]>([])
   const [allJobs, setAllJobs] = useState<JobOpeningListItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [addingUser, setAddingUser] = useState(false)
+  const [deletingUser, setDeletingUser] = useState<string | null>(null)
+  const [updatingAssignments, setUpdatingAssignments] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [showAddUserModal, setShowAddUserModal] = useState(false)
   const [showJobAssignmentsModal, setShowJobAssignmentsModal] = useState(false)
@@ -49,6 +53,9 @@ export function UserManagementView() {
       setUsers(usersResponse.users)
       setAllUserJobAccess(userJobAccessResponse.user_job_access)
       setAllJobs(jobsResponse.job_openings)
+      
+      // Small delay to ensure loading state is visible
+      await new Promise(resolve => setTimeout(resolve, 300))
     } catch (error) {
       console.error('Error loading data:', error)
       toast({
@@ -61,6 +68,44 @@ export function UserManagementView() {
     }
   }
 
+  const refreshData = async () => {
+    setRefreshing(true)
+    try {
+      // Load all data in parallel
+      const [usersResponse, userJobAccessResponse, jobsResponse] = await Promise.all([
+        UsersApi.getUsers(),
+        UserJobAccessApi.getUserJobAccess(),
+        JobOpeningsApi.getAllJobOpenings()
+      ])
+
+      setUsers(usersResponse.users)
+      setAllUserJobAccess(userJobAccessResponse.user_job_access)
+      setAllJobs(jobsResponse.job_openings)
+
+      // Update the selected user's job assignments from the fresh data
+      if (selectedUser) {
+        const userJobAssignments = userJobAccessResponse.user_job_access.filter(
+          access => access.user_id === selectedUser.id
+        )
+        setUserJobs(userJobAssignments)
+      }
+
+      toast({
+        title: "Success",
+        description: "Data refreshed successfully"
+      })
+    } catch (error) {
+      console.error('Error refreshing data:', error)
+      toast({
+        title: "Error",
+        description: "Failed to refresh data",
+        variant: "destructive"
+      })
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
   const handleUserSelect = (user: User) => {
     setSelectedUser(user)
     // Filter user jobs from the pre-loaded data
@@ -69,6 +114,7 @@ export function UserManagementView() {
   }
 
   const handleAddUser = async (userData: { email: string; first_name: string; last_name?: string }) => {
+    setAddingUser(true)
     try {
       await UsersApi.createUser({
         ...userData,
@@ -100,6 +146,8 @@ export function UserManagementView() {
         description: "Failed to add user",
         variant: "destructive"
       })
+    } finally {
+      setAddingUser(false)
     }
   }
 
@@ -108,6 +156,7 @@ export function UserManagementView() {
       return
     }
 
+    setDeletingUser(userId)
     try {
       await UsersApi.deleteUser(userId)
       
@@ -140,6 +189,8 @@ export function UserManagementView() {
         description: "Failed to delete user",
         variant: "destructive"
       })
+    } finally {
+      setDeletingUser(null)
     }
   }
 
@@ -148,6 +199,7 @@ export function UserManagementView() {
   }
 
   const handleJobAssignmentsUpdate = async () => {
+    setUpdatingAssignments(true)
     // Reload all data to get updated job assignments
     try {
       const [usersResponse, userJobAccessResponse, jobsResponse] = await Promise.all([
@@ -175,6 +227,8 @@ export function UserManagementView() {
         description: "Failed to reload data",
         variant: "destructive"
       })
+    } finally {
+      setUpdatingAssignments(false)
     }
     
     setShowJobAssignmentsModal(false)
@@ -215,8 +269,23 @@ export function UserManagementView() {
 
   if (loading) {
     return (
-      <Box css={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '16rem' }}>
-        <CircleLoader size="lg" />
+      <Box css={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        height: '100%',
+        minHeight: '400px',
+        backgroundColor: '$neutral25'
+      }}>
+        <Box css={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '$3' }}>
+          <CircleLoader size="xl" />
+          <Text size="lg" weight="medium" color="$neutral700">
+            Loading User Management...
+          </Text>
+          <Text size="sm" color="$neutral500">
+            Fetching users and job assignments
+          </Text>
+        </Box>
       </Box>
     )
   }
@@ -251,15 +320,27 @@ export function UserManagementView() {
                   Users ({filteredUsers.length})
                 </h2>
               </div>
-              <Button 
-                variant="solid" 
-                color="primary" 
-                size="sm"
-                leftIcon={<Plus size={16} />}
-                onClick={() => setShowAddUserModal(true)}
-              >
-                Add User
-              </Button>
+              <Box css={{ display: 'flex', gap: '$2' }}>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  leftIcon={refreshing ? <CircleLoader size="sm" /> : <RefreshCw size={16} />}
+                  onClick={refreshData}
+                  disabled={refreshing || addingUser || deletingUser || updatingAssignments}
+                >
+                  {refreshing ? 'Refreshing...' : 'Refresh'}
+                </Button>
+                <Button 
+                  variant="solid" 
+                  color="primary" 
+                  size="sm"
+                  leftIcon={addingUser ? <CircleLoader size="sm" /> : <Plus size={16} />}
+                  onClick={() => setShowAddUserModal(true)}
+                  disabled={addingUser || refreshing}
+                >
+                  {addingUser ? 'Adding...' : 'Add User'}
+                </Button>
+              </Box>
             </Box>
             <Box css={{ position: 'relative' }}>
               <Search 
@@ -280,7 +361,32 @@ export function UserManagementView() {
               />
             </Box>
           </Box>
-          <Box css={{ flex: 1, overflowY: 'auto', padding: '$2', minHeight: 0 }}>
+          <Box css={{ flex: 1, overflowY: 'auto', padding: '$2', minHeight: 0, position: 'relative' }}>
+            {(addingUser || deletingUser || updatingAssignments || refreshing) && (
+              <Box css={{ 
+                position: 'absolute', 
+                top: 0, 
+                left: 0, 
+                right: 0, 
+                bottom: 0, 
+                backgroundColor: 'rgba(255, 255, 255, 0.8)', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                zIndex: 10,
+                borderRadius: '$md'
+              }}>
+                <Box css={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '$2' }}>
+                  <CircleLoader size="lg" />
+                  <Text size="sm" color="$neutral600">
+                    {addingUser && 'Adding user...'}
+                    {deletingUser && 'Deleting user...'}
+                    {updatingAssignments && 'Updating assignments...'}
+                    {refreshing && 'Refreshing data...'}
+                  </Text>
+                </Box>
+              </Box>
+            )}
             <Box css={{ display: 'flex', flexDirection: 'column', gap: '$2' }}>
               {filteredUsers.map((user) => (
                 <Box
@@ -366,20 +472,22 @@ export function UserManagementView() {
                   <Button
                     variant="outline"
                     size="sm"
-                    leftIcon={<Settings size={16} />}
+                    leftIcon={updatingAssignments ? <CircleLoader size="sm" /> : <Settings size={16} />}
                     onClick={handleManageJobAssignments}
+                    disabled={updatingAssignments}
                   >
-                    Manage Access
+                    {updatingAssignments ? 'Updating...' : 'Manage Access'}
                   </Button>
                   {selectedUser.role !== 'admin' && (
                     <Button
                       variant="solid"
                       color="error"
                       size="sm"
-                      leftIcon={<Trash2 size={16} />}
+                      leftIcon={deletingUser === selectedUser.id ? <CircleLoader size="sm" /> : <Trash2 size={16} />}
                       onClick={() => handleDeleteUser(selectedUser.id)}
+                      disabled={deletingUser === selectedUser.id}
                     >
-                      Delete
+                      {deletingUser === selectedUser.id ? 'Deleting...' : 'Delete'}
                     </Button>
                   )}
                 </Box>
@@ -387,7 +495,29 @@ export function UserManagementView() {
             </Box>
           </Box>
           <Box css={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-            <Box css={{ padding: '$4', flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+            <Box css={{ padding: '$4', flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0, position: 'relative' }}>
+              {updatingAssignments && (
+                <Box css={{ 
+                  position: 'absolute', 
+                  top: 0, 
+                  left: 0, 
+                  right: 0, 
+                  bottom: 0, 
+                  backgroundColor: 'rgba(255, 255, 255, 0.8)', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  zIndex: 10,
+                  borderRadius: '$md'
+                }}>
+                  <Box css={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '$2' }}>
+                    <CircleLoader size="lg" />
+                    <Text size="sm" color="$neutral600">
+                      Updating job assignments...
+                    </Text>
+                  </Box>
+                </Box>
+              )}
               {selectedUser ? (
                 <Box css={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
                   {/* Job Assignments */}

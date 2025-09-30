@@ -16,6 +16,7 @@ import { CompetencyEditModal } from "./competency-edit-modal"
 import { AssetEvaluationModal } from "./asset-evaluation-modal"
 import { QAPairsSection } from "./qa-pairs-section"
 import { AudioVisualSection } from "./audio-visual-section"
+import { CheatingScoreSection } from "./cheating-score-section"
 import { getSparrowAssessmentData, type SparrowAssessmentResponse } from "@/lib/api/sparrow-assessment"
 import { getSparrowAssessmentMapping, type SparrowAssessmentMappingResponse } from "@/lib/api/sparrow-assessment-mapping"
 
@@ -1020,6 +1021,11 @@ export function CandidateEvaluationPanel({
                         </div>
                       </div>
                     </div>
+                  )}
+
+                  {/* Cheating Score Section - Only show if cheating analysis data exists */}
+                  {sparrowAssessmentData?.data?.cheating_score && (
+                    <CheatingScoreSection cheatingScore={sparrowAssessmentData.data.cheating_score} />
                   )}
 
                   {/* Section Scores */}
