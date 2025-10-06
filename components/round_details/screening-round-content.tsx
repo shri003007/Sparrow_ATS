@@ -37,6 +37,12 @@ export function ScreeningRoundContent({
   const [originalStatusById, setOriginalStatusById] = useState<Record<string, RoundStatus>>({})
   const [currentStatusById, setCurrentStatusById] = useState<Record<string, RoundStatus>>({})
   const [pendingChanges, setPendingChanges] = useState<Record<string, RoundStatus>>({})
+  
+  // Pagination states
+  const [isLoadingMoreCandidates, setIsLoadingMoreCandidates] = useState(false)
+  const [hasMoreCandidates, setHasMoreCandidates] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalCandidatesCount, setTotalCandidatesCount] = useState(0)
 
   // Metrics modal state
   const [showMetricsModal, setShowMetricsModal] = useState(false)
@@ -72,6 +78,19 @@ export function ScreeningRoundContent({
         }
         
         setRoundData(response)
+        
+        // Update pagination states
+        if (response.pagination) {
+          setHasMoreCandidates(response.pagination.has_next)
+          setCurrentPage(response.pagination.current_page)
+          setTotalCandidatesCount(response.pagination.total_count)
+        } else {
+          // Legacy response without pagination
+          setHasMoreCandidates(false)
+          setCurrentPage(1)
+          setTotalCandidatesCount(response.candidate_count || response.candidates?.length || 0)
+        }
+        
         // Initialize status maps from API response
         const initialOriginal: Record<string, RoundStatus> = {}
         const initialCurrent: Record<string, RoundStatus> = {}
@@ -106,6 +125,61 @@ export function ScreeningRoundContent({
       }
     }
   }, [currentRound?.id])
+
+  // Function to load more candidates (next page)
+  const handleLoadMoreCandidates = async () => {
+    if (!currentRound?.id || isLoadingMoreCandidates || !hasMoreCandidates || isMultiJobMode) {
+      return
+    }
+
+    setIsLoadingMoreCandidates(true)
+    
+    try {
+      const nextPage = currentPage + 1
+      const nextPageResponse = await RoundCandidatesApi.getCandidatesByRoundTemplate(
+        currentRound.id,
+        undefined, // no abort signal for load more
+        false, // don't force refresh
+        nextPage,
+        100
+      )
+
+      if (nextPageResponse) {
+        // Append new candidates to existing ones
+        setRoundData(prevData => {
+          if (!prevData) return nextPageResponse
+          return {
+            ...prevData,
+            candidates: [...prevData.candidates, ...nextPageResponse.candidates]
+          }
+        })
+        
+        // Update pagination states
+        if (nextPageResponse.pagination) {
+          setHasMoreCandidates(nextPageResponse.pagination.has_next)
+          setCurrentPage(nextPageResponse.pagination.current_page)
+        }
+
+        // Initialize status tracking for new candidates
+        const newOriginalStatus: Record<string, RoundStatus> = {}
+        const newCurrentStatus: Record<string, RoundStatus> = {}
+        
+        nextPageResponse.candidates.forEach(candidate => {
+          const status = (candidate.candidate_rounds?.[0]?.status || candidate.round_status || 'action_pending') as RoundStatus
+          newOriginalStatus[candidate.id] = status
+          newCurrentStatus[candidate.id] = status
+        })
+        
+        setOriginalStatusById(prev => ({ ...prev, ...newOriginalStatus }))
+        setCurrentStatusById(prev => ({ ...prev, ...newCurrentStatus }))
+      }
+    } catch (error: any) {
+      console.error('Error loading more candidates:', error)
+      // Could add toast notification here if needed
+    } finally {
+      setIsLoadingMoreCandidates(false)
+    }
+  }
 
   const handleRefresh = () => {
     if (currentRound?.id) {
@@ -296,10 +370,15 @@ export function ScreeningRoundContent({
                 {roundData && (
                   <div className="text-right">
                     <div className="text-2xl font-bold text-gray-900 mb-1" style={{ fontFamily }}>
-                      {roundData.candidate_count}
+                      {totalCandidatesCount}
                     </div>
                     <div className="text-sm text-gray-600" style={{ fontFamily }}>
-                      Candidate{roundData.candidate_count !== 1 ? 's' : ''}
+                      Candidate{totalCandidatesCount !== 1 ? 's' : ''}
+                      {roundData.candidates.length < totalCandidatesCount && (
+                        <span className="text-xs text-gray-500 block">
+                          Showing {roundData.candidates.length} of {totalCandidatesCount}
+                        </span>
+                      )}
                     </div>
                   </div>
                 )}
@@ -324,7 +403,7 @@ export function ScreeningRoundContent({
 
         {/* Modern Screening Candidates Table */}
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <div className={`overflow-y-auto ${isMultiJobMode ? 'max-h-[calc(100vh-400px)]' : 'max-h-[calc(100vh-300px)]'}`}>
+          <div className={`overflow-y-auto ${isMultiJobMode ? 'max-h-[calc(100vh-450px)]' : 'max-h-[calc(100vh-350px)]'}`}>
             <ModernScreeningCandidatesTable
               candidates={roundData?.candidates || []}
               customFieldDefinitions={roundData?.custom_field_definitions || []}
@@ -345,6 +424,32 @@ export function ScreeningRoundContent({
               }}
             />
           </div>
+          
+          {/* Load More Candidates Button */}
+          {hasMoreCandidates && !isMultiJobMode && (
+            <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 text-center">
+              <Button
+                onClick={handleLoadMoreCandidates}
+                disabled={isLoadingMoreCandidates}
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-2 mx-auto"
+                style={{ fontFamily }}
+              >
+                {isLoadingMoreCandidates ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  <>
+                    <Users className="w-4 h-4" />
+                    Load {Math.min(100, totalCandidatesCount - (roundData?.candidates.length || 0))} more
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* Competency Metrics Modal */}

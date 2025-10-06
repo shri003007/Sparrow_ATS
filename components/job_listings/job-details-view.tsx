@@ -600,9 +600,22 @@ export function JobDetailsView({
       // Step 2: Fetch candidates and mappings for all evaluable rounds in parallel
       const roundDataPromises = evaluableRounds.map(async (round): Promise<RoundEvaluationData> => {
         try {
-          // Fetch candidates and mappings in parallel
+          // Fetch ALL candidates across all pages and mappings in parallel
           const [candidatesResponse, mappingsResponse] = await Promise.all([
-            RoundCandidatesApi.getCandidatesByRoundTemplate(round.id),
+            RoundCandidatesApi.getAllCandidatesByRoundTemplate(
+              round.id,
+              undefined, // no abort signal for bulk eval
+              (currentPage, totalPages, candidates) => {
+                // Update progress as we fetch pages
+                updateEvaluationState(job.id, {
+                  currentStep: 'fetching-candidates',
+                  progress: { 
+                    ...jobBulkEvaluation.progress, 
+                    totalCandidates: candidates.length 
+                  }
+                })
+              }
+            ),
             getSparrowAssessmentMapping(round.id).catch(error => {
               console.warn(`Failed to fetch mappings for round ${round.id}:`, error)
               return { job_round_template_id: round.id, template_info: { round_name: round.round_name, round_type: round.round_type }, mappings_count: 0, mappings: [] }

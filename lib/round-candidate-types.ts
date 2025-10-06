@@ -1,5 +1,15 @@
 // Types for round candidates API responses
 
+export interface PaginationInfo {
+  current_page: number
+  total_pages: number
+  total_count: number
+  limit: number
+  has_next: boolean
+  has_previous: boolean
+  current_page_count: number
+}
+
 export interface RoundCandidateResponse {
   job_round_template_id: string
   template_info: {
@@ -10,7 +20,8 @@ export interface RoundCandidateResponse {
     evaluation_criteria: string | null
     competencies: any | null
   } | null
-  candidate_count: number
+  pagination?: PaginationInfo
+  candidate_count?: number // Legacy field, use pagination.total_count instead
   candidates: RoundCandidate[]
   custom_field_definitions: CustomFieldDefinition[]
   custom_fields_included: boolean

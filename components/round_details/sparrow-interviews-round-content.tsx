@@ -86,6 +86,12 @@ export function SparrowInterviewsRoundContent({
   const [currentStatusById, setCurrentStatusById] = useState<Record<string, RoundStatus>>({})
   const [pendingChanges, setPendingChanges] = useState<Record<string, RoundStatus>>({})
   
+  // Pagination states
+  const [isLoadingMoreCandidates, setIsLoadingMoreCandidates] = useState(false)
+  const [hasMoreCandidates, setHasMoreCandidates] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalCandidatesCount, setTotalCandidatesCount] = useState(0)
+  
   // Re-evaluation states for all candidates
   const [candidateReEvaluationStates, setCandidateReEvaluationStates] = useState<Record<string, {
     isReEvaluating: boolean
@@ -492,6 +498,22 @@ export function SparrowInterviewsRoundContent({
         if (roundResponse) {
           setRoundData(roundResponse)
           setLocalCandidates(roundResponse.candidates || [])
+          
+          // Update pagination states
+          if ('pagination' in roundResponse && roundResponse.pagination) {
+            setHasMoreCandidates(roundResponse.pagination.has_next)
+            setCurrentPage(roundResponse.pagination.current_page)
+            setTotalCandidatesCount(roundResponse.pagination.total_count)
+          } else {
+            // Legacy response without pagination or multi-job response
+            setHasMoreCandidates(false)
+            setCurrentPage(1)
+            setTotalCandidatesCount(
+              ('candidate_count' in roundResponse ? roundResponse.candidate_count : undefined) || 
+              roundResponse.candidates?.length || 
+              0
+            )
+          }
         }
 
         // Handle assessment mapping response
@@ -568,6 +590,59 @@ export function SparrowInterviewsRoundContent({
       })
     }
   }, [currentRound?.id, filteredJobIdsString, isMultiJobMode, roundType, selectedJobs.length])
+
+  // Function to load more candidates (next page)
+  const handleLoadMoreCandidates = async () => {
+    if (!currentRound?.id || isLoadingMoreCandidates || !hasMoreCandidates || isMultiJobMode) {
+      return
+    }
+
+    setIsLoadingMoreCandidates(true)
+    
+    try {
+      const nextPage = currentPage + 1
+      const nextPageResponse = await RoundCandidatesApi.getCandidatesByRoundTemplate(
+        currentRound.id,
+        undefined, // no abort signal for load more
+        false, // don't force refresh
+        nextPage,
+        100
+      )
+
+      if (nextPageResponse) {
+        // Append new candidates to existing ones
+        setLocalCandidates(prevCandidates => [...prevCandidates, ...nextPageResponse.candidates])
+        
+        // Update pagination states
+        if (nextPageResponse.pagination) {
+          setHasMoreCandidates(nextPageResponse.pagination.has_next)
+          setCurrentPage(nextPageResponse.pagination.current_page)
+        }
+
+        // Initialize status tracking for new candidates
+        const newOriginalStatus: Record<string, RoundStatus> = {}
+        const newCurrentStatus: Record<string, RoundStatus> = {}
+        
+        nextPageResponse.candidates.forEach(candidate => {
+          const status = (candidate.candidate_rounds?.[0]?.status || candidate.round_status || 'action_pending') as RoundStatus
+          newOriginalStatus[candidate.id] = status
+          newCurrentStatus[candidate.id] = status
+        })
+        
+        setOriginalStatusById(prev => ({ ...prev, ...newOriginalStatus }))
+        setCurrentStatusById(prev => ({ ...prev, ...newCurrentStatus }))
+      }
+    } catch (error: any) {
+      console.error('Error loading more candidates:', error)
+      toast({
+        title: "Error",
+        description: "Failed to load more candidates. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoadingMoreCandidates(false)
+    }
+  }
 
   const handleStatusChange = (candidateId: string, newStatus: RoundStatus) => {
     setLocalCandidates(prevCandidates => 
@@ -1096,10 +1171,15 @@ export function SparrowInterviewsRoundContent({
                 {roundData && (
                   <div className="text-right">
                     <div className="text-2xl font-bold text-gray-900 mb-1" style={{ fontFamily }}>
-                      {localCandidates.length}
+                      {totalCandidatesCount}
                     </div>
                     <div className="text-sm text-gray-600" style={{ fontFamily }}>
-                      Candidate{localCandidates.length !== 1 ? 's' : ''}
+                      Candidate{totalCandidatesCount !== 1 ? 's' : ''}
+                      {localCandidates.length < totalCandidatesCount && (
+                        <span className="text-xs text-gray-500 block">
+                          Showing {localCandidates.length} of {totalCandidatesCount}
+                        </span>
+                      )}
                     </div>
                   </div>
                 )}
@@ -1142,7 +1222,7 @@ export function SparrowInterviewsRoundContent({
 
         {/* Unified candidates table */}
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <div className="max-h-[calc(100vh-300px)] overflow-y-auto">
+          <div className="max-h-[calc(100vh-350px)] overflow-y-auto">
             <SparrowInterviewsCandidatesTable
               candidates={localCandidates}
               customFieldDefinitions={roundData?.custom_field_definitions || []}
@@ -1166,6 +1246,32 @@ export function SparrowInterviewsRoundContent({
               defaultSecondaryId={secondaryId}
             />
           </div>
+          
+          {/* Load More Candidates Button */}
+          {hasMoreCandidates && !isMultiJobMode && (
+            <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 text-center">
+              <Button
+                onClick={handleLoadMoreCandidates}
+                disabled={isLoadingMoreCandidates}
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-2 mx-auto"
+                style={{ fontFamily }}
+              >
+                {isLoadingMoreCandidates ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  <>
+                    <Users className="w-4 h-4" />
+                    Load {Math.min(100, totalCandidatesCount - localCandidates.length)} more
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 

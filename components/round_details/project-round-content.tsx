@@ -58,6 +58,12 @@ export function ProjectRoundContent({
   const [isProgressingCandidates, setIsProgressingCandidates] = useState(false)
   const [originalStatusById, setOriginalStatusById] = useState<Record<string, RoundStatus>>({})
   const [currentStatusById, setCurrentStatusById] = useState<Record<string, RoundStatus>>({})
+  
+  // Pagination states
+  const [isLoadingMoreCandidates, setIsLoadingMoreCandidates] = useState(false)
+  const [hasMoreCandidates, setHasMoreCandidates] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalCandidatesCount, setTotalCandidatesCount] = useState(0)
 
   // Metrics modal state
   const [showMetricsModal, setShowMetricsModal] = useState(false)
@@ -106,6 +112,18 @@ export function ProjectRoundContent({
         setRoundData(data)
         setLocalCandidates(data.candidates || [])
         
+        // Update pagination states
+        if (data.pagination) {
+          setHasMoreCandidates(data.pagination.has_next)
+          setCurrentPage(data.pagination.current_page)
+          setTotalCandidatesCount(data.pagination.total_count)
+        } else {
+          // Legacy response without pagination
+          setHasMoreCandidates(false)
+          setCurrentPage(1)
+          setTotalCandidatesCount(data.candidate_count || data.candidates?.length || 0)
+        }
+        
         // Initialize status tracking (same pattern as INTERVIEW and SCREENING rounds)
         const initialOriginal: Record<string, RoundStatus> = {}
         const initialCurrent: Record<string, RoundStatus> = {}
@@ -139,6 +157,55 @@ export function ProjectRoundContent({
       }
     }
   }, [currentRound?.id])
+
+  // Function to load more candidates (next page)
+  const handleLoadMoreCandidates = async () => {
+    if (!currentRound?.id || isLoadingMoreCandidates || !hasMoreCandidates || isMultiJobMode) {
+      return
+    }
+
+    setIsLoadingMoreCandidates(true)
+    
+    try {
+      const nextPage = currentPage + 1
+      const nextPageResponse = await RoundCandidatesApi.getCandidatesByRoundTemplate(
+        currentRound.id,
+        undefined, // no abort signal for load more
+        false, // don't force refresh
+        nextPage,
+        100
+      )
+
+      if (nextPageResponse) {
+        // Append new candidates to existing ones
+        setLocalCandidates(prevCandidates => [...prevCandidates, ...nextPageResponse.candidates])
+        
+        // Update pagination states
+        if (nextPageResponse.pagination) {
+          setHasMoreCandidates(nextPageResponse.pagination.has_next)
+          setCurrentPage(nextPageResponse.pagination.current_page)
+        }
+
+        // Initialize status tracking for new candidates
+        const newOriginalStatus: Record<string, RoundStatus> = {}
+        const newCurrentStatus: Record<string, RoundStatus> = {}
+        
+        nextPageResponse.candidates.forEach(candidate => {
+          const status = (candidate.candidate_rounds?.[0]?.status || candidate.round_status || 'action_pending') as RoundStatus
+          newOriginalStatus[candidate.id] = status
+          newCurrentStatus[candidate.id] = status
+        })
+        
+        setOriginalStatusById(prev => ({ ...prev, ...newOriginalStatus }))
+        setCurrentStatusById(prev => ({ ...prev, ...newCurrentStatus }))
+      }
+    } catch (error: any) {
+      console.error('Error loading more candidates:', error)
+      // Could add toast notification here if needed
+    } finally {
+      setIsLoadingMoreCandidates(false)
+    }
+  }
 
   const handleStatusChange = (candidateId: string, newStatus: RoundStatus) => {
     // Update local candidates state
@@ -286,11 +353,11 @@ export function ProjectRoundContent({
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-2xl font-bold text-gray-900 mb-2" style={{ fontFamily }}>
-                  {roundData.template_info.round_name}
+                  {roundData.template_info?.round_name}
                 </h2>
                 <div className="flex items-center gap-4 text-sm text-gray-600">
                   <span style={{ fontFamily }}>
-                    Round {roundData.template_info.order_index} of {rounds.length}
+                    Round {roundData.template_info?.order_index} of {rounds.length}
                   </span>
                   <span
                     className="px-2 py-1 rounded-full text-xs font-medium"
@@ -320,10 +387,15 @@ export function ProjectRoundContent({
                 {roundData && (
                   <div className="text-right">
                     <div className="text-2xl font-bold text-gray-900 mb-1" style={{ fontFamily }}>
-                      {localCandidates.length}
+                      {totalCandidatesCount}
                     </div>
                     <div className="text-sm text-gray-600" style={{ fontFamily }}>
-                      Candidate{localCandidates.length !== 1 ? 's' : ''}
+                      Candidate{totalCandidatesCount !== 1 ? 's' : ''}
+                      {localCandidates.length < totalCandidatesCount && (
+                        <span className="text-xs text-gray-500 block">
+                          Showing {localCandidates.length} of {totalCandidatesCount}
+                        </span>
+                      )}
                     </div>
                   </div>
                 )}
@@ -348,7 +420,7 @@ export function ProjectRoundContent({
 
         {/* Modern Project Candidates Table */}
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <div className={`overflow-y-auto ${isMultiJobMode ? 'max-h-[calc(100vh-400px)]' : 'max-h-[calc(100vh-300px)]'}`}>
+          <div className={`overflow-y-auto ${isMultiJobMode ? 'max-h-[calc(100vh-450px)]' : 'max-h-[calc(100vh-350px)]'}`}>
             <ModernProjectCandidatesTable
               candidates={localCandidates}
               customFieldDefinitions={roundData?.custom_field_definitions || []}
@@ -369,6 +441,32 @@ export function ProjectRoundContent({
               onReEvaluationStateChange={handleReEvaluationStateChange}
             />
           </div>
+          
+          {/* Load More Candidates Button */}
+          {hasMoreCandidates && !isMultiJobMode && (
+            <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 text-center">
+              <Button
+                onClick={handleLoadMoreCandidates}
+                disabled={isLoadingMoreCandidates}
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-2 mx-auto"
+                style={{ fontFamily }}
+              >
+                {isLoadingMoreCandidates ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  <>
+                    <Users className="w-4 h-4" />
+                    Load {Math.min(100, totalCandidatesCount - localCandidates.length)} more
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* Competency Metrics Modal */}
