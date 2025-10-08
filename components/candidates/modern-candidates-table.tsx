@@ -4,6 +4,7 @@ import React, { useState, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Input } from "@/components/ui/input"
 import { 
   ChevronDown, 
   ChevronUp, 
@@ -11,7 +12,8 @@ import {
   Phone,
   ThumbsUp,
   ThumbsDown,
-  Clock3
+  Clock3,
+  Search
 } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import type { CandidateDisplay, CandidateUIStatus } from "@/lib/candidate-types"
@@ -42,15 +44,17 @@ interface ModernCandidatesTableProps {
   onStatusChange: (candidateId: string, newStatus: CandidateUIStatus) => void
   hasRoundsStarted?: boolean
   onCandidateClick?: (candidate: CandidateDisplay) => void
+  isLoading?: boolean
 }
 
-export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsStarted = false, onCandidateClick }: ModernCandidatesTableProps) {
+export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsStarted = false, onCandidateClick, isLoading = false }: ModernCandidatesTableProps) {
   const fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
 
   const [sortOrder, setSortOrder] = useState<{[key: string]: 'asc' | 'desc'}>({
     score: 'desc' // Default to descending for scores (highest first)
   })
   const [localCandidates, setLocalCandidates] = useState<CandidateDisplay[]>(candidates)
+  const [searchQuery, setSearchQuery] = useState("")
 
   // Update local candidates when prop changes and sort by score by default when rounds started
   React.useEffect(() => {
@@ -159,6 +163,19 @@ export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsSta
     return roundScore && 'score' in roundScore ? roundScore.score : null
   }
 
+  // Filter candidates based on search query
+  const filteredCandidates = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return localCandidates
+    }
+    
+    const query = searchQuery.toLowerCase().trim()
+    return localCandidates.filter(candidate => 
+      candidate.name.toLowerCase().includes(query) ||
+      candidate.email.toLowerCase().includes(query)
+    )
+  }, [localCandidates, searchQuery])
+
   // Extract unique custom fields from candidates
   const customFields = useMemo(() => {
     const fieldMap = new Map<string, { field_name: string; field_label: string; field_type: string }>()
@@ -192,7 +209,7 @@ export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsSta
     onStatusChange(candidateId, status)
   }
 
-  if (localCandidates.length === 0) {
+  if (!isLoading && localCandidates.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center p-8 text-center">
         <Users className="w-12 h-12 text-gray-400 mb-4" />
@@ -219,9 +236,36 @@ export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsSta
         flexDirection: "column"
       }}
     >
-      {/* Horizontal Scroll Container */}
-      <div 
-        className="flex-1 overflow-auto"
+      {/* Search Bar */}
+      <div className="p-4 border-b border-gray-200">
+        <div className="relative max-w-md">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+          <Input
+            type="text"
+            placeholder="Search candidates by name or email..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10 pr-4 py-2 w-full"
+            style={{ fontFamily }}
+          />
+        </div>
+      </div>
+
+      {/* No search results state */}
+      {searchQuery.trim() && filteredCandidates.length === 0 ? (
+        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+          <Search className="w-12 h-12 text-gray-400 mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2" style={{ fontFamily }}>
+            No candidates found
+          </h3>
+          <p className="text-gray-500" style={{ fontFamily }}>
+            No candidates match your search for "{searchQuery}". Try a different search term.
+          </p>
+        </div>
+      ) : (
+        // Horizontal Scroll Container
+        <div 
+          className="flex-1 overflow-auto"
         style={{
           maxWidth: "100%",
           scrollbarWidth: "thin",
@@ -492,7 +536,7 @@ export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsSta
         
         {/* Table Body */}
         <tbody>
-          {localCandidates.map((candidate) => {
+          {filteredCandidates.map((candidate) => {
             const statusConfig = STATUS_CONFIG[candidate.status]
             
             return (
@@ -702,8 +746,9 @@ export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsSta
             )
           })}
         </tbody>
-      </table>
-      </div>
+        </table>
+        </div>
+      )}
     </div>
   )
 }

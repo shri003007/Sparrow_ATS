@@ -3,12 +3,14 @@
 import React, { useState, useMemo, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Input } from "@/components/ui/input"
 import { 
   ChevronDown, 
   ChevronUp, 
   Users,
   Phone,
-  Loader2
+  Loader2,
+  Search
 } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import type { CandidateDisplay, CandidateUIStatus } from "@/lib/candidate-types"
@@ -52,6 +54,7 @@ export function AllViewsCandidatesTable({
   const [candidates, setCandidates] = useState<CandidateWithJob[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [loadingProgress, setLoadingProgress] = useState({ completed: 0, total: 0 })
+  const [searchQuery, setSearchQuery] = useState("")
   
   // Track previous viewId to detect actual view changes
   const previousViewIdRef = useRef<string | null>(null)
@@ -243,6 +246,19 @@ export function AllViewsCandidatesTable({
     return roundScore && 'score' in roundScore ? roundScore.score : null
   }
 
+  // Filter candidates based on search query
+  const filteredCandidates = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return candidates
+    }
+    
+    const query = searchQuery.toLowerCase().trim()
+    return candidates.filter(candidate => 
+      candidate.name.toLowerCase().includes(query) ||
+      candidate.email.toLowerCase().includes(query)
+    )
+  }, [candidates, searchQuery])
+
   // Extract unique custom fields from candidates
   const customFields = useMemo(() => {
     const fieldMap = new Map<string, { field_name: string; field_label: string; field_type: string }>()
@@ -318,9 +334,36 @@ export function AllViewsCandidatesTable({
         overflow: "hidden"
       }}
     >
-      {/* Scrollable Table Container */}
-      <div 
-        className="w-full overflow-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100"
+      {/* Search Bar */}
+      <div className="p-4 border-b border-gray-200">
+        <div className="relative max-w-md">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+          <Input
+            type="text"
+            placeholder="Search candidates by name or email..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10 pr-4 py-2 w-full"
+            style={{ fontFamily }}
+          />
+        </div>
+      </div>
+
+      {/* No search results state */}
+      {searchQuery.trim() && filteredCandidates.length === 0 ? (
+        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+          <Search className="w-12 h-12 text-gray-400 mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2" style={{ fontFamily }}>
+            No candidates found
+          </h3>
+          <p className="text-gray-500" style={{ fontFamily }}>
+            No candidates match your search for "{searchQuery}". Try a different search term.
+          </p>
+        </div>
+      ) : (
+        // Scrollable Table Container
+        <div 
+          className="w-full overflow-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100"
         style={{
           maxHeight: "calc(100vh - 240px)", // Adjust based on header height and padding
           height: "fit-content",
@@ -551,7 +594,7 @@ export function AllViewsCandidatesTable({
         
         {/* Table Body */}
         <tbody>
-          {candidates.map((candidate) => {
+          {filteredCandidates.map((candidate) => {
             return (
               <tr
                 key={`${candidate.job_id}-${candidate.id}`}
@@ -725,8 +768,9 @@ export function AllViewsCandidatesTable({
             )
           })}
         </tbody>
-      </table>
-      </div>
+        </table>
+        </div>
+      )}
     </div>
   )
 }

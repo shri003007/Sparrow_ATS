@@ -6,6 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Spinner } from "@/components/ui/spinner"
+import { Input } from "@/components/ui/input"
 import { 
   Calendar, 
   Clock, 
@@ -20,7 +21,8 @@ import {
   MapPin,
   ThumbsUp,
   ThumbsDown,
-  Clock3
+  Clock3,
+  Search
 } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import type { RoundCandidate, CustomFieldDefinition } from "@/lib/round-candidate-types"
@@ -77,6 +79,7 @@ export function ModernScreeningCandidatesTable({
   const [isPanelOpen, setIsPanelOpen] = useState(false)
   const [sortOrder, setSortOrder] = useState<{[key: string]: 'asc' | 'desc'}>({})
   const [localCandidates, setLocalCandidates] = useState<RoundCandidate[]>(candidates)
+  const [searchQuery, setSearchQuery] = useState("")
   const [evaluatingCandidates, setEvaluatingCandidates] = useState<Set<string>>(new Set())
   const [batchEvaluationProgress, setBatchEvaluationProgress] = useState<{
     completed: number
@@ -372,6 +375,19 @@ export function ModernScreeningCandidatesTable({
     onStatusChange(candidateId, status)
   }
 
+  // Filter candidates based on search query
+  const filteredCandidates = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return localCandidates
+    }
+    
+    const query = searchQuery.toLowerCase().trim()
+    return localCandidates.filter(candidate => 
+      candidate.name.toLowerCase().includes(query) ||
+      candidate.email.toLowerCase().includes(query)
+    )
+  }, [localCandidates, searchQuery])
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -396,17 +412,44 @@ export function ModernScreeningCandidatesTable({
 
   return (
     <>
-      <div 
-        className="w-full"
-        style={{ 
-          fontFamily,
-          backgroundColor: "#FFFFFF",
-          borderRadius: "8px",
-          overflow: "hidden",
-          maxHeight: "600px",
-          overflowY: "auto"
-        }}
-      >
+      {/* Search Bar */}
+      <div className="p-4 bg-white border-b border-gray-200">
+        <div className="relative max-w-md">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+          <Input
+            type="text"
+            placeholder="Search candidates by name or email..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10 pr-4 py-2 w-full"
+            style={{ fontFamily }}
+          />
+        </div>
+      </div>
+
+      {/* No search results state */}
+      {searchQuery.trim() && filteredCandidates.length === 0 ? (
+        <div className="flex flex-col items-center justify-center p-8 text-center bg-white">
+          <Search className="w-12 h-12 text-gray-400 mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2" style={{ fontFamily }}>
+            No candidates found
+          </h3>
+          <p className="text-gray-500" style={{ fontFamily }}>
+            No candidates match your search for "{searchQuery}". Try a different search term.
+          </p>
+        </div>
+      ) : (
+        <div 
+          className="w-full"
+          style={{ 
+            fontFamily,
+            backgroundColor: "#FFFFFF",
+            borderRadius: "8px",
+            overflow: "hidden",
+            maxHeight: "600px",
+            overflowY: "auto"
+          }}
+        >
         {/* Table Header */}
         <table className="w-full" style={{ borderCollapse: "separate", borderSpacing: 0 }}>
           <thead
@@ -610,7 +653,7 @@ export function ModernScreeningCandidatesTable({
               height: "100%"
             }}
           >
-            {localCandidates.map((candidate) => {
+            {filteredCandidates.map((candidate) => {
               const status = getCandidateRoundStatus(candidate)
               const statusConfig = ROUND_STATUS_CONFIG[status]
               const score = getCandidateScore(candidate)
@@ -803,7 +846,8 @@ export function ModernScreeningCandidatesTable({
             })}
           </tbody>
         </table>
-      </div>
+        </div>
+      )}
 
       {/* Candidate Evaluation Panel */}
       {selectedCandidate && isPanelOpen && (

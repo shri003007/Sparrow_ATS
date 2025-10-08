@@ -1178,11 +1178,12 @@ export function JobDetailsView({
             </div>
           </div>
         ) : (
-          <ModernCandidatesTable 
-            candidates={candidates} 
+          <ModernCandidatesTable
+            candidates={candidates}
             onStatusChange={onStatusChange}
             hasRoundsStarted={job?.has_rounds_started || false}
             onCandidateClick={onCandidateClick}
+            isLoading={isLoadingCandidates}
           />
         )}
       </div>

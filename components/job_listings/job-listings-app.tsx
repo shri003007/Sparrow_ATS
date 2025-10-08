@@ -241,12 +241,17 @@ export function JobListingsApp({ onCreateJob, newlyCreatedJobId, onSettingsClick
   // Fetch candidates when selected job changes
   useEffect(() => {
     const abortController = new AbortController()
-    
+
     if (selectedJob?.id) {
+      // Set loading state immediately when job changes to prevent showing empty state
+      setIsLoadingCandidates(true)
       // Force refresh when job changes to ensure fresh data
       fetchCandidates(selectedJob.id, abortController.signal, true)
+    } else {
+      // No job selected, not loading
+      setIsLoadingCandidates(false)
     }
-    
+
     // Cleanup function to cancel request when job changes or component unmounts
     return () => {
       abortController.abort()
