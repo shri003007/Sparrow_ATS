@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 type RoundStatus = 'selected' | 'rejected' | 'action_pending'
-type RoundType = 'INTERVIEW' | 'RAPID_FIRE' | 'TALK_ON_A_TOPIC' | 'GAMES_ARENA' | 'PROJECT' | 'SCREENING'
+type RoundType = 'INTERVIEW' | 'RAPID_FIRE' | 'TALK_ON_A_TOPIC' | 'GAMES_ARENA' | 'RAPID_FIRE_WITH_GROUNDING' | 'PROJECT' | 'SCREENING'
 
 interface RoundSettingsModalProps {
   isOpen: boolean
@@ -161,7 +161,7 @@ export function RoundSettingsModal({
     }
   }
 
-  const showSecondaryId = roundType === 'RAPID_FIRE' || roundType === 'TALK_ON_A_TOPIC' || roundType === 'GAMES_ARENA'
+  const showSecondaryId = roundType === 'RAPID_FIRE' || roundType === 'TALK_ON_A_TOPIC' || roundType === 'GAMES_ARENA' || roundType === 'RAPID_FIRE_WITH_GROUNDING'
 
   return (
     <Dialog

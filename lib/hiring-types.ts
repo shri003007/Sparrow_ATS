@@ -38,6 +38,7 @@ export interface HiringRound {
   sparrowAssessmentId?: string
   sparrowTestName?: string
   sparrowAssessmentName?: string
+  sparrowFilterColumn?: string
 }
 
 export interface Competency {

@@ -52,7 +52,7 @@ export function RoundContent({ currentRound, rounds, currentStepIndex, onNextSte
         createdBy={createdBy || ''}
       />
     )
-  } else if (currentRound.round_type === 'INTERVIEW' || currentRound.round_type === 'RAPID_FIRE' || currentRound.round_type === 'TALK_ON_A_TOPIC' || currentRound.round_type === 'GAMES_ARENA') {
+  } else if (currentRound.round_type === 'INTERVIEW' || currentRound.round_type === 'RAPID_FIRE' || currentRound.round_type === 'TALK_ON_A_TOPIC' || currentRound.round_type === 'GAMES_ARENA' || currentRound.round_type === 'RAPID_FIRE_WITH_GROUNDING') {
     return (
       <SparrowInterviewsRoundContent
         currentRound={currentRound}

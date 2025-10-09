@@ -30,7 +30,7 @@ import { CandidateEvaluationPanel } from "./candidate-evaluation-panel"
 import { useMultiJobContextSafe } from "@/components/all_views/multi-job-context"
 
 type RoundStatus = 'selected' | 'rejected' | 'action_pending'
-type RoundType = 'INTERVIEW' | 'RAPID_FIRE' | 'GAMES_ARENA' | 'TALK_ON_A_TOPIC'
+type RoundType = 'INTERVIEW' | 'RAPID_FIRE' | 'GAMES_ARENA' | 'TALK_ON_A_TOPIC' | 'RAPID_FIRE_WITH_GROUNDING'
 
 // Unified status configuration with sales labels for all round types
 const ROUND_STATUS_CONFIG = {

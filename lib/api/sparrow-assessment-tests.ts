@@ -33,6 +33,7 @@ export interface SparrowAssessmentsResponse {
 export interface SparrowAssessmentMappingRequest {
   sparrow_assessment_id: string
   job_round_template_id: string
+  filter_column?: string
 }
 
 export interface SparrowAssessmentMappingResponse {

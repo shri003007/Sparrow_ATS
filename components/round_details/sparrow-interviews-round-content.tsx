@@ -16,8 +16,8 @@ import { useMultiJobContextSafe } from "@/components/all_views/multi-job-context
 import { useToast } from "@/hooks/use-toast"
 
 type RoundStatus = 'selected' | 'rejected' | 'action_pending'
-type RoundType = 'INTERVIEW' | 'RAPID_FIRE' | 'GAMES_ARENA' | 'TALK_ON_A_TOPIC'
-type SalesRoundType = 'RAPID_FIRE' | 'GAMES_ARENA' | 'TALK_ON_A_TOPIC'
+type RoundType = 'INTERVIEW' | 'RAPID_FIRE' | 'GAMES_ARENA' | 'TALK_ON_A_TOPIC' | 'RAPID_FIRE_WITH_GROUNDING'
+type SalesRoundType = 'RAPID_FIRE' | 'GAMES_ARENA' | 'TALK_ON_A_TOPIC' | 'RAPID_FIRE_WITH_GROUNDING'
 
 interface SparrowInterviewsRoundContentProps {
   currentRound: JobRoundTemplate | null
@@ -53,6 +53,13 @@ const ROUND_TYPE_CONFIG = {
   TALK_ON_A_TOPIC: {
     defaultName: 'Talk on Topic Round',
     description: 'Topic-based discussion assessment for candidates',
+    iconBg: 'bg-blue-100',
+    iconColor: 'text-blue-600',
+    buttonBg: '#10B981'
+  },
+  RAPID_FIRE_WITH_GROUNDING: {
+    defaultName: 'Rapid Fire with Grounding Round',
+    description: 'Rapid Fire with Grounding assessment for candidates',
     iconBg: 'bg-blue-100',
     iconColor: 'text-blue-600',
     buttonBg: '#10B981'
@@ -1142,16 +1149,6 @@ export function SparrowInterviewsRoundContent({
                 <div className="flex items-center gap-4 text-sm text-gray-600">
                   <span style={{ fontFamily }}>
                     Round {currentRound.order_index} of {rounds.length}
-                  </span>
-                  <span
-                    className="px-2 py-1 rounded-full text-xs font-medium"
-                    style={{
-                      backgroundColor: '#DBEAFE',
-                      color: '#3B82F6',
-                      fontFamily
-                    }}
-                  >
-                    {roundType}
                   </span>
                   <span
                     className="px-2 py-1 rounded-full text-xs font-medium"

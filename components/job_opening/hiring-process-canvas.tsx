@@ -271,7 +271,8 @@ export function HiringProcessCanvas({ rounds, onUpdateRounds, onPublish, onBack,
         ? { 
             ...r, 
             sparrowAssessmentEnabled: enabled,
-            sparrowAssessmentId: enabled ? r.sparrowAssessmentId : undefined
+            sparrowAssessmentId: enabled ? r.sparrowAssessmentId : undefined,
+            sparrowFilterColumn: enabled ? r.sparrowFilterColumn : undefined
           } 
         : r
     )
@@ -286,6 +287,18 @@ export function HiringProcessCanvas({ rounds, onUpdateRounds, onPublish, onBack,
             sparrowAssessmentId: assessmentId,
             sparrowTestName: testName,
             sparrowAssessmentName: assessmentName
+          } 
+        : r
+    )
+    onUpdateRounds(updatedRounds)
+  }
+
+  const handleSparrowFilterColumnSelect = (roundId: string, filterColumn: string | undefined) => {
+    const updatedRounds = rounds.map((r) => 
+      r.id === roundId 
+        ? { 
+            ...r, 
+            sparrowFilterColumn: filterColumn
           } 
         : r
     )
@@ -822,8 +835,10 @@ export function HiringProcessCanvas({ rounds, onUpdateRounds, onPublish, onBack,
                     selectedAssessmentId={activeRound.sparrowAssessmentId}
                     selectedTestName={activeRound.sparrowTestName}
                     selectedAssessmentName={activeRound.sparrowAssessmentName}
+                    selectedFilterColumn={activeRound.sparrowFilterColumn}
                     onToggle={(enabled) => handleSparrowAssessmentToggle(activeRound.id, enabled)}
                     onAssessmentSelect={(assessmentId, testName, assessmentName) => handleSparrowAssessmentSelect(activeRound.id, assessmentId, testName, assessmentName)}
+                    onFilterColumnSelect={(filterColumn) => handleSparrowFilterColumnSelect(activeRound.id, filterColumn)}
                   />
                 </div>
                 </div>

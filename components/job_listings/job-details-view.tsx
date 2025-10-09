@@ -580,13 +580,13 @@ export function JobDetailsView({
       }
 
       // Filter for evaluable round types
-      const evaluableRoundTypes = ['INTERVIEW', 'RAPID_FIRE', 'TALK_ON_A_TOPIC', 'GAMES_ARENA']
+      const evaluableRoundTypes = ['INTERVIEW', 'RAPID_FIRE', 'TALK_ON_A_TOPIC', 'GAMES_ARENA', 'RAPID_FIRE_WITH_GROUNDING']
       const evaluableRounds = templatesResponse.job_round_templates.filter(round => 
         evaluableRoundTypes.includes(round.round_type)
       )
 
       if (evaluableRounds.length === 0) {
-        throw new Error('No evaluable rounds found. Only INTERVIEW and sales rounds (RAPID_FIRE, TALK_ON_A_TOPIC, GAMES_ARENA) can be bulk evaluated.')
+        throw new Error('No evaluable rounds found. Only INTERVIEW and sales rounds (RAPID_FIRE, TALK_ON_A_TOPIC, GAMES_ARENA, RAPID_FIRE_WITH_GROUNDING) can be bulk evaluated.')
       }
 
       console.log(`📋 [JOB BULK EVAL] Found ${evaluableRounds.length} evaluable rounds:`, 
@@ -789,7 +789,7 @@ export function JobDetailsView({
                     brand_id: secondaryId || 'surveysparrow'
                   }
 
-                  result = await evaluateSalesCandidate(request, round.round_type as 'RAPID_FIRE' | 'TALK_ON_A_TOPIC' | 'GAMES_ARENA')
+                  result = await evaluateSalesCandidate(request, round.round_type as 'RAPID_FIRE' | 'TALK_ON_A_TOPIC' | 'GAMES_ARENA' | 'RAPID_FIRE_WITH_GROUNDING')
                   evaluationSuccess = result.success
                   errorMessage = result.error_message || ''
                 }

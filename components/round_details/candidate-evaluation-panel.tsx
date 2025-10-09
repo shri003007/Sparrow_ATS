@@ -202,7 +202,7 @@ export function CandidateEvaluationPanel({
       if (!candidate?.email) return
       
       // Check if this is a sparrow assessment round and we have an assessment ID
-      const eligibleRoundTypes = ['INTERVIEW', 'RAPID_FIRE', 'GAMES_ARENA', 'TALK_ON_A_TOPIC']
+      const eligibleRoundTypes = ['INTERVIEW', 'RAPID_FIRE', 'GAMES_ARENA', 'TALK_ON_A_TOPIC', 'RAPID_FIRE_WITH_GROUNDING']
       
       // Fetch sparrow assessment data if we have an assessment ID for eligible round types
       // We'll try to fetch regardless of evaluation status since the data might be available
@@ -521,7 +521,7 @@ export function CandidateEvaluationPanel({
 
       const result = await evaluateSalesCandidate(
         request, 
-        roundType as 'RAPID_FIRE' | 'TALK_ON_A_TOPIC' | 'GAMES_ARENA'
+        roundType as 'RAPID_FIRE' | 'TALK_ON_A_TOPIC' | 'GAMES_ARENA' | 'RAPID_FIRE_WITH_GROUNDING'
       )
       
       if (result.success) {
@@ -713,7 +713,7 @@ export function CandidateEvaluationPanel({
                       Re-evaluate Interview
                     </DropdownMenuItem>
                   )}
-                  {(roundType === 'RAPID_FIRE' || roundType === 'TALK_ON_A_TOPIC' || roundType === 'GAMES_ARENA') && hasEvaluation && (
+                  {(roundType === 'RAPID_FIRE' || roundType === 'TALK_ON_A_TOPIC' || roundType === 'GAMES_ARENA' || roundType === 'RAPID_FIRE_WITH_GROUNDING') && hasEvaluation && (
                     <DropdownMenuItem
                       onClick={() => setShowReEvaluationOptions(true)}
                       className="flex items-center gap-2"
@@ -868,7 +868,7 @@ export function CandidateEvaluationPanel({
                     </div>
                   </div>
                 </div>
-              ) : showReEvaluationOptions && (roundType === 'RAPID_FIRE' || roundType === 'TALK_ON_A_TOPIC' || roundType === 'GAMES_ARENA') ? (
+              ) : showReEvaluationOptions && (roundType === 'RAPID_FIRE' || roundType === 'TALK_ON_A_TOPIC' || roundType === 'GAMES_ARENA' || roundType === 'RAPID_FIRE_WITH_GROUNDING') ? (
                 /* Re-evaluation Options for Sales rounds */
                 <div className="w-full max-w-2xl mx-auto space-y-6">
                   <div className="bg-white border border-gray-100 rounded-2xl p-8 text-center">
@@ -1160,7 +1160,7 @@ export function CandidateEvaluationPanel({
 
 
                   {/* Round ID Configuration Info for eligible sparrow assessment rounds */}
-                  {['INTERVIEW', 'RAPID_FIRE', 'GAMES_ARENA', 'TALK_ON_A_TOPIC'].includes(roundType) && (
+                  {['INTERVIEW', 'RAPID_FIRE', 'GAMES_ARENA', 'TALK_ON_A_TOPIC', 'RAPID_FIRE_WITH_GROUNDING'].includes(roundType) && (
                     <div className="w-full max-w-4xl mx-auto">
                       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
                         <div className="text-sm text-blue-900">
@@ -1175,10 +1175,10 @@ export function CandidateEvaluationPanel({
                   )}
 
                   {/* Comprehensive Evaluation - For Sales rounds */}
-                  {(roundType === 'RAPID_FIRE' || roundType === 'TALK_ON_A_TOPIC' || roundType === 'GAMES_ARENA') && (
+                  {(roundType === 'RAPID_FIRE' || roundType === 'TALK_ON_A_TOPIC' || roundType === 'GAMES_ARENA' || roundType === 'RAPID_FIRE_WITH_GROUNDING') && (
                     (() => {
-                      // For RAPID_FIRE, use rapid_fire_evaluation key, for others use comprehensive_evaluation
-                      const evaluationContent = roundType === 'RAPID_FIRE' 
+                      // For RAPID_FIRE and RAPID_FIRE_WITH_GROUNDING, use rapid_fire_evaluation key, for others use comprehensive_evaluation
+                      const evaluationContent = (roundType === 'RAPID_FIRE' || roundType === 'RAPID_FIRE_WITH_GROUNDING')
                         ? evaluation.rapid_fire_evaluation 
                         : evaluation.comprehensive_evaluation;
                       
@@ -1206,7 +1206,7 @@ export function CandidateEvaluationPanel({
                   )}
 
                   {/* Sales Transcript - For Sales rounds and only if transcript_text exists */}
-                  {(roundType === 'RAPID_FIRE' || roundType === 'TALK_ON_A_TOPIC' || roundType === 'GAMES_ARENA') && evaluation.transcript_text && (
+                  {(roundType === 'RAPID_FIRE' || roundType === 'TALK_ON_A_TOPIC' || roundType === 'GAMES_ARENA' || roundType === 'RAPID_FIRE_WITH_GROUNDING') && evaluation.transcript_text && (
                     <div className="w-full max-w-4xl mx-auto">
                       <div className="bg-white border border-gray-100 rounded-2xl">
                         <div className="p-6 border-b border-gray-100">
@@ -1413,7 +1413,7 @@ export function CandidateEvaluationPanel({
                     )}
 
                     {/* Evaluation Options for Sales rounds */}
-                    {(roundType === 'RAPID_FIRE' || roundType === 'TALK_ON_A_TOPIC' || roundType === 'GAMES_ARENA') && (
+                    {(roundType === 'RAPID_FIRE' || roundType === 'TALK_ON_A_TOPIC' || roundType === 'GAMES_ARENA' || roundType === 'RAPID_FIRE_WITH_GROUNDING') && (
                       <div className="max-w-2xl mx-auto space-y-6">
                         {/* Warning banner when sparrowRoundId is not configured */}
                         {(!sparrowRoundId || sparrowRoundId.trim() === '') && (

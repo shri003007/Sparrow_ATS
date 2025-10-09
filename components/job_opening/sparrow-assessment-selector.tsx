@@ -4,6 +4,7 @@ import React, { useState } from "react"
 import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Settings, Check } from "lucide-react"
 import { SparrowAssessmentModal } from "./sparrow-assessment-modal"
 
@@ -12,8 +13,10 @@ interface SparrowAssessmentSelectorProps {
   selectedAssessmentId?: string
   selectedTestName?: string
   selectedAssessmentName?: string
+  selectedFilterColumn?: string
   onToggle: (enabled: boolean) => void
   onAssessmentSelect: (assessmentId: string | undefined, testName?: string, assessmentName?: string) => void
+  onFilterColumnSelect: (filterColumn: string | undefined) => void
 }
 
 export function SparrowAssessmentSelector({
@@ -21,8 +24,10 @@ export function SparrowAssessmentSelector({
   selectedAssessmentId,
   selectedTestName,
   selectedAssessmentName,
+  selectedFilterColumn,
   onToggle,
-  onAssessmentSelect
+  onAssessmentSelect,
+  onFilterColumnSelect
 }: SparrowAssessmentSelectorProps) {
   const [showModal, setShowModal] = useState(false)
 
@@ -70,6 +75,26 @@ export function SparrowAssessmentSelector({
       {/* Assessment Configuration */}
       {isEnabled && (
         <div className="space-y-4 pl-6 border-l-2 border-blue-200">
+          {/* Filter Column Selection */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium text-gray-700">
+              Filter Column (Optional)
+            </Label>
+            <Select
+              value={selectedFilterColumn || "none"}
+              onValueChange={(value) => onFilterColumnSelect(value === "none" ? undefined : value)}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select filter column (optional)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                <SelectItem value="surveysparrow">surveysparrow</SelectItem>
+                <SelectItem value="thrivesparrow">thrivesparrow</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
           {selectedAssessmentId && selectedTestName && selectedAssessmentName ? (
             // Selected Assessment Display
             <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">

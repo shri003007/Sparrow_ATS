@@ -341,10 +341,13 @@ export default function ATSInterface() {
         )
 
         if (roundTemplate?.id) {
-          const mappingPromise = SparrowAssessmentTestsApi.createAssessmentMapping({
+          const mappingRequest = {
             sparrow_assessment_id: round.sparrowAssessmentId,
-            job_round_template_id: roundTemplate.id
-          }).then(() => {
+            job_round_template_id: roundTemplate.id,
+            ...(round.sparrowFilterColumn && { filter_column: round.sparrowFilterColumn })
+          }
+          
+          const mappingPromise = SparrowAssessmentTestsApi.createAssessmentMapping(mappingRequest).then(() => {
             console.log(`✅ Created Sparrow Assessment mapping for round: ${round.name}`)
           }).catch((error) => {
             console.error(`❌ Failed to create Sparrow Assessment mapping for round: ${round.name}`, error)
