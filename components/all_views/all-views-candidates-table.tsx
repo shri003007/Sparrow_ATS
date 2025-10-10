@@ -8,7 +8,6 @@ import {
   ChevronDown, 
   ChevronUp, 
   Users,
-  Phone,
   Loader2,
   Search
 } from "lucide-react"
@@ -38,13 +37,15 @@ interface AllViewsCandidatesTableProps {
   onStatusChange: (candidateId: string, newStatus: CandidateUIStatus) => void
   hasRoundsStarted?: boolean
   viewId?: string
+  forceRefresh?: boolean
 }
 
 export function AllViewsCandidatesTable({ 
   selectedJobs, 
   onStatusChange, 
   hasRoundsStarted = false,
-  viewId
+  viewId,
+  forceRefresh = false
 }: AllViewsCandidatesTableProps) {
   const fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
 
@@ -55,6 +56,7 @@ export function AllViewsCandidatesTable({
   const [isLoading, setIsLoading] = useState(false)
   const [loadingProgress, setLoadingProgress] = useState({ completed: 0, total: 0 })
   const [searchQuery, setSearchQuery] = useState("")
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
   
   // Track previous viewId to detect actual view changes
   const previousViewIdRef = useRef<string | null>(null)
@@ -73,15 +75,24 @@ export function AllViewsCandidatesTable({
   }, [viewId])
 
   // Helper function to fetch candidates for a single job (caching handled at API level)
-  const fetchJobCandidates = async (job: JobOpeningListItem): Promise<CandidateWithJob[]> => {
+  const fetchJobCandidates = async (job: JobOpeningListItem, forceRefresh: boolean = false): Promise<CandidateWithJob[]> => {
     try {
-      const response = await CandidatesApi.getCandidatesByJob(job.id)
+      const response = await CandidatesApi.getCandidatesByJob(job.id, forceRefresh)
       
       // Add job information to each candidate and ensure valid status
       const jobName = job.posting_title || (job as any).title || (job as any).job_title || (job as any).name || 'Unknown Job'
       
       const candidatesWithJob = response.candidates.map(candidate => {
-        const overallScore = candidate.overall_evaluation?.overall_score || undefined
+        const overallScore = candidate.overall_evaluation?.overall_score ?? undefined
+        
+        // Log candidate data for debugging
+        if (candidate.overall_evaluation) {
+          console.log(`🔍 [CANDIDATE DATA] ${candidate.name} (${jobName}):`, {
+            overall_score: candidate.overall_evaluation.overall_score,
+            round_scores: candidate.overall_evaluation.round_scores,
+            has_round_scores: !!candidate.overall_evaluation.round_scores
+          })
+        }
         
         return {
           ...candidate,
@@ -125,7 +136,8 @@ export function AllViewsCandidatesTable({
       try {
         // Fetch all jobs in parallel
         const jobPromises = selectedJobs.map(async (job, index) => {
-          const candidates = await fetchJobCandidates(job)
+          const shouldForceRefresh = forceRefresh || refreshTrigger > 0
+          const candidates = await fetchJobCandidates(job, shouldForceRefresh)
           
           // Update progress as each job completes
           setLoadingProgress(prev => ({ ...prev, completed: prev.completed + 1 }))
@@ -158,7 +170,7 @@ export function AllViewsCandidatesTable({
     }
 
     fetchAllCandidates()
-  }, [selectedJobs, hasRoundsStarted])
+  }, [selectedJobs, hasRoundsStarted, forceRefresh, refreshTrigger])
 
   const truncateText = (text: string | undefined | null, maxLength: number) => {
     if (!text) return '-'
@@ -334,18 +346,48 @@ export function AllViewsCandidatesTable({
         overflow: "hidden"
       }}
     >
-      {/* Search Bar */}
+      {/* Search Bar and Controls */}
       <div className="p-4 border-b border-gray-200">
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-          <Input
-            type="text"
-            placeholder="Search candidates by name or email..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 pr-4 py-2 w-full"
+        <div className="flex items-center justify-between gap-4">
+          <div className="relative max-w-md flex-1">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <Input
+              type="text"
+              placeholder="Search candidates by name or email..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10 pr-4 py-2 w-full"
+              style={{ fontFamily }}
+            />
+          </div>
+          <Button
+            onClick={() => {
+              console.log('🔄 [REFRESH] Force refreshing all candidates data')
+              CandidatesApi.clearCache()
+              // Trigger re-fetch by incrementing refresh trigger
+              setRefreshTrigger(prev => prev + 1)
+            }}
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-2"
+            disabled={isLoading}
             style={{ fontFamily }}
-          />
+          >
+            <svg
+              className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              />
+            </svg>
+            Refresh
+          </Button>
         </div>
       </div>
 
@@ -541,26 +583,6 @@ export function AllViewsCandidatesTable({
                 {round.round_name}
               </th>
             ))}
-            <th
-              style={{
-                background: "#f6f7f8",
-                borderBottom: "none",
-                height: "48px",
-                fontSize: "12px",
-                color: "#6B7280",
-                padding: "8px 16px",
-                fontWeight: "500",
-                verticalAlign: "center",
-                fontFamily,
-                textAlign: "left",
-                minWidth: "140px",
-                position: "sticky",
-                top: 0,
-                zIndex: 10
-              }}
-            >
-              Contact
-            </th>
             {/* Custom Fields */}
             {customFields.map((field, index) => (
               <th
@@ -745,13 +767,6 @@ export function AllViewsCandidatesTable({
                   </td>
                 ))}
 
-                {/* Contact */}
-                <td style={{ minWidth: "140px", padding: "12px" }}>
-                  <div className="flex items-center gap-2 text-sm text-gray-600" style={{ fontFamily }}>
-                    <Phone className="w-3 h-3" />
-                    {candidate.mobile_phone || '-'}
-                  </div>
-                </td>
 
                 {/* Custom Fields */}
                 {customFields.map((field) => (

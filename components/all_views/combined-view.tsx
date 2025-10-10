@@ -116,6 +116,7 @@ export function AllViewsCombinedView({
               onStatusChange={handleStatusChange}
               hasRoundsStarted={true} // TODO: Determine this based on actual round status
               viewId={viewId}
+              forceRefresh={false}
             />
           </div>
         </>
