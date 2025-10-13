@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Loader2, AlertCircle, Users, ArrowRight, Calendar, ChevronDown } from "lucide-react"
+import { Loader2, AlertCircle, Users, ArrowRight, Calendar, ChevronDown, RefreshCw } from "lucide-react"
 import { RoundCandidatesApi } from "@/lib/api/round-candidates"
 import { CandidateRoundsApi, JobRoundTemplatesApi } from "@/lib/api/rounds"
 import type { JobRoundTemplate } from "@/lib/round-types"
@@ -207,9 +207,21 @@ export function ProjectRoundContent({
     }
   }
 
+  const handleRefresh = () => {
+    if (currentRound?.id) {
+      setRoundData(null)
+      setError(null)
+      setIsLoading(true)
+      // Reset pagination
+      setCurrentPage(1)
+      setHasMoreCandidates(false)
+      setTotalCandidatesCount(0)
+    }
+  }
+
   const handleStatusChange = (candidateId: string, newStatus: RoundStatus) => {
     // Update local candidates state
-    setLocalCandidates(prevCandidates => 
+    setLocalCandidates(prevCandidates =>
       prevCandidates.map(candidate => {
         if (candidate.id === candidateId) {
           const updatedCandidate = { ...candidate }
@@ -223,7 +235,7 @@ export function ProjectRoundContent({
         return candidate
       })
     )
-    
+
     // Update status tracking (same pattern as INTERVIEW and SCREENING rounds)
     setCurrentStatusById(prev => ({ ...prev, [candidateId]: newStatus }))
     
@@ -411,6 +423,19 @@ export function ProjectRoundContent({
                 >
                   <Users className="w-4 h-4" />
                   Radar Chart
+                </Button>
+
+                {/* Refresh Button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRefresh}
+                  className="flex items-center gap-2"
+                  disabled={isLoading}
+                  style={{ fontFamily }}
+                >
+                  <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                  Refresh
                 </Button>
 
               </div>

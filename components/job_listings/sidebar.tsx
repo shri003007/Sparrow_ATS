@@ -51,7 +51,8 @@ interface AppSidebarProps {
   appMode?: string; // Track the current app mode to prevent auto-selection
   refreshViewsTrigger?: number; // Trigger to refresh views list
   onSettingsClick?: () => void; // Callback for admin settings click
-
+  preselectedJobId?: string | null; // Preselected job from selection page
+  preselectedViewId?: string | null; // Preselected view from selection page
 }
 
 export function AppSidebar({
@@ -66,6 +67,8 @@ export function AppSidebar({
   appMode,
   refreshViewsTrigger = 0,
   onSettingsClick,
+  preselectedJobId,
+  preselectedViewId,
 }: AppSidebarProps) {
   const { user, apiUser, logout } = useAuth();
   const [jobs, setJobs] = useState<JobOpeningListItem[]>([]);
@@ -176,15 +179,32 @@ export function AppSidebar({
     fetchJobs();
   }, [apiUser?.id]);
 
-  // Handle auto-selection of first job
+  // Handle auto-selection of first job when no preselection exists
   useEffect(() => {
-    // Auto-select the first job if none is selected and we're in listing mode
     // Don't auto-select during all views creation or when in all views mode
-    if (jobs.length > 0 && !selectedJobId && mode === "listing" && onJobSelect && 
-        appMode !== 'all-views-creation' && appMode !== 'all-views' && !loading) {
-      onJobSelect(jobs[0]);
+    if (mode !== "listing" || appMode === 'all-views-creation' || appMode === 'all-views' || loading) {
+      return
     }
-  }, [jobs, selectedJobId, mode, onJobSelect, appMode, loading]);
+
+    if (jobs.length === 0 || !onJobSelect) {
+      return
+    }
+
+    // Don't auto-select job if a view is preselected
+    if (preselectedViewId) {
+      return
+    }
+
+    // Don't auto-select if there's a preselected job (handled by handleJobsLoaded)
+    if (preselectedJobId) {
+      return
+    }
+
+    // Auto-select the first job if none is selected and no preselection
+    if (!selectedJobId) {
+      onJobSelect(jobs[0])
+    }
+  }, [jobs, selectedJobId, mode, onJobSelect, appMode, loading, preselectedJobId, preselectedViewId]);
 
   // Function to fetch saved views - can be called externally
   const fetchSavedViews = useCallback(async () => {
@@ -216,6 +236,22 @@ export function AppSidebar({
   useEffect(() => {
     fetchSavedViews();
   }, [fetchSavedViews, refreshViewsTrigger]);
+
+  // Handle auto-selection of preselected view
+  useEffect(() => {
+    // Don't auto-select view if a job is preselected
+    if (preselectedJobId) {
+      return
+    }
+
+    if (preselectedViewId && savedViews.length > 0 && onSelectSavedView && !selectedViewId) {
+      const preselectedView = savedViews.find(view => view.id === preselectedViewId)
+      if (preselectedView) {
+        console.log('Selecting preselected view:', preselectedView.title)
+        onSelectSavedView(preselectedView)
+      }
+    }
+  }, [preselectedViewId, savedViews, onSelectSavedView, selectedViewId, preselectedJobId]);
 
   // Keyboard shortcut handler for Command+K
   useEffect(() => {

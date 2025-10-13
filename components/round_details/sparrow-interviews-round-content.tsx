@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useMemo } from "react"
-import { Loader2, AlertCircle, Users, ArrowRight, Settings } from "lucide-react"
+import { Loader2, AlertCircle, Users, ArrowRight, Settings, RefreshCw } from "lucide-react"
 import { SparrowInterviewsCandidatesTable } from "./sparrow-interviews-candidates-table"
 import { RoundSettingsModal } from "./round-settings-modal"
 import { CompetencyMetricsModal } from "./competency-metrics-modal"
@@ -651,8 +651,20 @@ export function SparrowInterviewsRoundContent({
     }
   }
 
+  const handleRefresh = () => {
+    if (currentRound?.id) {
+      setRoundData(null)
+      setError(null)
+      setIsLoading(true)
+      // Reset pagination
+      setCurrentPage(1)
+      setHasMoreCandidates(false)
+      setTotalCandidatesCount(0)
+    }
+  }
+
   const handleStatusChange = (candidateId: string, newStatus: RoundStatus) => {
-    setLocalCandidates(prevCandidates => 
+    setLocalCandidates(prevCandidates =>
       prevCandidates.map(candidate => {
         if (candidate.id === candidateId) {
           const updatedCandidate = { ...candidate }
@@ -666,7 +678,7 @@ export function SparrowInterviewsRoundContent({
         return candidate
       })
     )
-    
+
     setCurrentStatusById(prev => ({
       ...prev,
       [candidateId]: newStatus
@@ -1193,7 +1205,20 @@ export function SparrowInterviewsRoundContent({
                   <Users className="w-4 h-4" />
                   Radar Chart
                 </Button>
-        
+
+                {/* Refresh Button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRefresh}
+                  className="flex items-center gap-2"
+                  disabled={isLoading}
+                  style={{ fontFamily }}
+                >
+                  <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+
                 {/* Settings Button - Hide in multi-job mode */}
                 {!isMultiJobMode && (
                   <Button

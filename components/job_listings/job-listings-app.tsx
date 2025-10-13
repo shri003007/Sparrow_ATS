@@ -16,12 +16,15 @@ interface JobListingsAppProps {
   onCreateJob?: () => void
   newlyCreatedJobId?: string | null
   onSettingsClick?: () => void
+  preselectedJobId?: string | null
+  preselectedViewId?: string | null
+  shouldCreateView?: boolean
 }
 
 type JobView = 'candidates' | 'rounds' | 'candidate-details'
 type AppMode = 'single-job' | 'all-views' | 'all-views-creation'
 
-export function JobListingsApp({ onCreateJob, newlyCreatedJobId, onSettingsClick }: JobListingsAppProps) {
+export function JobListingsApp({ onCreateJob, newlyCreatedJobId, onSettingsClick, preselectedJobId, preselectedViewId, shouldCreateView }: JobListingsAppProps) {
   const [selectedJob, setSelectedJob] = useState<JobOpeningListItem | null>(null)
   const [currentView, setCurrentView] = useState<JobView>('candidates')
   const [isLoadingJobs, setIsLoadingJobs] = useState(true)
@@ -43,6 +46,14 @@ export function JobListingsApp({ onCreateJob, newlyCreatedJobId, onSettingsClick
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   
   const navigationCheckRef = useRef<((callback: () => void) => void) | null>(null)
+
+  // Handle view creation from selection page
+  useEffect(() => {
+    if (shouldCreateView) {
+      console.log('Switching to all-views-creation mode from selection page')
+      setAppMode('all-views-creation')
+    }
+  }, [shouldCreateView])
 
   // Constants for localStorage keys
   const SELECTED_JOB_KEY = 'ats_selected_job'
@@ -154,6 +165,20 @@ export function JobListingsApp({ onCreateJob, newlyCreatedJobId, onSettingsClick
     setIsLoadingJobs(false)
     setJobsList(jobs || [])
 
+    // Priority 0: Select preselected job from selection page
+    if (preselectedJobId && jobs && Array.isArray(jobs)) {
+      console.log('Looking for preselected job:', preselectedJobId, 'in', jobs.length, 'jobs')
+      const preselectedJob = jobs.find(job => job.id === preselectedJobId)
+      if (preselectedJob) {
+        console.log('✅ Selecting preselected job from selection page:', preselectedJob.posting_title)
+        setSelectedJob(preselectedJob)
+        setCurrentView(preselectedJob.has_rounds_started ? 'rounds' : 'candidates')
+        return // Exit early, we found and selected the preselected job
+      } else {
+        console.warn('❌ Preselected job not found:', preselectedJobId)
+      }
+    }
+
     // Priority 1: Select newly created job if available
     if (newlyCreatedJobId && jobs && Array.isArray(jobs)) {
       const newlyCreatedJob = jobs.find(job => job.id === newlyCreatedJobId)
@@ -236,7 +261,7 @@ export function JobListingsApp({ onCreateJob, newlyCreatedJobId, onSettingsClick
         }
       }
     }
-  }, [selectedJob, appMode, newlyCreatedJobId])
+  }, [selectedJob, appMode, newlyCreatedJobId, preselectedJobId])
 
   // Fetch candidates when selected job changes
   useEffect(() => {
@@ -540,6 +565,8 @@ export function JobListingsApp({ onCreateJob, newlyCreatedJobId, onSettingsClick
         appMode={appMode}
         refreshViewsTrigger={refreshViewsTrigger}
         onSettingsClick={onSettingsClick}
+        preselectedJobId={preselectedJobId}
+        preselectedViewId={preselectedViewId}
       />
       {appMode === 'all-views-creation' ? (
         <AllViewsCreationPage

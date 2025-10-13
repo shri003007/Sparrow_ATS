@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Loader2, AlertCircle, Users, ArrowRight } from "lucide-react"
+import { Loader2, AlertCircle, Users, ArrowRight, RefreshCw } from "lucide-react"
 import { ModernScreeningCandidatesTable } from "./modern-screening-candidates-table"
 import { CompetencyMetricsModal } from "./competency-metrics-modal"
 import { RoundCandidatesApi } from "@/lib/api/round-candidates"
@@ -394,6 +394,19 @@ export function ScreeningRoundContent({
                 >
                   <Users className="w-4 h-4" />
                   Radar Chart
+                </Button>
+
+                {/* Refresh Button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRefresh}
+                  className="flex items-center gap-2"
+                  disabled={isLoading}
+                  style={{ fontFamily }}
+                >
+                  <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                  Refresh
                 </Button>
 
               </div>

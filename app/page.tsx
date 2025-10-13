@@ -27,11 +27,12 @@ import { NavigationWarningDialog } from "@/components/job_opening/navigation-war
 import { useNavigationPrevention } from "@/hooks/use-navigation-prevention"
 import { JobListingsApp } from "@/components/job_listings/job-listings-app"
 import { AdminSettingsPage } from "@/components/admin/admin-settings-page"
+import { JobViewSelectionPage } from "@/components/job_listings/job-view-selection-page"
 import { SparrowAssessmentTestsApi } from "@/lib/api/sparrow-assessment-tests"
 import { toast } from "@/hooks/use-toast"
 
 
-type AppView = "job-listings" | "job-creation" | "admin-settings"
+type AppView = "selection" | "job-listings" | "job-creation" | "admin-settings"
 type JobCreationView = "form" | "canvas"
 
 export default function ATSInterface() {
@@ -40,8 +41,30 @@ export default function ATSInterface() {
   
   // All useState hooks must be declared before any conditional returns
   const [activeTab, setActiveTab] = useState("all")
-  const [appView, setAppView] = useState<AppView>("job-listings")
+  const [appView, setAppView] = useState<AppView>(() => {
+    // Check if this is a fresh login session
+    try {
+      const isFreshLogin = !sessionStorage.getItem('ats_session_started')
+
+      // Mark session as started
+      sessionStorage.setItem('ats_session_started', 'true')
+
+      // Show selection page only on fresh login
+      if (isFreshLogin) {
+        return "selection"
+      }
+
+      // Otherwise, go to job-listings directly (user is refreshing within app)
+      return "job-listings"
+    } catch (error) {
+      // On error, default to selection page
+      return "selection"
+    }
+  })
   const [jobCreationView, setJobCreationView] = useState<JobCreationView>("form")
+  const [preselectedJobId, setPreselectedJobId] = useState<string | null>(null)
+  const [preselectedViewId, setPreselectedViewId] = useState<string | null>(null)
+  const [shouldCreateView, setShouldCreateView] = useState(false)
   const [jobFormData, setJobFormData] = useState<Partial<JobFormData>>({})
   const [currentJobId, setCurrentJobId] = useState<string | null>(null)
   const [newlyCreatedJobId, setNewlyCreatedJobId] = useState<string | null>(null)
@@ -90,6 +113,12 @@ export default function ATSInterface() {
   // Auth effect - must be after all hooks
   useEffect(() => {
     if (!isLoading && !user) {
+      // Clear session flag on logout
+      try {
+        sessionStorage.removeItem('ats_session_started')
+      } catch (error) {
+        console.warn('Failed to clear session flag:', error)
+      }
       router.replace('/login')
     }
   }, [user, isLoading, router])
@@ -507,13 +536,52 @@ export default function ATSInterface() {
 
 
 
+  const handleJobSelection = (job: JobOpeningListItem) => {
+    setPreselectedJobId(job.id)
+    setPreselectedViewId(null)
+  }
+
+  const handleViewSelection = (view: any) => {
+    setPreselectedViewId(view.id)
+    setPreselectedJobId(null)
+  }
+
+  const handleSkipSelection = () => {
+    setAppView("job-listings")
+  }
+
+  const handleCreateJobFromSelection = () => {
+    setAppView("job-listings")
+    // Delay slightly to ensure the view has changed before opening modal
+    setTimeout(() => {
+      setShowCreationModal(true)
+    }, 100)
+  }
+
+  const handleCreateViewFromSelection = () => {
+    setShouldCreateView(true)
+    setAppView("job-listings")
+  }
+
   return (
     <>
+      {appView === "selection" && (
+        <JobViewSelectionPage
+          onJobSelect={handleJobSelection}
+          onViewSelect={handleViewSelection}
+          onSkip={handleSkipSelection}
+          onCreateJob={handleCreateJobFromSelection}
+          onCreateView={handleCreateViewFromSelection}
+        />
+      )}
       {appView === "job-listings" && (
-        <JobListingsApp 
-          onCreateJob={handleCreateJobClick} 
+        <JobListingsApp
+          onCreateJob={handleCreateJobClick}
           newlyCreatedJobId={newlyCreatedJobId}
           onSettingsClick={handleSettingsClick}
+          preselectedJobId={preselectedJobId}
+          preselectedViewId={preselectedViewId}
+          shouldCreateView={shouldCreateView}
         />
       )}
       {appView === "job-creation" && renderJobCreationView()}
