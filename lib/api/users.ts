@@ -61,8 +61,15 @@ export class UsersApi {
       const response = await authenticatedApiService.post(url, userData)
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(`Failed to create user: ${response.status} - ${errorData.message || 'Unknown error'}`)
+        const errorText = await response.text()
+        let errorData = {}
+        try {
+          errorData = JSON.parse(errorText)
+        } catch (e) {
+          // Response is not JSON
+        }
+        
+        throw new Error(`Failed to create user: ${response.status} - ${(errorData as any).message || errorText || 'Unknown error'}`)
       }
 
       return await response.json()
@@ -178,22 +185,44 @@ export class UsersApi {
   static async ensureUserExists(email: string, firstName: string, lastName?: string): Promise<User> {
     try {
       // First, try to get the user by email
-      const existingUser = await this.getUserByEmail(email)
+      let existingUser: User | null = null
+      
+      try {
+        existingUser = await this.getUserByEmail(email)
+      } catch (getUserError) {
+        // Continue to create user if getting user fails (normal for new users)
+      }
       
       if (existingUser) {
         return existingUser
       }
 
       // User doesn't exist, create a new one with 'recruiter' role as default
-      const createResponse = await this.createUser({
-        email,
-        first_name: firstName,
-        last_name: lastName,
-        role: 'recruiter',
-        is_active: true
-      })
+      try {
+        const createResponse = await this.createUser({
+          email,
+          first_name: firstName,
+          last_name: lastName,
+          role: 'recruiter',
+          is_active: true
+        })
 
-      return createResponse.user
+        return createResponse.user
+      } catch (createError: any) {
+        // If user creation fails because user already exists, try to get the user again
+        if (createError.message && createError.message.includes('already exists')) {
+          // Wait a bit and try to get the user again
+          await new Promise(resolve => setTimeout(resolve, 1000))
+          
+          const retryUser = await this.getUserByEmail(email)
+          if (retryUser) {
+            return retryUser
+          }
+        }
+        
+        // Re-throw the error if it's not a "user already exists" error
+        throw createError
+      }
     } catch (error) {
       console.error('Error ensuring user exists:', error)
       throw error

@@ -6,6 +6,7 @@ import {
   signOut,
   onAuthStateChanged,
   signInWithPopup,
+  signInWithEmailAndPassword,
 } from 'firebase/auth'
 import { auth, googleProvider } from '@/lib/firebase'
 import { useRouter, usePathname } from 'next/navigation'
@@ -20,6 +21,7 @@ interface AuthContextType {
   isLoading: boolean
   logout: () => Promise<void>
   signInWithGoogle: () => Promise<void>
+  signInWithEmail: (email: string, password: string) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -32,6 +34,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
   const pathname = usePathname()
+  
+  // Track ongoing API user setup to prevent duplicate calls
+  const [userSetupInProgress, setUserSetupInProgress] = useState<Set<string>>(new Set())
 
   // Helper function to handle API user creation/verification
   const handleApiUserSetup = async (firebaseUser: User): Promise<ApiUser | null> => {
@@ -40,11 +45,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error('User email is required')
       }
 
-      // Extract first and last name from display name
+      // Check if setup is already in progress for this user
+      if (userSetupInProgress.has(firebaseUser.email)) {
+        console.log('User setup already in progress for:', firebaseUser.email)
+        return null
+      }
+
+      // Mark setup as in progress
+      setUserSetupInProgress(prev => new Set(prev).add(firebaseUser.email!))
+
+      // Extract first and last name from display name or email
       const displayName = firebaseUser.displayName || ''
-      const nameParts = displayName.split(' ')
-      const firstName = nameParts[0] || firebaseUser.email.split('@')[0]
-      const lastName = nameParts.slice(1).join(' ') || undefined
+      let firstName: string
+      let lastName: string | undefined
+
+      if (displayName.trim()) {
+        // If display name exists (Google auth), use it
+        const nameParts = displayName.split(' ')
+        firstName = nameParts[0]
+        lastName = nameParts.slice(1).join(' ') || undefined
+      } else {
+        // If no display name (email/password auth), extract from email
+        const emailPrefix = firebaseUser.email.split('@')[0]
+        // Try to split by common separators like dots, underscores, etc.
+        const emailParts = emailPrefix.split(/[._-]/)
+        firstName = emailParts[0] || emailPrefix
+        lastName = emailParts.length > 1 ? emailParts.slice(1).join(' ') : undefined
+        
+        // Capitalize first letter of names
+        firstName = firstName.charAt(0).toUpperCase() + firstName.slice(1).toLowerCase()
+        if (lastName) {
+          lastName = lastName.charAt(0).toUpperCase() + lastName.slice(1).toLowerCase()
+        }
+      }
 
       // Check if user exists in our system, create if not
       const apiUser = await UsersApi.ensureUserExists(
@@ -62,6 +95,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         variant: "destructive"
       })
       return null
+    } finally {
+      // Always clear the in-progress flag
+      if (firebaseUser.email) {
+        setUserSetupInProgress(prev => {
+          const newSet = new Set(prev)
+          newSet.delete(firebaseUser.email!)
+          return newSet
+        })
+      }
     }
   }
 
@@ -176,6 +218,77 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const signInWithEmail = async (email: string, password: string): Promise<void> => {
+    try {
+      setIsLoading(true)
+      
+      // Validate domain before attempting authentication
+      if (!email.endsWith(`@${ALLOWED_DOMAIN}`)) {
+        throw new Error(`Access restricted to @${ALLOWED_DOMAIN} email addresses only.`)
+      }
+      
+      const result = await signInWithEmailAndPassword(auth, email, password)
+      
+      if (result.user) {
+        // Get fresh token and set it immediately
+        const token = await result.user.getIdToken(true) // Force fresh token
+        localStorage.setItem('auth-token', token)
+        
+        // Update API service with new token BEFORE making any API calls
+        authenticatedApiService.setIdToken(token)
+        
+        // Set the user state first
+        setUser(result.user)
+        
+        // Set up API user (check existence and create if needed)
+        const apiUserData = await handleApiUserSetup(result.user)
+        setApiUser(apiUserData)
+        
+        // Identify user in Clarity
+        clarityService.identifyUser(result.user)
+        
+        // Only redirect if we're on login page
+        if (pathname === '/login') {
+          router.replace('/')
+          toast({
+            title: "Welcome!",
+            description: apiUserData ? 
+              `Successfully signed in as ${apiUserData.first_name}!` : 
+              "Successfully signed in!",
+          })
+        }
+      }
+    } catch (error: any) {
+      console.error('Email Auth Error:', error)
+      
+      // Provide user-friendly error messages
+      let errorMessage = 'Invalid email or password'
+      
+      if (error.code === 'auth/user-not-found') {
+        errorMessage = 'No account found with this email address'
+      } else if (error.code === 'auth/wrong-password') {
+        errorMessage = 'Incorrect password'
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Invalid email address'
+      } else if (error.code === 'auth/user-disabled') {
+        errorMessage = 'This account has been disabled'
+      } else if (error.code === 'auth/too-many-requests') {
+        errorMessage = 'Too many failed attempts. Please try again later'
+      } else if (error.message) {
+        errorMessage = error.message
+      }
+      
+      toast({
+        title: "Sign In Failed",
+        description: errorMessage,
+        variant: "destructive"
+      })
+      throw new Error(errorMessage)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const logout = async () => {
     try {
       setIsLoading(true)
@@ -221,7 +334,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       apiUser,
       isLoading, 
       logout,
-      signInWithGoogle
+      signInWithGoogle,
+      signInWithEmail
     }}>
       {children}
     </AuthContext.Provider>
