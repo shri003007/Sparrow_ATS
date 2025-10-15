@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
+import { useAuth } from "@/contexts/auth-context"
 import { AppSidebar } from "./sidebar"
 import { JobDetailsView } from "./job-details-view"
 import { RoundDetailsView } from "./round-details-view"
@@ -9,6 +10,8 @@ import { AllViewsCreationPage } from "../all_views/all-views-creation-page"
 import { CandidateDetailsView } from "./candidate-details-view"
 import { CandidatesApi } from "@/lib/api/candidates"
 import { CandidateTransformer } from "@/lib/transformers/candidate-transformer"
+import { AllViewsApi } from "@/lib/api/all-views"
+import { CustomFieldsApi } from "@/lib/api/custom-fields"
 import type { JobOpeningListItem } from "@/lib/job-types"
 import type { CandidateDisplay, CandidateUIStatus } from "@/lib/candidate-types"
 
@@ -19,12 +22,14 @@ interface JobListingsAppProps {
   preselectedJobId?: string | null
   preselectedViewId?: string | null
   shouldCreateView?: boolean
+  onClearPreselected?: () => void
 }
 
 type JobView = 'candidates' | 'rounds' | 'candidate-details'
 type AppMode = 'single-job' | 'all-views' | 'all-views-creation'
 
-export function JobListingsApp({ onCreateJob, newlyCreatedJobId, onSettingsClick, preselectedJobId, preselectedViewId, shouldCreateView }: JobListingsAppProps) {
+export function JobListingsApp({ onCreateJob, newlyCreatedJobId, onSettingsClick, preselectedJobId, preselectedViewId, shouldCreateView, onClearPreselected }: JobListingsAppProps) {
+  const { apiUser } = useAuth()
   const [selectedJob, setSelectedJob] = useState<JobOpeningListItem | null>(null)
   const [currentView, setCurrentView] = useState<JobView>('candidates')
   const [isLoadingJobs, setIsLoadingJobs] = useState(true)
@@ -34,6 +39,7 @@ export function JobListingsApp({ onCreateJob, newlyCreatedJobId, onSettingsClick
   const [allViewsTitle, setAllViewsTitle] = useState<string>('')
   const [selectedViewId, setSelectedViewId] = useState<string | null>(null)
   const [refreshViewsTrigger, setRefreshViewsTrigger] = useState<number>(0)
+  const [refreshJobsTrigger, setRefreshJobsTrigger] = useState<number>(0)
   const [isLoadingViewJobs, setIsLoadingViewJobs] = useState(false)
   const [selectedCandidate, setSelectedCandidate] = useState<CandidateDisplay | null>(null)
   
@@ -165,6 +171,12 @@ export function JobListingsApp({ onCreateJob, newlyCreatedJobId, onSettingsClick
     setIsLoadingJobs(false)
     setJobsList(jobs || [])
 
+    // Don't auto-select jobs if a view is preselected
+    if (preselectedViewId) {
+      console.log('Skipping job selection because view is preselected:', preselectedViewId)
+      return
+    }
+
     // Priority 0: Select preselected job from selection page
     if (preselectedJobId && jobs && Array.isArray(jobs)) {
       console.log('Looking for preselected job:', preselectedJobId, 'in', jobs.length, 'jobs')
@@ -173,6 +185,8 @@ export function JobListingsApp({ onCreateJob, newlyCreatedJobId, onSettingsClick
         console.log('✅ Selecting preselected job from selection page:', preselectedJob.posting_title)
         setSelectedJob(preselectedJob)
         setCurrentView(preselectedJob.has_rounds_started ? 'rounds' : 'candidates')
+        // Clear preselected values after successful selection
+        onClearPreselected?.()
         return // Exit early, we found and selected the preselected job
       } else {
         console.warn('❌ Preselected job not found:', preselectedJobId)
@@ -188,6 +202,12 @@ export function JobListingsApp({ onCreateJob, newlyCreatedJobId, onSettingsClick
         setCurrentView(newlyCreatedJob.has_rounds_started ? 'rounds' : 'candidates')
         return // Exit early, we found and selected the newly created job
       }
+    }
+
+    // Don't auto-select jobs if a view is preselected
+    if (preselectedViewId) {
+      console.log('Skipping job fallback selection because view is preselected:', preselectedViewId)
+      return
     }
 
     // Priority 2: Check if the saved job is still in the list
@@ -240,8 +260,8 @@ export function JobListingsApp({ onCreateJob, newlyCreatedJobId, onSettingsClick
               console.log('Selected fallback job:', mostRecentJob.posting_title)
             }
           }
-        } else if (jobs.length > 0 && !selectedJob) {
-          // No saved job, select the most recent one
+        } else if (jobs.length > 0 && !selectedJob && !preselectedViewId) {
+          // No saved job and no preselected view, select the most recent one
           const mostRecentJob = jobs[0]
           setSelectedJob(mostRecentJob)
           setCurrentView(mostRecentJob.has_rounds_started ? 'rounds' : 'candidates')
@@ -254,14 +274,14 @@ export function JobListingsApp({ onCreateJob, newlyCreatedJobId, onSettingsClick
         localStorage.removeItem(CURRENT_VIEW_KEY)
         localStorage.removeItem(CURRENT_ROUND_INDEX_KEY)
         
-        if (jobs.length > 0) {
+        if (jobs.length > 0 && !preselectedViewId) {
           const mostRecentJob = jobs[0]
           setSelectedJob(mostRecentJob)
           setCurrentView(mostRecentJob.has_rounds_started ? 'rounds' : 'candidates')
         }
       }
     }
-  }, [selectedJob, appMode, newlyCreatedJobId, preselectedJobId])
+  }, [selectedJob, appMode, newlyCreatedJobId, preselectedJobId, preselectedViewId])
 
   // Fetch candidates when selected job changes
   useEffect(() => {
@@ -501,9 +521,12 @@ export function JobListingsApp({ onCreateJob, newlyCreatedJobId, onSettingsClick
     }
   }, [])
 
-  const handleAllViewsCreated = (viewTitle: string, jobs: JobOpeningListItem[]) => {
+  const handleAllViewsCreated = (viewTitle: string, jobs: JobOpeningListItem[], viewId?: string) => {
     setAllViewsTitle(viewTitle)
     setSelectedJobsForAllViews(jobs)
+    if (viewId) {
+      setSelectedViewId(viewId) // Select the newly created view in sidebar
+    }
     setAppMode('all-views') // Go directly to rounds view (no toggle needed)
 
     // Trigger sidebar refresh to show the newly created view
@@ -550,6 +573,35 @@ export function JobListingsApp({ onCreateJob, newlyCreatedJobId, onSettingsClick
     }
   }, [])
 
+  // Handle preselected view from selection page
+  useEffect(() => {
+    const handlePreselectedView = async () => {
+      if (preselectedViewId && !selectedViewId) {
+        console.log('Handling preselected view from selection page:', preselectedViewId)
+        try {
+          // Fetch views to find the preselected one
+          const isAdmin = apiUser?.role === 'admin'
+          const response = isAdmin
+            ? await AllViewsApi.getAllViews()
+            : await AllViewsApi.getAllViewsForUser(apiUser?.id || '')
+
+          const preselectedView = response.all_views.find(view => view.id === preselectedViewId)
+          if (preselectedView) {
+            console.log('Found preselected view, selecting:', preselectedView.title)
+            await handleSelectSavedView(preselectedView)
+            // Clear preselected values after successful selection
+            onClearPreselected?.()
+          } else {
+            console.warn('Preselected view not found:', preselectedViewId)
+          }
+        } catch (error) {
+          console.error('Failed to fetch views for preselected view:', error)
+        }
+      }
+    }
+
+    handlePreselectedView()
+  }, [preselectedViewId, selectedViewId, handleSelectSavedView, apiUser?.id, apiUser?.role])
 
   return (
     <div className="flex h-screen bg-white" style={{ gap: 0 }}>
@@ -564,6 +616,7 @@ export function JobListingsApp({ onCreateJob, newlyCreatedJobId, onSettingsClick
         onSelectSavedView={handleSelectSavedView}
         appMode={appMode}
         refreshViewsTrigger={refreshViewsTrigger}
+        refreshJobsTrigger={refreshJobsTrigger}
         onSettingsClick={onSettingsClick}
         preselectedJobId={preselectedJobId}
         preselectedViewId={preselectedViewId}
@@ -580,6 +633,13 @@ export function JobListingsApp({ onCreateJob, newlyCreatedJobId, onSettingsClick
           isLoadingJobs={isLoadingViewJobs}
           viewTitle={allViewsTitle}
           viewId={selectedViewId || undefined}
+          onBack={() => {
+            setSelectedViewId(null)
+            setAppMode('single-job')
+            setIsLoadingViewJobs(false)
+            // Trigger sidebar refresh to remove deleted view from the list
+            setRefreshViewsTrigger(prev => prev + 1)
+          }}
         />
       ) : (
         // Single job mode (existing functionality)
@@ -592,9 +652,21 @@ export function JobListingsApp({ onCreateJob, newlyCreatedJobId, onSettingsClick
             onStatusChange={handleStatusChange}
             hasUnsavedChanges={hasUnsavedChanges}
             pendingStatusChanges={pendingStatusChanges}
-            onRefreshCandidates={(forceRefresh = false) => {
+            onRefreshCandidates={async (forceRefresh = false) => {
               if (selectedJob?.id) {
-                fetchCandidates(selectedJob.id, undefined, forceRefresh)
+                console.log('🔄 [REFRESH] Refreshing candidates and custom field definitions')
+                
+                // Refresh candidates data
+                await fetchCandidates(selectedJob.id, undefined, forceRefresh)
+                
+                // Also refresh custom field definitions
+                try {
+                  console.log('🔄 [REFRESH] Fetching custom field definitions for job:', selectedJob.id)
+                  await CustomFieldsApi.getCustomFieldDefinitionsByJob(selectedJob.id, true)
+                  console.log('✅ [REFRESH] Custom field definitions refreshed successfully')
+                } catch (error) {
+                  console.error('❌ [REFRESH] Failed to refresh custom field definitions:', error)
+                }
               }
             }}
             onSavePendingChanges={savePendingChanges}
@@ -605,6 +677,13 @@ export function JobListingsApp({ onCreateJob, newlyCreatedJobId, onSettingsClick
             onGoToRounds={handleGoToRounds}
             onCandidateClick={handleCandidateClick}
             isLoadingJobs={isLoadingJobs}
+            onDeleteJob={() => {
+              setSelectedJob(null)
+              setCandidates([])
+              setCandidatesCount(0)
+              setIsLoadingCandidates(false)
+              setRefreshJobsTrigger(prev => prev + 1) // Refresh sidebar to remove deleted job
+            }}
           />
         ) : currentView === 'candidate-details' && selectedCandidate ? (
           <CandidateDetailsView

@@ -50,6 +50,7 @@ interface AppSidebarProps {
   onSelectSavedView?: (view: any) => void; // Callback for when user selects a saved view
   appMode?: string; // Track the current app mode to prevent auto-selection
   refreshViewsTrigger?: number; // Trigger to refresh views list
+  refreshJobsTrigger?: number; // Trigger to refresh jobs list
   onSettingsClick?: () => void; // Callback for admin settings click
   preselectedJobId?: string | null; // Preselected job from selection page
   preselectedViewId?: string | null; // Preselected view from selection page
@@ -66,6 +67,7 @@ export function AppSidebar({
   onSelectSavedView,
   appMode,
   refreshViewsTrigger = 0,
+  refreshJobsTrigger = 0,
   onSettingsClick,
   preselectedJobId,
   preselectedViewId,
@@ -177,7 +179,7 @@ export function AppSidebar({
     };
 
     fetchJobs();
-  }, [apiUser?.id]);
+  }, [apiUser?.id, refreshJobsTrigger]);
 
   // Handle auto-selection of first job when no preselection exists
   useEffect(() => {
@@ -190,8 +192,15 @@ export function AppSidebar({
       return
     }
 
-    // Don't auto-select job if a view is preselected
+    // Don't auto-select job if a view is currently selected
+    if (selectedViewId) {
+      console.log('Not auto-selecting job because view is selected:', selectedViewId)
+      return
+    }
+
+    // Don't auto-select job if a view is preselected (view selection in progress)
     if (preselectedViewId) {
+      console.log('Not auto-selecting job because view is preselected:', preselectedViewId)
       return
     }
 
@@ -202,9 +211,10 @@ export function AppSidebar({
 
     // Auto-select the first job if none is selected and no preselection
     if (!selectedJobId) {
+      console.log('Auto-selecting first job:', jobs[0]?.posting_title)
       onJobSelect(jobs[0])
     }
-  }, [jobs, selectedJobId, mode, onJobSelect, appMode, loading, preselectedJobId, preselectedViewId]);
+  }, [jobs, selectedJobId, selectedViewId, mode, onJobSelect, appMode, loading, preselectedJobId, preselectedViewId]);
 
   // Function to fetch saved views - can be called externally
   const fetchSavedViews = useCallback(async () => {
@@ -237,21 +247,39 @@ export function AppSidebar({
     fetchSavedViews();
   }, [fetchSavedViews, refreshViewsTrigger]);
 
-  // Handle auto-selection of preselected view
+  // Handle auto-selection of preselected view (only run once when preselected)
   useEffect(() => {
+    // Don't auto-select view if a job is currently selected
+    if (selectedJobId) {
+      return
+    }
+
     // Don't auto-select view if a job is preselected
     if (preselectedJobId) {
       return
     }
 
-    if (preselectedViewId && savedViews.length > 0 && onSelectSavedView && !selectedViewId) {
+    // Only run this once when preselectedViewId is first set and no view is selected yet
+    if (preselectedViewId && onSelectSavedView && !selectedViewId) {
+      // First try to find the view in the already loaded savedViews
       const preselectedView = savedViews.find(view => view.id === preselectedViewId)
       if (preselectedView) {
-        console.log('Selecting preselected view:', preselectedView.title)
+        console.log('Selecting preselected view from loaded views:', preselectedView.title)
         onSelectSavedView(preselectedView)
+        return
+      }
+
+      // If not found in loaded views and we're not currently loading, try to fetch it
+      if (!loadingViews && savedViews.length === 0) {
+        console.log('Preselected view not found in loaded views, fetching views...')
+        // Trigger a fetch of views
+        fetchSavedViews()
+      } else if (!loadingViews) {
+        // Views are loaded but preselected view not found - this shouldn't happen
+        console.warn('Preselected view not found in saved views:', preselectedViewId)
       }
     }
-  }, [preselectedViewId, savedViews, onSelectSavedView, selectedViewId, preselectedJobId]);
+  }, [preselectedViewId, savedViews, onSelectSavedView, selectedViewId, selectedJobId, preselectedJobId, loadingViews, fetchSavedViews]);
 
   // Keyboard shortcut handler for Command+K
   useEffect(() => {

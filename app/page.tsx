@@ -11,7 +11,7 @@ import { TemplateSelectionModal } from "@/components/job_opening/template-select
 import { AICreationModal } from "@/components/job_opening/ai-creation-modal"
 import { AILoadingModal } from "@/components/job_opening/ai-loading-modal"
 import { UploadModal } from "@/components/job_opening/upload-modal"
-import type { CreationMethod, JobTemplate, JobFormData } from "@/lib/job-types"
+import type { CreationMethod, JobTemplate, JobFormData, JobOpeningListItem } from "@/lib/job-types"
 import { JobTemplateTransformer } from "@/lib/transformers/job-template-transformer"
 import { JobOpeningsApi } from "@/lib/api/job-openings"
 import { JobOpeningTransformer } from "@/lib/transformers/job-opening-transformer"
@@ -539,11 +539,13 @@ export default function ATSInterface() {
   const handleJobSelection = (job: JobOpeningListItem) => {
     setPreselectedJobId(job.id)
     setPreselectedViewId(null)
+    setAppView("job-listings")
   }
 
   const handleViewSelection = (view: any) => {
     setPreselectedViewId(view.id)
     setPreselectedJobId(null)
+    setAppView("job-listings")
   }
 
   const handleSkipSelection = () => {
@@ -561,6 +563,11 @@ export default function ATSInterface() {
   const handleCreateViewFromSelection = () => {
     setShouldCreateView(true)
     setAppView("job-listings")
+  }
+
+  const handleClearPreselected = () => {
+    setPreselectedJobId(null)
+    setPreselectedViewId(null)
   }
 
   return (
@@ -582,6 +589,7 @@ export default function ATSInterface() {
           preselectedJobId={preselectedJobId}
           preselectedViewId={preselectedViewId}
           shouldCreateView={shouldCreateView}
+          onClearPreselected={handleClearPreselected}
         />
       )}
       {appView === "job-creation" && renderJobCreationView()}

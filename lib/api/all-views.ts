@@ -110,6 +110,31 @@ export class AllViewsApi {
   }
 
   /**
+   * Delete a specific all view
+   */
+  static async deleteAllView(viewId: string): Promise<DeleteAllViewResponse> {
+    try {
+      if (!this.baseUrl) {
+        throw new Error('All Views API URL not configured. Please set NEXT_PUBLIC_ALL_VIEWS_API_URL in your environment variables.')
+      }
+
+      const url = `${this.baseUrl}/all-views/${viewId}`
+      const response = await authenticatedApiService.delete(url)
+
+      if (!response.ok) {
+        const errorData = await response.text()
+        throw new Error(`Failed to delete all view: ${response.status} - ${errorData}`)
+      }
+
+      const result = await response.json()
+      return result
+    } catch (error) {
+      console.error('Failed to delete all view:', error)
+      throw error
+    }
+  }
+
+  /**
    * Helper function to get jobs for view IDs
    * This fetches job details for the job_opening_ids in a view
    */
@@ -117,15 +142,15 @@ export class AllViewsApi {
     try {
       // Import here to avoid circular dependencies
       const { JobOpeningsApi } = await import('./job-openings')
-      
+
       // Get all user's accessible jobs
       const response = await JobOpeningsApi.getJobOpenings(userId)
-      
+
       // Filter to only include jobs that are in the view
-      const viewJobs = response.job_openings.filter(job => 
+      const viewJobs = response.job_openings.filter(job =>
         jobIds.includes(job.id)
       )
-      
+
       return viewJobs
     } catch (error) {
       console.error('Failed to fetch jobs for view:', error)

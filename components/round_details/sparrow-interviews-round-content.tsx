@@ -141,7 +141,7 @@ export function SparrowInterviewsRoundContent({
   const [showMetricsModal, setShowMetricsModal] = useState(false)
 
   // Multi-job data fetching function with parallel processing
-  const fetchMultiJobRoundData = async (roundType: string, roundName: string, abortSignal: AbortSignal) => {
+  const fetchMultiJobRoundData = async (roundType: string, roundName: string, abortSignal: AbortSignal, forceRefresh: boolean = false) => {
     if (!isMultiJobMode || selectedJobs.length === 0) {
       return null
     }
@@ -172,7 +172,7 @@ export function SparrowInterviewsRoundContent({
           try {
             // Fetch both candidates and assessment mapping in parallel
             const [candidatesResponse, mappingResponse] = await Promise.all([
-              RoundCandidatesApi.getCandidatesByRoundTemplate(round.id, abortSignal),
+              RoundCandidatesApi.getCandidatesByRoundTemplate(round.id, abortSignal, forceRefresh),
               getSparrowAssessmentMapping(round.id, abortSignal).catch(error => {
                 if (error.name !== 'AbortError') {
                   console.warn(`Failed to fetch assessment mapping for round ${round.id}:`, error)
@@ -651,15 +651,133 @@ export function SparrowInterviewsRoundContent({
     }
   }
 
-  const handleRefresh = () => {
-    if (currentRound?.id) {
+  const handleRefresh = async () => {
+    if (!currentRound?.id) return
+
+    console.log('🔄 [REFRESH] Refreshing interview round data for round:', currentRound.id)
+
+    // Cancel any ongoing request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    
+    // Create new abort controller for this request
+    const abortController = new AbortController()
+    abortControllerRef.current = abortController
+
+    try {
+      // Clear cache to ensure fresh data
+      console.log('🔄 [REFRESH] Clearing cache before refresh')
+      RoundCandidatesApi.clearCache()
+      
+      // Clear previous data immediately to show loader
       setRoundData(null)
-      setError(null)
+      setLocalCandidates([])
+      setCandidateMappings({})
       setIsLoading(true)
+      setError(null)
       // Reset pagination
       setCurrentPage(1)
       setHasMoreCandidates(false)
       setTotalCandidatesCount(0)
+
+      console.log('🔄 [REFRESH] Calling API: getCandidatesByRoundTemplate with forceRefresh=true')
+      let roundResponse
+      let mappingResponse = null
+
+      if (isMultiJobMode) {
+        console.log(`🔄 [REFRESH] Multi-job mode - fetching data for ${selectedJobs.length} jobs with forceRefresh=true`)
+        const [multiJobRoundData, mapping] = await Promise.all([
+          fetchMultiJobRoundData(currentRound.round_type, currentRound.round_name, abortController.signal, true),
+          getSparrowAssessmentMapping(currentRound.id, abortController.signal).catch(error => {
+            if (error.name !== 'AbortError') {
+              console.error('Failed to fetch assessment mapping:', error)
+            }
+            return null
+          })
+        ])
+        
+        roundResponse = multiJobRoundData
+        mappingResponse = mapping
+      } else {
+        console.log(`🔄 [REFRESH] Single-job mode - fetching data for round template: ${currentRound.id}`)
+        const [singleRoundResponse, singleMappingResponse] = await Promise.all([
+          RoundCandidatesApi.getCandidatesByRoundTemplate(currentRound.id, abortController.signal, true),
+          getSparrowAssessmentMapping(currentRound.id, abortController.signal).catch(error => {
+            if (error.name !== 'AbortError') {
+              console.error('Failed to fetch assessment mapping:', error)
+            }
+            return null
+          })
+        ])
+        
+        roundResponse = singleRoundResponse
+        mappingResponse = singleMappingResponse
+      }
+      
+      // Check if request was aborted before updating state
+      if (abortController.signal.aborted) {
+        return
+      }
+
+      console.log('✅ [REFRESH] Data refreshed successfully, candidates count:', roundResponse?.candidates?.length || 0)
+
+      // Only set round data if we have a valid response
+      if (roundResponse) {
+        setRoundData(roundResponse)
+        setLocalCandidates(roundResponse.candidates || [])
+        
+        // Update pagination states
+        if ('pagination' in roundResponse && roundResponse.pagination) {
+          setHasMoreCandidates(roundResponse.pagination.has_next)
+          setCurrentPage(roundResponse.pagination.current_page)
+          setTotalCandidatesCount(roundResponse.pagination.total_count)
+        } else {
+          setHasMoreCandidates(false)
+          setCurrentPage(1)
+          setTotalCandidatesCount(
+            ('candidate_count' in roundResponse ? roundResponse.candidate_count : undefined) || 
+            roundResponse.candidates?.length || 
+            0
+          )
+        }
+      }
+
+      // Handle assessment mapping response
+      if (mappingResponse) {
+        setAssessmentMapping(mappingResponse)
+
+        // Auto-populate settings if mapping exists
+        if (mappingResponse.mappings && mappingResponse.mappings.length > 0) {
+          const firstMapping = mappingResponse.mappings[0]
+          setPrimaryId(firstMapping.sparrow_assessment_id)
+          setSecondaryId(firstMapping.filter_column || 'surveysparrow')
+          setTempPrimaryId(firstMapping.sparrow_assessment_id)
+          setTempSecondaryId(firstMapping.filter_column || 'surveysparrow')
+        }
+      }
+
+      // Initialize status tracking
+      const initialOriginal: Record<string, RoundStatus> = {}
+      const initialCurrent: Record<string, RoundStatus> = {}
+      for (const candidate of roundResponse?.candidates || []) {
+        const status = (candidate.candidate_rounds?.[0]?.status || candidate.round_status || 'action_pending') as RoundStatus
+        initialOriginal[candidate.id] = status
+        initialCurrent[candidate.id] = status
+      }
+      setOriginalStatusById(initialOriginal)
+      setCurrentStatusById(initialCurrent)
+    } catch (err: any) {
+      // Don't show error for aborted requests
+      if (err.name !== 'AbortError') {
+        console.error('❌ [REFRESH] Failed to refresh round data:', err)
+        setError(err instanceof Error ? err.message : 'Failed to load round data')
+      }
+    } finally {
+      // Only set loading to false if request wasn't aborted
+      if (!abortController.signal.aborted) {
+        setIsLoading(false)
+      }
     }
   }
 

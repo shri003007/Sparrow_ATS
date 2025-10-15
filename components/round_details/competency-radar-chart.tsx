@@ -196,7 +196,7 @@ export function CompetencyRadarChart({
                 const textY = y + Math.sin(radians) * radius
                 
                 // Determine text anchor based on angle
-                let textAnchor = 'middle'
+                let textAnchor: "start" | "middle" | "end" = 'middle'
                 
                 // More precise angle-based text anchoring
                 if (angle > 45 && angle < 135) {
@@ -366,11 +366,13 @@ export function CompetencyRadarChart({
                   dot={(props: any) => {
                     // Custom dot component with click handler
                     const { cx, cy, payload } = props
+                    const dotKey = `${candidateId}-${payload?.competency || Math.random()}`
                     
                     return (
-                      <g>
+                      <g key={dotKey}>
                         {/* Main dot */}
                         <circle
+                          key={`${dotKey}-main`}
                           cx={cx}
                           cy={cy}
                           r={dotRadius}
@@ -384,6 +386,7 @@ export function CompetencyRadarChart({
                         />
                         {/* Invisible larger clickable area */}
                         <circle
+                          key={`${dotKey}-clickable`}
                           cx={cx}
                           cy={cy}
                           r={dotRadius + 4}

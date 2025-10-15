@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Settings, Plus, Users, Calendar, DollarSign, Clock, MapPin, Play, Loader2, Eye, Zap } from "lucide-react"
+import { Settings, Plus, Users, Calendar, DollarSign, Clock, MapPin, Play, Loader2, Eye, Zap, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { CSVImportFlow } from "@/components/candidates/csv-import-flow"
 import { ModernCandidatesTable } from "@/components/candidates/modern-candidates-table"
@@ -43,6 +43,7 @@ interface JobDetailsViewProps {
   onGoToRounds?: () => void
   onCandidateClick?: (candidate: CandidateDisplay) => void
   isLoadingJobs?: boolean
+  onDeleteJob?: () => void
 }
 
 
@@ -71,8 +72,9 @@ export function JobDetailsView({
   onAddCandidates, 
   onNavigationCheck, 
   onGoToRounds, 
-  onCandidateClick, 
-  isLoadingJobs = false 
+  onCandidateClick,
+  isLoadingJobs = false,
+  onDeleteJob
 }: JobDetailsViewProps) {
   const { apiUser } = useAuth()
   const { getEvaluationState, updateEvaluationState } = useBulkEvaluation()
@@ -1018,6 +1020,22 @@ export function JobDetailsView({
               </div>
             )}
             
+            {/* Refresh Button */}
+            <Button
+              variant="outline"
+              onClick={() => onRefreshCandidates(true)}
+              className="flex items-center gap-2"
+              disabled={isLoadingCandidates}
+              style={{
+                borderColor: "#E5E7EB",
+                color: "#374151",
+                fontFamily,
+              }}
+            >
+              <RefreshCw className={`w-4 h-4 ${isLoadingCandidates ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+            
             <Button
               variant="outline"
               onClick={() => setShowSettingsModal(true)}
@@ -1215,10 +1233,12 @@ export function JobDetailsView({
       isOpen={showSettingsModal}
       onClose={() => setShowSettingsModal(false)}
       jobTitle={job?.posting_title || 'Unknown Job'}
+      jobId={job?.id}
       hasRoundsStarted={job?.has_rounds_started || false}
       candidatesCount={candidates.length}
       bulkEvaluationState={jobBulkEvaluation}
       onBulkEvaluation={handleJobBulkEvaluation}
+      onDeleteJob={onDeleteJob}
     />
   </>
   )

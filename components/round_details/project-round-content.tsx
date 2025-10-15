@@ -207,15 +207,80 @@ export function ProjectRoundContent({
     }
   }
 
-  const handleRefresh = () => {
-    if (currentRound?.id) {
+  const handleRefresh = async () => {
+    if (!currentRound?.id) return
+    
+    console.log('🔄 [REFRESH] Refreshing project round data for round:', currentRound.id)
+    
+    // Cancel any ongoing request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    
+    // Create new abort controller for this request
+    const abortController = new AbortController()
+    abortControllerRef.current = abortController
+
+    try {
+      // Clear cache to ensure fresh data
+      console.log('🔄 [REFRESH] Clearing cache before refresh')
+      RoundCandidatesApi.clearCache()
+      
+      // Clear previous data immediately to show loader
       setRoundData(null)
-      setError(null)
+      setLocalCandidates([])
       setIsLoading(true)
+      setError(null)
       // Reset pagination
       setCurrentPage(1)
       setHasMoreCandidates(false)
       setTotalCandidatesCount(0)
+      
+      console.log('🔄 [REFRESH] Calling API: getCandidatesByRoundTemplate with forceRefresh=true')
+      const data = await RoundCandidatesApi.getCandidatesByRoundTemplate(currentRound.id, abortController.signal, true)
+      
+      // Check if request was aborted before updating state
+      if (abortController.signal.aborted) {
+        return
+      }
+      
+      console.log('✅ [REFRESH] Data refreshed successfully, candidates count:', data.candidates?.length || 0)
+      setRoundData(data)
+      setLocalCandidates(data.candidates || [])
+      
+      // Update pagination states
+      if (data.pagination) {
+        setHasMoreCandidates(data.pagination.has_next)
+        setCurrentPage(data.pagination.current_page)
+        setTotalCandidatesCount(data.pagination.total_count)
+      } else {
+        // Legacy response without pagination
+        setHasMoreCandidates(false)
+        setCurrentPage(1)
+        setTotalCandidatesCount(data.candidate_count || data.candidates?.length || 0)
+      }
+      
+      // Initialize status tracking
+      const initialOriginal: Record<string, RoundStatus> = {}
+      const initialCurrent: Record<string, RoundStatus> = {}
+      for (const candidate of data.candidates || []) {
+        const status = (candidate.candidate_rounds?.[0]?.status || candidate.round_status || 'action_pending') as RoundStatus
+        initialOriginal[candidate.id] = status
+        initialCurrent[candidate.id] = status
+      }
+      setOriginalStatusById(initialOriginal)
+      setCurrentStatusById(initialCurrent)
+    } catch (err: any) {
+      // Don't show error for aborted requests
+      if (err.name !== 'AbortError') {
+        console.error('❌ [REFRESH] Failed to refresh round data:', err)
+        setError(err instanceof Error ? err.message : 'Failed to load round data')
+      }
+    } finally {
+      // Only set loading to false if request wasn't aborted
+      if (!abortController.signal.aborted) {
+        setIsLoading(false)
+      }
     }
   }
 

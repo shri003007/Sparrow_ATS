@@ -34,8 +34,6 @@ export function JobViewSelectionPage({
   const [savedViews, setSavedViews] = useState<SavedView[]>([])
   const [loadingJobs, setLoadingJobs] = useState(true)
   const [loadingViews, setLoadingViews] = useState(true)
-  const [selectedType, setSelectedType] = useState<'job' | 'view' | null>(null)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
 
   const fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
 
@@ -100,26 +98,14 @@ export function JobViewSelectionPage({
   }, [apiUser?.id, apiUser?.role])
 
   const handleJobClick = (job: JobOpeningListItem) => {
-    setSelectedType('job')
-    setSelectedId(job.id)
     onJobSelect(job)
   }
 
   const handleViewClick = (view: SavedView) => {
-    setSelectedType('view')
-    setSelectedId(view.id)
     onViewSelect(view)
   }
 
   const handleSkip = () => {
-    // If nothing is selected, select the first available item
-    if (!selectedType) {
-      if (jobs.length > 0) {
-        onJobSelect(jobs[0])
-      } else if (savedViews.length > 0) {
-        onViewSelect(savedViews[0])
-      }
-    }
     onSkip()
   }
 
@@ -232,11 +218,7 @@ export function JobViewSelectionPage({
                       <button
                         key={job.id}
                         onClick={() => handleJobClick(job)}
-                        className={`w-full flex items-center justify-between p-4 rounded-lg transition-all hover:bg-gray-100 ${
-                          selectedType === 'job' && selectedId === job.id
-                            ? 'bg-orange-50 shadow-sm'
-                            : 'bg-gray-50'
-                        }`}
+                        className="w-full flex items-center justify-between p-4 rounded-lg transition-all bg-gray-50 hover:bg-gray-100"
                         style={{ fontFamily }}
                       >
                         <div className="flex-1 text-left">
@@ -247,9 +229,7 @@ export function JobViewSelectionPage({
                             {job.job_status.charAt(0).toUpperCase() + job.job_status.slice(1)} • {job.employment_type.replace('_', ' ')}
                           </div>
                         </div>
-                        <ChevronRight className={`w-5 h-5 flex-shrink-0 ml-3 ${
-                          selectedType === 'job' && selectedId === job.id ? 'text-orange-600' : 'text-gray-400'
-                        }`} />
+                        <ChevronRight className="w-5 h-5 flex-shrink-0 ml-3 text-gray-400" />
                       </button>
                     ))
                   )}
@@ -298,11 +278,7 @@ export function JobViewSelectionPage({
                       <button
                         key={view.id}
                         onClick={() => handleViewClick(view)}
-                        className={`w-full flex items-center justify-between p-4 rounded-lg transition-all hover:bg-gray-100 ${
-                          selectedType === 'view' && selectedId === view.id
-                            ? 'bg-orange-50 shadow-sm'
-                            : 'bg-gray-50'
-                        }`}
+                        className="w-full flex items-center justify-between p-4 rounded-lg transition-all bg-gray-50 hover:bg-gray-100"
                         style={{ fontFamily }}
                       >
                         <div className="flex-1 text-left">
@@ -313,9 +289,7 @@ export function JobViewSelectionPage({
                             {view.job_opening_ids?.length || 0} job{view.job_opening_ids?.length !== 1 ? 's' : ''}
                           </div>
                         </div>
-                        <ChevronRight className={`w-5 h-5 flex-shrink-0 ml-3 ${
-                          selectedType === 'view' && selectedId === view.id ? 'text-orange-600' : 'text-gray-400'
-                        }`} />
+                        <ChevronRight className="w-5 h-5 flex-shrink-0 ml-3 text-gray-400" />
                       </button>
                     ))
                   )}
@@ -334,7 +308,7 @@ export function JobViewSelectionPage({
           className="flex items-center gap-2 px-6 py-3 text-base text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           style={{ fontFamily }}
         >
-          {selectedType ? 'Continue' : 'Skip'}
+          Skip
           <ChevronRight className="w-4 h-4" />
         </button>
       </div>
