@@ -5,6 +5,21 @@ import { AudioPlayer } from '@/components/ui/audioPlayer'
 import { ImageCarousel } from './image-carousel'
 import { Play } from 'lucide-react'
 
+interface Question {
+  question_id: string
+  question_text: string
+  question_order: number
+  original_id: string
+}
+
+interface Interaction {
+  question: string
+  question_id: string
+  start_time: string
+  end_time: string
+  duration_seconds: number
+}
+
 interface AudioVisualSectionProps {
   audioUrl?: string
   images?: Array<{
@@ -13,9 +28,12 @@ interface AudioVisualSectionProps {
     size: number
     key: string
   }>
+  recordingDuration?: number  // Duration in seconds from API
+  questions?: Question[]
+  interactions?: Interaction[]
 }
 
-export function AudioVisualSection({ audioUrl, images }: AudioVisualSectionProps) {
+export function AudioVisualSection({ audioUrl, images, recordingDuration, questions, interactions }: AudioVisualSectionProps) {
   const [currentTime, setCurrentTime] = useState(0)
   const [seekTime, setSeekTime] = useState<number | undefined>(undefined)
 
@@ -51,6 +69,9 @@ export function AudioVisualSection({ audioUrl, images }: AudioVisualSectionProps
               onImageClick={handleImageClick}
               audioUrl={audioUrl}
               onAudioTimeUpdate={handleTimeUpdate}
+              recordingDuration={recordingDuration}
+              questions={questions}
+              interactions={interactions}
             />
           )}
           
@@ -72,6 +93,7 @@ export function AudioVisualSection({ audioUrl, images }: AudioVisualSectionProps
                 onTimeUpdate={handleTimeUpdate}
                 seekToTime={seekTime}
                 compact={false}
+                initialDuration={recordingDuration}
               />
             </div>
           )}

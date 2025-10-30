@@ -42,7 +42,7 @@ export interface SparrowAssessmentResponse {
           duration_seconds: number
         }>
         performance_metrics: {
-          recording_duration: number
+          recording_duration: number  // Duration in seconds
         }
       }
     }

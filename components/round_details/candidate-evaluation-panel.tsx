@@ -1154,6 +1154,9 @@ export function CandidateEvaluationPanel({
                     <AudioVisualSection 
                       audioUrl={sparrowAssessmentData?.data?.audio_url}
                       images={sparrowAssessmentData?.data?.images}
+                      recordingDuration={sparrowAssessmentData?.data?.logs?.logs?.performance_metrics?.recording_duration}
+                      questions={sparrowAssessmentData?.data?.questions?.questions}
+                      interactions={sparrowAssessmentData?.data?.logs?.logs?.interactions}
                     />
                   )}
 

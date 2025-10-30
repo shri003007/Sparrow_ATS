@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect, useRef } from 'react'
-import { ChevronLeft, ChevronRight, Camera } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Camera, SkipBack, SkipForward } from 'lucide-react'
 import { AudioPlayer } from '@/components/ui/audioPlayer'
 
 interface CarouselImage {
@@ -12,12 +12,30 @@ interface CarouselImage {
   timestamp?: number
 }
 
+interface Question {
+  question_id: string
+  question_text: string
+  question_order: number
+  original_id: string
+}
+
+interface Interaction {
+  question: string
+  question_id: string
+  start_time: string
+  end_time: string
+  duration_seconds: number
+}
+
 interface ImageCarouselProps {
   images: CarouselImage[]
   currentAudioTime: number
   onImageClick?: (timestamp: number) => void
   audioUrl?: string
   onAudioTimeUpdate?: (time: number) => void
+  recordingDuration?: number  // Duration in seconds from API
+  questions?: Question[]
+  interactions?: Interaction[]
 }
 
 // Extract timestamp from filename like "image_1755870012881_nrir2295x.jpg"
@@ -31,12 +49,45 @@ const calculateDisplayTime = (timestamp: number, startTime: number): number => {
   return Math.floor((timestamp - startTime) / 1000) // Convert to seconds
 }
 
-export function ImageCarousel({ images, currentAudioTime, onImageClick, audioUrl, onAudioTimeUpdate }: ImageCarouselProps) {
+export function ImageCarousel({ images, currentAudioTime, onImageClick, audioUrl, onAudioTimeUpdate, recordingDuration, questions, interactions }: ImageCarouselProps) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [processedImages, setProcessedImages] = useState<CarouselImage[]>([])
   const [preloadedImages, setPreloadedImages] = useState<Set<string>>(new Set())
   const [seekTime, setSeekTime] = useState<number | undefined>(undefined)
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const imageRefs = useRef<Map<string, HTMLImageElement>>(new Map())
+  const isManualNavigationRef = useRef(false) // Track if user manually navigated
+  
+  // Parse timestamps from ISO format to seconds from session start
+  const parseTimestampToSeconds = (isoTimestamp: string, sessionStart: string): number => {
+    const targetTime = new Date(isoTimestamp).getTime()
+    const startTime = new Date(sessionStart).getTime()
+    return Math.floor((targetTime - startTime) / 1000)
+  }
+  
+  // Get session start time from first interaction
+  const sessionStart = interactions?.[0]?.start_time || new Date().toISOString()
+  
+  // Process interactions to get question timestamps
+  const questionTimestamps = interactions?.map(interaction => ({
+    questionId: interaction.question_id,
+    question: interaction.question,
+    startTimeSeconds: parseTimestampToSeconds(interaction.start_time, sessionStart),
+    endTimeSeconds: parseTimestampToSeconds(interaction.end_time, sessionStart),
+    duration: interaction.duration_seconds
+  })) || []
+  
+  // Debug: Log question timestamps on mount
+  useEffect(() => {
+    if (questionTimestamps.length > 0) {
+      console.log('📋 Question timestamps loaded:', questionTimestamps.map((qt, idx) => ({
+        index: idx,
+        question: qt.question.substring(0, 50) + '...',
+        start: qt.startTimeSeconds,
+        end: qt.endTimeSeconds
+      })))
+    }
+  }, [questionTimestamps.length])
 
   // Process images to extract timestamps and sort them
   useEffect(() => {
@@ -120,6 +171,35 @@ export function ImageCarousel({ images, currentAudioTime, onImageClick, audioUrl
 
     setCurrentImageIndex(targetIndex)
   }, [currentAudioTime, processedImages])
+  
+  // Update current question based on audio time (auto-tracking)
+  useEffect(() => {
+    if (questionTimestamps.length === 0) return
+    
+    // If manual navigation happened, wait a bit before resuming auto-tracking
+    if (isManualNavigationRef.current) {
+      // Reset the flag after a short delay to allow seek to complete
+      const timer = setTimeout(() => {
+        isManualNavigationRef.current = false
+      }, 500)
+      return () => clearTimeout(timer)
+    }
+    
+    // Find which question the current audio time falls into
+    let newQuestionIndex = 0
+    for (let i = questionTimestamps.length - 1; i >= 0; i--) {
+      if (currentAudioTime >= questionTimestamps[i].startTimeSeconds) {
+        newQuestionIndex = i
+        break
+      }
+    }
+    
+    // Only update if it's different to avoid unnecessary re-renders
+    if (newQuestionIndex !== currentQuestionIndex) {
+      console.log('📍 Auto-tracking: Updating question index from', currentQuestionIndex, 'to', newQuestionIndex, 'at time', currentAudioTime)
+      setCurrentQuestionIndex(newQuestionIndex)
+    }
+  }, [currentAudioTime, questionTimestamps, currentQuestionIndex])
 
   if (!processedImages || processedImages.length === 0) {
     return null
@@ -158,12 +238,98 @@ export function ImageCarousel({ images, currentAudioTime, onImageClick, audioUrl
   const handleAudioTimeUpdate = (time: number) => {
     onAudioTimeUpdate?.(time)
   }
+  
+  const handlePreviousQuestion = () => {
+    console.log('⏮️ Previous button clicked. Current index:', currentQuestionIndex, 'Total questions:', questionTimestamps.length)
+    
+    if (questionTimestamps.length === 0) {
+      console.warn('No question timestamps available')
+      return
+    }
+    
+    if (currentQuestionIndex <= 0) {
+      console.warn('Already at first question')
+      return
+    }
+    
+    const newIndex = currentQuestionIndex - 1
+    const prevQuestion = questionTimestamps[newIndex]
+    
+    if (!prevQuestion) {
+      console.error('Previous question not found at index:', newIndex)
+      return
+    }
+    
+    const seekToTime = prevQuestion.startTimeSeconds
+    console.log('⏮️ Seeking to previous question:', {
+      index: newIndex,
+      question: prevQuestion.question.substring(0, 50) + '...',
+      seekTime: seekToTime
+    })
+    
+    // Set manual navigation flag to prevent auto-tracking from overriding
+    isManualNavigationRef.current = true
+    
+    // Immediately update the question index
+    setCurrentQuestionIndex(newIndex)
+    
+    // Seek the audio
+    setSeekTime(seekToTime)
+    onImageClick?.(seekToTime)
+    setTimeout(() => setSeekTime(undefined), 100)
+  }
+  
+  const handleNextQuestion = () => {
+    console.log('⏭️ Next button clicked. Current index:', currentQuestionIndex, 'Total questions:', questionTimestamps.length)
+    
+    if (questionTimestamps.length === 0) {
+      console.warn('No question timestamps available')
+      return
+    }
+    
+    if (currentQuestionIndex >= questionTimestamps.length - 1) {
+      console.warn('Already at last question')
+      return
+    }
+    
+    const newIndex = currentQuestionIndex + 1
+    const nextQuestion = questionTimestamps[newIndex]
+    
+    if (!nextQuestion) {
+      console.error('Next question not found at index:', newIndex)
+      return
+    }
+    
+    const seekToTime = nextQuestion.startTimeSeconds
+    console.log('⏭️ Seeking to next question:', {
+      index: newIndex,
+      question: nextQuestion.question.substring(0, 50) + '...',
+      seekTime: seekToTime
+    })
+    
+    // Set manual navigation flag to prevent auto-tracking from overriding
+    isManualNavigationRef.current = true
+    
+    // Immediately update the question index
+    setCurrentQuestionIndex(newIndex)
+    
+    // Seek the audio
+    setSeekTime(seekToTime)
+    onImageClick?.(seekToTime)
+    setTimeout(() => setSeekTime(undefined), 100)
+  }
 
   const formatTimestamp = (timestamp: number) => {
     const displayTime = calculateDisplayTime(timestamp, startTime)
     const minutes = Math.floor(displayTime / 60)
     const seconds = displayTime % 60
     return `${minutes}:${seconds.toString().padStart(2, '0')}`
+  }
+  
+  const formatSecondsToTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
   return (
@@ -200,13 +366,52 @@ export function ImageCarousel({ images, currentAudioTime, onImageClick, audioUrl
           
           {/* Audio Controls Overlay */}
           {audioUrl && (
-            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-4 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+              {/* Question Info and Navigation */}
+              {questionTimestamps.length > 0 && (
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs text-white/70 mb-1">
+                      Question {currentQuestionIndex + 1} of {questionTimestamps.length}
+                    </div>
+                    <div className="text-sm text-white font-medium truncate">
+                      {questionTimestamps[currentQuestionIndex]?.question || 'No question'}
+                    </div>
+                    <div className="text-xs text-white/60 mt-1">
+                      {formatSecondsToTime(questionTimestamps[currentQuestionIndex]?.startTimeSeconds || 0)} - {formatSecondsToTime(questionTimestamps[currentQuestionIndex]?.endTimeSeconds || 0)}
+                    </div>
+                  </div>
+                  
+                  {/* Question Navigation Buttons */}
+                  <div className="flex gap-2 flex-shrink-0">
+                    <button
+                      onClick={handlePreviousQuestion}
+                      disabled={currentQuestionIndex === 0}
+                      className="w-8 h-8 rounded-lg flex items-center justify-center bg-white/20 hover:bg-white/30 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                      title="Previous Question"
+                    >
+                      <SkipBack className="w-4 h-4 text-white" />
+                    </button>
+                    <button
+                      onClick={handleNextQuestion}
+                      disabled={currentQuestionIndex === questionTimestamps.length - 1}
+                      className="w-8 h-8 rounded-lg flex items-center justify-center bg-white/20 hover:bg-white/30 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                      title="Next Question"
+                    >
+                      <SkipForward className="w-4 h-4 text-white" />
+                    </button>
+                  </div>
+                </div>
+              )}
+              
+              {/* Audio Player */}
               <AudioPlayer 
                 audioUrl={audioUrl}
                 onError={(error) => console.error('Audio playback error:', error)}
                 onTimeUpdate={handleAudioTimeUpdate}
                 seekToTime={seekTime}
                 compact={true}
+                initialDuration={recordingDuration}
               />
             </div>
           )}
