@@ -277,8 +277,19 @@ export function ScreeningRoundContent({
 
     setIsProgressingCandidates(true)
     try {
-      // 1) Persist ALL statuses for CURRENT round (not just changed)
-      const currentRoundUpdates = (roundData.candidates || []).map(c => ({
+      // 1) Fetch ALL candidates across all pages for the current round
+      const allCandidatesResponse = await RoundCandidatesApi.getAllCandidatesByRoundTemplate(
+        currentRound.id,
+        undefined,
+        (currentPage, totalPages, candidates) => {
+          console.log(`Fetching candidates: page ${currentPage}/${totalPages}, total: ${candidates.length}`)
+        }
+      )
+
+      const allCandidates = allCandidatesResponse.candidates
+
+      // 2) Persist ALL statuses for CURRENT round (not just changed)
+      const currentRoundUpdates = allCandidates.map(c => ({
         candidate_id: c.id,
         status: (currentStatusById[c.id] || 'action_pending') as RoundStatus,
       }))
@@ -288,8 +299,8 @@ export function ScreeningRoundContent({
         candidate_updates: currentRoundUpdates,
       })
 
-      // 2) Build full candidate list for the NEXT round using current statuses
-      const allCandidateIds = (roundData.candidates || []).map(c => c.id)
+      // 3) Build full candidate list for the NEXT round using current statuses
+      const allCandidateIds = allCandidates.map(c => c.id)
 
       // Find next round
       const nextRound = rounds[currentStepIndex + 1]
@@ -298,7 +309,7 @@ export function ScreeningRoundContent({
         return
       }
 
-      // 3) Progress candidates to next round by updating per-round status for the NEXT round template
+      // 4) Progress candidates to next round by updating per-round status for the NEXT round template
       // Use the exact same status as currently set in this (previous) round, for ALL candidates
       const candidate_updates = allCandidateIds.map(candidate_id => ({
         candidate_id,

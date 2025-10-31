@@ -880,17 +880,52 @@ export function SparrowInterviewsRoundContent({
       return
     }
 
-    const candidatesWithoutEvaluation = getCandidatesWithoutEvaluations()
-    if (candidatesWithoutEvaluation.length === 0) {
-      updateBulkEvaluationState({ error: 'All candidates already have evaluations' })
-      return
-    }
-
+    // Set initial loading state
     updateBulkEvaluationState({
       isEvaluating: true,
       error: null,
-      progress: { completed: 0, total: candidatesWithoutEvaluation.length }
+      progress: { completed: 0, total: 0 }
     })
+
+    // Fetch ALL candidates across all pages for the current round
+    let candidatesWithoutEvaluation: RoundCandidate[]
+    try {
+      const allCandidatesResponse = await RoundCandidatesApi.getAllCandidatesByRoundTemplate(
+        currentRound!.id,
+        undefined,
+        (currentPage, totalPages, candidates) => {
+          console.log(`Fetching candidates for bulk evaluation: page ${currentPage}/${totalPages}, total: ${candidates.length}`)
+        }
+      )
+
+      const allCandidates = allCandidatesResponse.candidates
+
+      // Filter candidates without evaluations from ALL candidates
+      candidatesWithoutEvaluation = allCandidates.filter(
+        candidate => !candidate.candidate_rounds?.[0]?.is_evaluation
+      )
+
+      if (candidatesWithoutEvaluation.length === 0) {
+        updateBulkEvaluationState({ 
+          isEvaluating: false,
+          error: 'All candidates already have evaluations' 
+        })
+        return
+      }
+
+      updateBulkEvaluationState({
+        isEvaluating: true,
+        error: null,
+        progress: { completed: 0, total: candidatesWithoutEvaluation.length }
+      })
+    } catch (error) {
+      console.error('Error fetching candidates for bulk evaluation:', error)
+      updateBulkEvaluationState({ 
+        isEvaluating: false,
+        error: 'Failed to fetch candidates. Please try again.' 
+      })
+      return
+    }
 
     // Show initial toast notification with round information
     const roundDisplayName = currentRound?.round_name || config.defaultName
@@ -1156,8 +1191,19 @@ export function SparrowInterviewsRoundContent({
 
     setIsProgressingCandidates(true)
     try {
-      // 1) Persist ALL statuses for CURRENT round (not just changed)
-      const currentRoundUpdates = (roundData.candidates || []).map(c => ({
+      // 1) Fetch ALL candidates across all pages for the current round
+      const allCandidatesResponse = await RoundCandidatesApi.getAllCandidatesByRoundTemplate(
+        currentRound.id,
+        undefined,
+        (currentPage, totalPages, candidates) => {
+          console.log(`Fetching candidates: page ${currentPage}/${totalPages}, total: ${candidates.length}`)
+        }
+      )
+
+      const allCandidates = allCandidatesResponse.candidates
+
+      // 2) Persist ALL statuses for CURRENT round (not just changed)
+      const currentRoundUpdates = allCandidates.map(c => ({
         candidate_id: c.id,
         status: (currentStatusById[c.id] || 'action_pending') as RoundStatus,
       }))
@@ -1166,8 +1212,8 @@ export function SparrowInterviewsRoundContent({
         candidate_updates: currentRoundUpdates,
       })
 
-      // 2) Build full candidate list for the NEXT round using current statuses
-      const allCandidateIds = (roundData.candidates || []).map(c => c.id)
+      // 3) Build full candidate list for the NEXT round using current statuses
+      const allCandidateIds = allCandidates.map(c => c.id)
 
       const nextRound = rounds[currentStepIndex + 1]
       if (!nextRound) {
@@ -1175,7 +1221,7 @@ export function SparrowInterviewsRoundContent({
         return
       }
 
-      // 3) Progress candidates to next round using the same status from the current round, for ALL candidates
+      // 4) Progress candidates to next round using the same status from the current round, for ALL candidates
       const candidate_updates = allCandidateIds.map(candidate_id => ({
         candidate_id,
         status: (currentStatusById[candidate_id] || 'action_pending') as 'selected' | 'rejected' | 'action_pending'
