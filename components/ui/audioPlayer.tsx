@@ -7,7 +7,7 @@ interface AudioPlayerProps {
   compact?: boolean;
   onTimeUpdate?: (currentTime: number) => void;
   seekToTime?: number;
-  initialDuration?: number;  // Duration in seconds from API (for WebM files with Infinity duration)
+  initialDuration?: number; 
 }
 
 const formatTime = (seconds: number): string => {
@@ -59,19 +59,19 @@ export const AudioPlayer = ({ audioUrl, onError, compact = false, onTimeUpdate, 
         setIsAudioReady(true);
         return;
       }
-
+      
       console.log('🔄 Fetching audio file using presigned URL...', { audioUrl });
       setIsLoading(true);
       setIsAudioReady(false);
 
       try {
         // Step 1: Direct HTTP GET to fetch the entire audio file as Blob
-        const response = await fetch(audioUrl, {
-          method: 'GET',
+          const response = await fetch(audioUrl, {
+            method: 'GET',
           // No special headers needed for presigned URLs
-        });
-        
-        if (!response.ok) {
+          });
+          
+          if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status} ${response.statusText}`);
         }
         
@@ -106,7 +106,7 @@ export const AudioPlayer = ({ audioUrl, onError, compact = false, onTimeUpdate, 
       } catch (error) {
         console.error('Failed to download audio:', error);
         if (isMounted) {
-          setIsLoading(false);
+        setIsLoading(false);
           onError?.(error instanceof Error ? error : new Error('Failed to download audio'));
         }
       }
@@ -413,28 +413,49 @@ export const AudioPlayer = ({ audioUrl, onError, compact = false, onTimeUpdate, 
     const syncInterval = setInterval(() => {
       const actuallyPlaying = !audio.paused;
       if (actuallyPlaying !== isPlaying) {
+        console.log('🔄 Syncing play state:', { actuallyPlaying, wasShowing: isPlaying });
         setIsPlaying(actuallyPlaying);
+      }
+      
+      // Also update current time to keep seeker moving
+      const time = audio.currentTime || 0;
+      if (actuallyPlaying && time !== currentTime) {
+        setCurrentTime(time);
+        onTimeUpdate?.(time);
       }
     }, 100); // Check every 100ms
 
     return () => clearInterval(syncInterval);
-  }, [audioKey, isPlaying]);
+  }, [audioKey, isPlaying, currentTime, onTimeUpdate]);
 
   const handlePlayPause = async () => {
     const audio = audioRefs.current[audioKey] || audioRef.current;
 
+    console.log('🎮 Play/Pause button clicked', {
+      hasAudio: !!audio,
+      hasDownloadedUrl: !!downloadedUrl,
+      isAudioReady,
+      audioPaused: audio?.paused,
+      currentIsPlaying: isPlaying
+    });
+
     if (!audio || !downloadedUrl || !isAudioReady) {
+      console.warn('⚠️ Cannot play - audio not ready');
       return;
     }
 
     // Check actual audio state instead of React state
     if (!audio.paused) {
+      console.log('⏸️ Pausing audio');
       audio.pause();
-    } else {
+      setIsPlaying(false);
+      } else {
+      console.log('▶️ Playing audio');
       try {
         audio.volume = 1.0;
         audio.muted = false;
         await audio.play();
+        setIsPlaying(true);
       } catch (error) {
         console.error('❌ Error playing audio:', error);
         onError?.(error instanceof Error ? error : new Error('Failed to play audio'));
@@ -491,7 +512,7 @@ export const AudioPlayer = ({ audioUrl, onError, compact = false, onTimeUpdate, 
         <div
           ref={progressBarRef}
           onClick={handleProgressBarClick}
-          className="w-36 h-1 bg-gray-200 rounded-full cursor-pointer relative transition-all duration-200 hover:h-1.5 group"
+          className="flex-1 h-2 bg-gray-200 rounded-full cursor-pointer relative transition-all duration-200 hover:h-2.5 group"
         >
           <div
             className="progress-bar absolute left-0 top-1/2 transform -translate-y-1/2 h-full rounded-full transition-all duration-200 group-hover:bg-teal-600"
@@ -507,9 +528,9 @@ export const AudioPlayer = ({ audioUrl, onError, compact = false, onTimeUpdate, 
         </span>
       </div>
 
-      <audio
-        ref={audioRef}
-      />
+        <audio
+          ref={audioRef}
+        />
     </div>
   );
 }; 
