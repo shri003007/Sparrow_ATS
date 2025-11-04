@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import type { JobOpeningListItem } from "@/lib/job-types"
@@ -28,6 +28,26 @@ export function RoundDetailsView({ job, onBackToCandidates }: RoundDetailsViewPr
   
   // Constants for localStorage keys
   const CURRENT_ROUND_INDEX_KEY = 'ats_current_round_index'
+  
+  // Cache for round templates - prevents reloading when navigating back
+  const roundTemplatesCacheRef = useRef<Record<string, {
+    rounds: JobRoundTemplate[]
+    currentRound: JobRoundTemplate | null
+    currentStepIndex: number
+  }>>({})
+  
+  // Track the current job ID to detect job changes
+  const currentJobIdRef = useRef<string | null>(null)
+  
+  // Clear cache when switching to a different job
+  useEffect(() => {
+    if (job?.id && currentJobIdRef.current && currentJobIdRef.current !== job.id) {
+      console.log(`🔄 Job changed from ${currentJobIdRef.current} to ${job.id}, clearing round templates cache`)
+      // Clear cache for ALL jobs when switching (to avoid stale data)
+      roundTemplatesCacheRef.current = {}
+    }
+    currentJobIdRef.current = job?.id || null
+  }, [job?.id])
 
   // Fetch round templates when component mounts or job changes
   useEffect(() => {
@@ -36,12 +56,23 @@ export function RoundDetailsView({ job, onBackToCandidates }: RoundDetailsViewPr
     const fetchRoundTemplates = async () => {
       if (!job?.id) return
 
+      // Check if we have cached round templates for this job
+      const cachedData = roundTemplatesCacheRef.current[job.id]
+      if (cachedData) {
+        console.log(`📦 Using cached round templates for job ${job.id}`)
+        setRounds(cachedData.rounds)
+        setCurrentRound(cachedData.currentRound)
+        setCurrentStepIndex(cachedData.currentStepIndex)
+        setIsLoadingRounds(false)
+        return
+      }
+
       setIsLoadingRounds(true)
       setRoundsError(null)
 
       try {
-        // Force refresh to get latest data (bypass cache)
-        const response = await JobRoundTemplatesApi.getJobRoundTemplates(job.id, true)
+        // Use cache instead of force refresh
+        const response = await JobRoundTemplatesApi.getJobRoundTemplates(job.id, false)
         
         // Check if request was cancelled
         if (abortController.signal.aborted) {
@@ -86,6 +117,16 @@ export function RoundDetailsView({ job, onBackToCandidates }: RoundDetailsViewPr
         }
         
         setCurrentStepIndex(Math.max(0, initialStepIndex))
+        
+        // Cache the round templates data
+        const finalRound = useSavedIndex ? sortedRounds[initialStepIndex] : (sortedRounds.find(r => r.id === currentRound?.id) || sortedRounds[initialStepIndex] || sortedRounds[0])
+        roundTemplatesCacheRef.current[job.id] = {
+          rounds: sortedRounds,
+          currentRound: finalRound || null,
+          currentStepIndex: Math.max(0, initialStepIndex)
+        }
+        
+        console.log(`✅ Cached round templates for job ${job.id}`)
       } catch (error) {
         // Don't show errors for cancelled requests
         if (abortController.signal.aborted) {
@@ -126,12 +167,22 @@ export function RoundDetailsView({ job, onBackToCandidates }: RoundDetailsViewPr
     }
   }, [job?.id])
 
-  // Update current round when step index changes
+  // Update current round when step index changes and update cache
   useEffect(() => {
     if (rounds.length > 0 && currentStepIndex >= 0 && currentStepIndex < rounds.length) {
-      setCurrentRound(rounds[currentStepIndex])
+      const newCurrentRound = rounds[currentStepIndex]
+      setCurrentRound(newCurrentRound)
+      
+      // Update the cache with the new current round and step index
+      if (job?.id && roundTemplatesCacheRef.current[job.id]) {
+        roundTemplatesCacheRef.current[job.id] = {
+          ...roundTemplatesCacheRef.current[job.id],
+          currentRound: newCurrentRound,
+          currentStepIndex: currentStepIndex
+        }
+      }
     }
-  }, [currentStepIndex, rounds])
+  }, [currentStepIndex, rounds, job?.id])
 
   // Save current round index to localStorage whenever it changes
   useEffect(() => {

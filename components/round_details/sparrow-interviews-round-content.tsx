@@ -19,6 +19,27 @@ type RoundStatus = 'selected' | 'rejected' | 'action_pending'
 type RoundType = 'INTERVIEW' | 'RAPID_FIRE' | 'GAMES_ARENA' | 'TALK_ON_A_TOPIC' | 'RAPID_FIRE_WITH_GROUNDING'
 type SalesRoundType = 'RAPID_FIRE' | 'GAMES_ARENA' | 'TALK_ON_A_TOPIC' | 'RAPID_FIRE_WITH_GROUNDING'
 
+// Module-level cache that persists across component mount/unmount cycles
+const sparrowInterviewsRoundCache: Record<string, {
+  roundData: RoundCandidateResponse | null
+  localCandidates: RoundCandidate[]
+  originalStatus: Record<string, RoundStatus>
+  currentStatus: Record<string, RoundStatus>
+  hasMoreCandidates: boolean
+  currentPage: number
+  totalCandidatesCount: number
+  fetchTime: number | null
+  assessmentMapping: SparrowAssessmentMappingResponse | null
+  allAssessmentMappings: Record<string, SparrowAssessmentMappingResponse>
+  candidateMappings: Record<string, { primaryId: string; secondaryId: string; jobRoundTemplateId: string }>
+  pageCache: Record<number, {
+    candidates: RoundCandidate[]
+    originalStatus: Record<string, RoundStatus>
+    currentStatus: Record<string, RoundStatus>
+    pagination: any
+  }>
+}> = {}
+
 interface SparrowInterviewsRoundContentProps {
   currentRound: JobRoundTemplate | null
   rounds: JobRoundTemplate[]
@@ -98,6 +119,18 @@ export function SparrowInterviewsRoundContent({
   const [hasMoreCandidates, setHasMoreCandidates] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [totalCandidatesCount, setTotalCandidatesCount] = useState(0)
+  const [fetchTime, setFetchTime] = useState<number | null>(null)
+  
+  // Cache for storing fetched pages
+  const pageCacheRef = useRef<Record<number, {
+    candidates: RoundCandidate[]
+    originalStatus: Record<string, RoundStatus>
+    currentStatus: Record<string, RoundStatus>
+    pagination: any
+  }>>({})
+  
+  // Use module-level cache instead of component-level ref to persist across unmounts
+  // (fullPageCacheRef is replaced by sparrowInterviewsRoundCache module variable)
   
   // Re-evaluation states for all candidates
   const [candidateReEvaluationStates, setCandidateReEvaluationStates] = useState<Record<string, {
@@ -418,6 +451,20 @@ export function SparrowInterviewsRoundContent({
     return filteredJobIdsArray ? filteredJobIdsArray.join(',') : ''
   }, [filteredJobIdsArray])
 
+  // Clear caches intelligently when round changes
+  useEffect(() => {
+    if (currentRound?.id) {
+      const currentConfig = `${currentRound.id}-${isMultiJobMode}-${filteredJobIdsString}`
+      const cachedFullPage = sparrowInterviewsRoundCache[currentConfig]
+      if (!cachedFullPage) {
+        // New round, clear page cache
+        pageCacheRef.current = {}
+        setFetchTime(null)
+      }
+      // If cache exists, we'll restore pageCache from it
+    }
+  }, [currentRound?.id, isMultiJobMode, filteredJobIdsString])
+
   // Fetch round candidates data when current round changes
   useEffect(() => {
     const fetchRoundData = async () => {
@@ -425,11 +472,34 @@ export function SparrowInterviewsRoundContent({
       
       console.log(`🎯 [COMPONENT] SparrowInterviewsRoundContent - Starting data fetch for round: ${currentRound.round_name} (${currentRound.id}), isMultiJobMode: ${isMultiJobMode}`)
       
+      // Check if we have cached data for this round configuration (module-level cache)
+      const currentConfig = `${currentRound.id}-${isMultiJobMode}-${filteredJobIdsString}`
+      const cachedFullPage = sparrowInterviewsRoundCache[currentConfig]
+      if (cachedFullPage) {
+        console.log(`📦 Using module-level cache for round config ${currentConfig}`)
+        setRoundData(cachedFullPage.roundData)
+        setLocalCandidates(cachedFullPage.localCandidates)
+        setOriginalStatusById(cachedFullPage.originalStatus)
+        setCurrentStatusById(cachedFullPage.currentStatus)
+        setHasMoreCandidates(cachedFullPage.hasMoreCandidates)
+        setCurrentPage(cachedFullPage.currentPage)
+        setTotalCandidatesCount(cachedFullPage.totalCandidatesCount)
+        setFetchTime(cachedFullPage.fetchTime)
+        setAssessmentMapping(cachedFullPage.assessmentMapping)
+        setAllAssessmentMappings(cachedFullPage.allAssessmentMappings)
+        setCandidateMappings(cachedFullPage.candidateMappings)
+        setPendingChanges({})
+        // Restore page cache as well
+        pageCacheRef.current = cachedFullPage.pageCache
+        console.log(`📦 Restored ${Object.keys(cachedFullPage.pageCache).length} cached pages`)
+        setIsLoading(false)
+        return
+      }
+      
       // Generate unique request ID
       const currentRequestId = ++requestIdRef.current
       
       // Prevent duplicate calls for the same round and configuration
-      const currentConfig = `${currentRound.id}-${isMultiJobMode}-${filteredJobIdsString}`
       if (isLoadingRef.current && currentRoundIdRef.current === currentConfig) {
         console.log(`🟡 [DUPLICATE PREVENTION] Skipping duplicate fetch for round: ${currentRound.round_name}`)
         return
@@ -560,6 +630,26 @@ export function SparrowInterviewsRoundContent({
         setOriginalStatusById(initialOriginal)
         setCurrentStatusById(initialCurrent)
         setPendingChanges({})
+        
+        // Cache the full page data including page cache (module-level)
+        sparrowInterviewsRoundCache[currentConfig] = {
+          roundData: roundResponse,
+          localCandidates: roundResponse?.candidates || [],
+          originalStatus: initialOriginal,
+          currentStatus: initialCurrent,
+          hasMoreCandidates: (roundResponse && 'pagination' in roundResponse) ? (roundResponse.pagination?.has_next || false) : false,
+          currentPage: (roundResponse && 'pagination' in roundResponse) ? (roundResponse.pagination?.current_page || 1) : 1,
+          totalCandidatesCount: (roundResponse && 'pagination' in roundResponse && roundResponse.pagination) 
+            ? roundResponse.pagination.total_count 
+            : ((roundResponse && 'candidate_count' in roundResponse) ? (roundResponse as any).candidate_count : (roundResponse?.candidates?.length || 0)),
+          fetchTime: null,
+          assessmentMapping: mappingResponse,
+          allAssessmentMappings: allAssessmentMappings,
+          candidateMappings: candidateMappings,
+          pageCache: { ...pageCacheRef.current }
+        }
+        
+        console.log(`✅ Cached full page data for round config ${currentConfig}`)
       } catch (error: any) {
         // Don't show error for aborted requests (happens during navigation)
         if (error.name !== 'AbortError') {
@@ -598,52 +688,96 @@ export function SparrowInterviewsRoundContent({
     }
   }, [currentRound?.id, filteredJobIdsString, isMultiJobMode, roundType, selectedJobs.length])
 
-  // Function to load more candidates (next page)
-  const handleLoadMoreCandidates = async () => {
-    if (!currentRound?.id || isLoadingMoreCandidates || !hasMoreCandidates || isMultiJobMode) {
+  // Function to handle page navigation
+  const handlePageChange = async (newPage: number) => {
+    if (!currentRound?.id || isLoadingMoreCandidates || isMultiJobMode) {
+      return
+    }
+
+    // Check if page is already cached
+    const cachedPage = pageCacheRef.current[newPage]
+    if (cachedPage) {
+      console.log(`📦 Using cached data for page ${newPage}`)
+      setLocalCandidates(cachedPage.candidates)
+      setOriginalStatusById(cachedPage.originalStatus)
+      setCurrentStatusById(cachedPage.currentStatus)
+      setHasMoreCandidates(cachedPage.pagination.has_next)
+      setCurrentPage(cachedPage.pagination.current_page)
+      setTotalCandidatesCount(cachedPage.pagination.total_count)
+      setPendingChanges({})
+      setFetchTime(0) // Instant from cache
       return
     }
 
     setIsLoadingMoreCandidates(true)
+    const startTime = performance.now()
     
     try {
-      const nextPage = currentPage + 1
-      const nextPageResponse = await RoundCandidatesApi.getCandidatesByRoundTemplate(
+      const pageResponse = await RoundCandidatesApi.getCandidatesByRoundTemplate(
         currentRound.id,
-        undefined, // no abort signal for load more
+        undefined, // no abort signal
         false, // don't force refresh
-        nextPage,
+        newPage,
         100
       )
 
-      if (nextPageResponse) {
-        // Append new candidates to existing ones
-        setLocalCandidates(prevCandidates => [...prevCandidates, ...nextPageResponse.candidates])
+      if (pageResponse) {
+        const endTime = performance.now()
+        const fetchTimeMs = Math.round(endTime - startTime)
+        setFetchTime(fetchTimeMs)
+        
+        // Replace candidates with new page data
+        setLocalCandidates(pageResponse.candidates || [])
         
         // Update pagination states
-        if (nextPageResponse.pagination) {
-          setHasMoreCandidates(nextPageResponse.pagination.has_next)
-          setCurrentPage(nextPageResponse.pagination.current_page)
+        if (pageResponse.pagination) {
+          setHasMoreCandidates(pageResponse.pagination.has_next)
+          setCurrentPage(pageResponse.pagination.current_page)
+          setTotalCandidatesCount(pageResponse.pagination.total_count)
         }
 
-        // Initialize status tracking for new candidates
+        // Initialize status tracking for new page candidates
         const newOriginalStatus: Record<string, RoundStatus> = {}
         const newCurrentStatus: Record<string, RoundStatus> = {}
         
-        nextPageResponse.candidates.forEach(candidate => {
+        pageResponse.candidates.forEach(candidate => {
           const status = (candidate.candidate_rounds?.[0]?.status || candidate.round_status || 'action_pending') as RoundStatus
           newOriginalStatus[candidate.id] = status
           newCurrentStatus[candidate.id] = status
         })
         
-        setOriginalStatusById(prev => ({ ...prev, ...newOriginalStatus }))
-        setCurrentStatusById(prev => ({ ...prev, ...newCurrentStatus }))
+        setOriginalStatusById(newOriginalStatus)
+        setCurrentStatusById(newCurrentStatus)
+        setPendingChanges({})
+        
+        // Cache the page data
+        pageCacheRef.current[newPage] = {
+          candidates: pageResponse.candidates || [],
+          originalStatus: newOriginalStatus,
+          currentStatus: newCurrentStatus,
+          pagination: {
+            has_next: pageResponse.pagination?.has_next || false,
+            total_count: pageResponse.pagination?.total_count || 0,
+            current_page: pageResponse.pagination?.current_page || newPage
+          }
+        }
+        
+        // Update module-level cache with new page cache
+        const currentConfig = `${currentRound.id}-${isMultiJobMode}-${filteredJobIdsString}`
+        if (sparrowInterviewsRoundCache[currentConfig]) {
+          sparrowInterviewsRoundCache[currentConfig].pageCache = { ...pageCacheRef.current }
+          sparrowInterviewsRoundCache[currentConfig].currentPage = newPage
+          sparrowInterviewsRoundCache[currentConfig].fetchTime = fetchTimeMs
+        }
+        
+        console.log(`✅ Fetched and cached page ${newPage} in ${fetchTimeMs}ms`)
       }
     } catch (error: any) {
-      console.error('Error loading more candidates:', error)
+      console.error('Error changing page:', error)
+      setFetchTime(null)
       toast({
         title: "Error",
-        description: "Failed to load more candidates. Please try again.",
+        description: "Failed to load page. Please try again.",
         variant: "destructive",
       })
     } finally {
@@ -669,6 +803,15 @@ export function SparrowInterviewsRoundContent({
       // Clear cache to ensure fresh data
       console.log('🔄 [REFRESH] Clearing cache before refresh')
       RoundCandidatesApi.clearCache()
+      
+      // Clear both page cache and module-level cache
+      pageCacheRef.current = {}
+      const currentConfig = `${currentRound.id}-${isMultiJobMode}-${filteredJobIdsString}`
+      if (sparrowInterviewsRoundCache[currentConfig]) {
+        delete sparrowInterviewsRoundCache[currentConfig]
+      }
+      setFetchTime(null)
+      console.log('🔄 [REFRESH] Page cache and module-level cache cleared')
       
       // Clear previous data immediately to show loader
       setRoundData(null)
@@ -1430,34 +1573,15 @@ export function SparrowInterviewsRoundContent({
               roundType={roundType}
               candidateMappings={candidateMappings}
               defaultSecondaryId={secondaryId}
+              currentPage={currentPage}
+              totalPages={Math.ceil(totalCandidatesCount / 100)}
+              hasNextPage={hasMoreCandidates}
+              hasPrevPage={currentPage > 1}
+              onPageChange={!isMultiJobMode ? handlePageChange : undefined}
+              isLoadingPage={isLoadingMoreCandidates}
+              fetchTime={fetchTime}
             />
           </div>
-          
-          {/* Load More Candidates Button */}
-          {hasMoreCandidates && !isMultiJobMode && (
-            <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 text-center">
-              <Button
-                onClick={handleLoadMoreCandidates}
-                disabled={isLoadingMoreCandidates}
-                variant="outline"
-                size="sm"
-                className="flex items-center gap-2 mx-auto"
-                style={{ fontFamily }}
-              >
-                {isLoadingMoreCandidates ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Loading...
-                  </>
-                ) : (
-                  <>
-                    <Users className="w-4 h-4" />
-                    Load {Math.min(100, totalCandidatesCount - localCandidates.length)} more
-                  </>
-                )}
-              </Button>
-            </div>
-          )}
         </div>
       </div>
 

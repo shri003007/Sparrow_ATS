@@ -7,9 +7,28 @@ import { CompetencyMetricsModal } from "./competency-metrics-modal"
 import { RoundCandidatesApi } from "@/lib/api/round-candidates"
 import { CandidateRoundsApi, JobRoundTemplatesApi } from "@/lib/api/rounds"
 import type { JobRoundTemplate } from "@/lib/round-types"
-import type { RoundCandidateResponse } from "@/lib/round-candidate-types"
+import type { RoundCandidateResponse, RoundCandidate } from "@/lib/round-candidate-types"
 import { Button } from "@/components/ui/button"
 import { useMultiJobContextSafe } from "@/components/all_views/multi-job-context"
+
+type RoundStatus = 'selected' | 'rejected' | 'action_pending'
+
+// Module-level cache that persists across component mount/unmount cycles
+const screeningRoundCache: Record<string, {
+  roundData: RoundCandidateResponse
+  originalStatus: Record<string, RoundStatus>
+  currentStatus: Record<string, RoundStatus>
+  hasMoreCandidates: boolean
+  currentPage: number
+  totalCandidatesCount: number
+  fetchTime: number | null
+  pageCache: Record<number, {
+    candidates: RoundCandidate[]
+    originalStatus: Record<string, RoundStatus>
+    currentStatus: Record<string, RoundStatus>
+    pagination: any
+  }>
+}> = {}
 
 interface ScreeningRoundContentProps {
   currentRound: JobRoundTemplate | null
@@ -33,7 +52,6 @@ export function ScreeningRoundContent({
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isProgressingCandidates, setIsProgressingCandidates] = useState(false)
-  type RoundStatus = 'selected' | 'rejected' | 'action_pending'
   const [originalStatusById, setOriginalStatusById] = useState<Record<string, RoundStatus>>({})
   const [currentStatusById, setCurrentStatusById] = useState<Record<string, RoundStatus>>({})
   const [pendingChanges, setPendingChanges] = useState<Record<string, RoundStatus>>({})
@@ -43,17 +61,62 @@ export function ScreeningRoundContent({
   const [hasMoreCandidates, setHasMoreCandidates] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [totalCandidatesCount, setTotalCandidatesCount] = useState(0)
+  const [fetchTime, setFetchTime] = useState<number | null>(null)
+  
+  // Cache for storing fetched pages (use module-level cache via ref for persistence)
+  const pageCacheRef = useRef<Record<number, {
+    candidates: RoundCandidate[]
+    originalStatus: Record<string, RoundStatus>
+    currentStatus: Record<string, RoundStatus>
+    pagination: any
+  }>>({})
+  
+  // Use module-level cache instead of component-level ref to persist across unmounts
+  // (fullPageCacheRef is replaced by screeningRoundCache module variable)
 
   // Metrics modal state
   const [showMetricsModal, setShowMetricsModal] = useState(false)
 
   // Ref for request cancellation
   const abortControllerRef = useRef<AbortController | null>(null)
+  
+  // Clear page cache when switching to a new round (not in module cache)
+  useEffect(() => {
+    // Only clear if we're actually switching to a different round
+    if (currentRound?.id) {
+      const cachedFullPage = screeningRoundCache[currentRound.id]
+      if (!cachedFullPage) {
+        // New round, clear page cache
+        pageCacheRef.current = {}
+        setFetchTime(null)
+      }
+      // If cache exists, we'll restore pageCache from it
+    }
+  }, [currentRound?.id])
 
   // Fetch round candidates data when current round changes
   useEffect(() => {
     const fetchRoundData = async () => {
       if (!currentRound?.id) return
+
+      // Check if we have cached data for this round (module-level cache)
+      const cachedFullPage = screeningRoundCache[currentRound.id]
+      if (cachedFullPage) {
+        console.log(`📦 Using module-level cache for round ${currentRound.id}`)
+        setRoundData(cachedFullPage.roundData)
+        setOriginalStatusById(cachedFullPage.originalStatus)
+        setCurrentStatusById(cachedFullPage.currentStatus)
+        setHasMoreCandidates(cachedFullPage.hasMoreCandidates)
+        setCurrentPage(cachedFullPage.currentPage)
+        setTotalCandidatesCount(cachedFullPage.totalCandidatesCount)
+        setFetchTime(cachedFullPage.fetchTime)
+        setPendingChanges({})
+        // Restore page cache as well
+        pageCacheRef.current = cachedFullPage.pageCache
+        console.log(`📦 Restored ${Object.keys(cachedFullPage.pageCache).length} cached pages`)
+        setIsLoading(false)
+        return
+      }
 
       // Cancel any ongoing request
       if (abortControllerRef.current) {
@@ -102,6 +165,20 @@ export function ScreeningRoundContent({
         setOriginalStatusById(initialOriginal)
         setCurrentStatusById(initialCurrent)
         setPendingChanges({})
+        
+        // Cache the full page data including page cache (module-level)
+        screeningRoundCache[currentRound.id] = {
+          roundData: response,
+          originalStatus: initialOriginal,
+          currentStatus: initialCurrent,
+          hasMoreCandidates: response.pagination?.has_next || false,
+          currentPage: response.pagination?.current_page || 1,
+          totalCandidatesCount: response.pagination?.total_count || response.candidate_count || response.candidates?.length || 0,
+          fetchTime: null,
+          pageCache: { ...pageCacheRef.current }
+        }
+        
+        console.log(`✅ Cached full page data in module-level cache for round ${currentRound.id}`)
       } catch (error: any) {
         // Don't show error for aborted requests (happens during navigation)
         if (error.name !== 'AbortError') {
@@ -126,55 +203,96 @@ export function ScreeningRoundContent({
     }
   }, [currentRound?.id])
 
-  // Function to load more candidates (next page)
-  const handleLoadMoreCandidates = async () => {
-    if (!currentRound?.id || isLoadingMoreCandidates || !hasMoreCandidates || isMultiJobMode) {
+  // Function to handle page navigation
+  const handlePageChange = async (newPage: number) => {
+    if (!currentRound?.id || isLoadingMoreCandidates || isMultiJobMode) {
+      return
+    }
+
+    // Check if page is already cached
+    const cachedPage = pageCacheRef.current[newPage]
+    if (cachedPage) {
+      console.log(`📦 Using cached data for page ${newPage}`)
+      setRoundData({ 
+        ...roundData!, 
+        candidates: cachedPage.candidates,
+        pagination: cachedPage.pagination
+      })
+      setOriginalStatusById(cachedPage.originalStatus)
+      setCurrentStatusById(cachedPage.currentStatus)
+      setHasMoreCandidates(cachedPage.pagination.has_next)
+      setCurrentPage(cachedPage.pagination.current_page)
+      setTotalCandidatesCount(cachedPage.pagination.total_count)
+      setPendingChanges({})
+      setFetchTime(0) // Instant from cache
       return
     }
 
     setIsLoadingMoreCandidates(true)
+    const startTime = performance.now()
     
     try {
-      const nextPage = currentPage + 1
-      const nextPageResponse = await RoundCandidatesApi.getCandidatesByRoundTemplate(
+      const pageResponse = await RoundCandidatesApi.getCandidatesByRoundTemplate(
         currentRound.id,
-        undefined, // no abort signal for load more
+        undefined, // no abort signal
         false, // don't force refresh
-        nextPage,
+        newPage,
         100
       )
 
-      if (nextPageResponse) {
-        // Append new candidates to existing ones
-        setRoundData(prevData => {
-          if (!prevData) return nextPageResponse
-          return {
-            ...prevData,
-            candidates: [...prevData.candidates, ...nextPageResponse.candidates]
-          }
-        })
+      if (pageResponse) {
+        const endTime = performance.now()
+        const fetchTimeMs = Math.round(endTime - startTime)
+        setFetchTime(fetchTimeMs)
+        
+        // Replace candidates with new page data
+        setRoundData(pageResponse)
         
         // Update pagination states
-        if (nextPageResponse.pagination) {
-          setHasMoreCandidates(nextPageResponse.pagination.has_next)
-          setCurrentPage(nextPageResponse.pagination.current_page)
+        if (pageResponse.pagination) {
+          setHasMoreCandidates(pageResponse.pagination.has_next)
+          setCurrentPage(pageResponse.pagination.current_page)
+          setTotalCandidatesCount(pageResponse.pagination.total_count)
         }
 
-        // Initialize status tracking for new candidates
+        // Initialize status tracking for new page candidates
         const newOriginalStatus: Record<string, RoundStatus> = {}
         const newCurrentStatus: Record<string, RoundStatus> = {}
         
-        nextPageResponse.candidates.forEach(candidate => {
+        pageResponse.candidates.forEach(candidate => {
           const status = (candidate.candidate_rounds?.[0]?.status || candidate.round_status || 'action_pending') as RoundStatus
           newOriginalStatus[candidate.id] = status
           newCurrentStatus[candidate.id] = status
         })
         
-        setOriginalStatusById(prev => ({ ...prev, ...newOriginalStatus }))
-        setCurrentStatusById(prev => ({ ...prev, ...newCurrentStatus }))
+        setOriginalStatusById(newOriginalStatus)
+        setCurrentStatusById(newCurrentStatus)
+        setPendingChanges({})
+        
+        // Cache the page data
+        pageCacheRef.current[newPage] = {
+          candidates: pageResponse.candidates,
+          originalStatus: newOriginalStatus,
+          currentStatus: newCurrentStatus,
+          pagination: {
+            has_next: pageResponse.pagination?.has_next || false,
+            total_count: pageResponse.pagination?.total_count || 0,
+            current_page: pageResponse.pagination?.current_page || newPage
+          }
+        }
+        
+        // Update module-level cache with new page cache
+        if (currentRound?.id && screeningRoundCache[currentRound.id]) {
+          screeningRoundCache[currentRound.id].pageCache = { ...pageCacheRef.current }
+          screeningRoundCache[currentRound.id].currentPage = newPage
+          screeningRoundCache[currentRound.id].fetchTime = fetchTimeMs
+        }
+        
+        console.log(`✅ Fetched and cached page ${newPage} in ${fetchTimeMs}ms`)
       }
     } catch (error: any) {
-      console.error('Error loading more candidates:', error)
+      console.error('Error changing page:', error)
+      setFetchTime(null)
       // Could add toast notification here if needed
     } finally {
       setIsLoadingMoreCandidates(false)
@@ -199,6 +317,14 @@ export function ScreeningRoundContent({
       // Clear cache to ensure fresh data
       console.log('🔄 [REFRESH] Clearing cache before refresh')
       RoundCandidatesApi.clearCache()
+      
+      // Clear both page cache and module-level cache
+      pageCacheRef.current = {}
+      if (currentRound?.id) {
+        delete screeningRoundCache[currentRound.id]
+      }
+      setFetchTime(null)
+      console.log('🔄 [REFRESH] Page cache and module-level cache cleared')
       
       // Clear previous data immediately to show loader
       setRoundData(null)
@@ -514,34 +640,15 @@ export function ScreeningRoundContent({
                   }
                 })
               }}
+              currentPage={currentPage}
+              totalPages={Math.ceil(totalCandidatesCount / 100)}
+              hasNextPage={hasMoreCandidates}
+              hasPrevPage={currentPage > 1}
+              onPageChange={!isMultiJobMode ? handlePageChange : undefined}
+              isLoadingPage={isLoadingMoreCandidates}
+              fetchTime={fetchTime}
             />
           </div>
-          
-          {/* Load More Candidates Button */}
-          {hasMoreCandidates && !isMultiJobMode && (
-            <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 text-center">
-              <Button
-                onClick={handleLoadMoreCandidates}
-                disabled={isLoadingMoreCandidates}
-                variant="outline"
-                size="sm"
-                className="flex items-center gap-2 mx-auto"
-                style={{ fontFamily }}
-              >
-                {isLoadingMoreCandidates ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Loading...
-                  </>
-                ) : (
-                  <>
-                    <Users className="w-4 h-4" />
-                    Load {Math.min(100, totalCandidatesCount - (roundData?.candidates.length || 0))} more
-                  </>
-                )}
-              </Button>
-            </div>
-          )}
         </div>
 
         {/* Competency Metrics Modal */}

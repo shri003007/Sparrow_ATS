@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useMemo } from "react"
+import React, { useState, useMemo, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -22,7 +22,9 @@ import {
   ThumbsUp,
   ThumbsDown,
   Clock3,
-  Search
+  Search,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import type { RoundCandidate, CustomFieldDefinition } from "@/lib/round-candidate-types"
@@ -61,6 +63,14 @@ interface ModernScreeningCandidatesTableProps {
   jobOpeningId?: string
   onStatusChange: (candidateId: string, status: RoundStatus) => void
   onCandidateUpdated?: (candidate: RoundCandidate) => void
+  // Pagination props
+  currentPage?: number
+  totalPages?: number
+  hasNextPage?: boolean
+  hasPrevPage?: boolean
+  onPageChange?: (page: number) => void
+  isLoadingPage?: boolean
+  fetchTime?: number | null
 }
 
 export function ModernScreeningCandidatesTable({
@@ -70,13 +80,35 @@ export function ModernScreeningCandidatesTable({
   roundInfo,
   jobOpeningId,
   onStatusChange,
-  onCandidateUpdated = () => {}
+  onCandidateUpdated = () => {},
+  currentPage = 1,
+  totalPages = 1,
+  hasNextPage = false,
+  hasPrevPage = false,
+  onPageChange,
+  isLoadingPage = false,
+  fetchTime = null
 }: ModernScreeningCandidatesTableProps) {
   const fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
   const { isMultiJobMode } = useMultiJobContextSafe()
 
   const [selectedCandidate, setSelectedCandidate] = useState<RoundCandidate | null>(null)
   const [isPanelOpen, setIsPanelOpen] = useState(false)
+  const [liveTimer, setLiveTimer] = useState(0)
+  
+  // Live timer effect for showing elapsed time during fetch
+  useEffect(() => {
+    if (isLoadingPage) {
+      setLiveTimer(0)
+      const startTime = Date.now()
+      const interval = setInterval(() => {
+        const elapsed = (Date.now() - startTime) / 1000
+        setLiveTimer(elapsed)
+      }, 50) // Update every 50ms for smooth timer
+      
+      return () => clearInterval(interval)
+    }
+  }, [isLoadingPage])
   const [sortOrder, setSortOrder] = useState<{[key: string]: 'asc' | 'desc'}>({})
   const [localCandidates, setLocalCandidates] = useState<RoundCandidate[]>(candidates)
   const [searchQuery, setSearchQuery] = useState("")
@@ -412,9 +444,9 @@ export function ModernScreeningCandidatesTable({
 
   return (
     <>
-      {/* Search Bar */}
-      <div className="p-4 bg-white border-b border-gray-200">
-        <div className="relative max-w-md">
+      {/* Search Bar and Pagination */}
+      <div className="p-4 bg-white border-b border-gray-200 flex items-center justify-between gap-4">
+        <div className="relative max-w-md flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
           <Input
             type="text"
@@ -425,6 +457,52 @@ export function ModernScreeningCandidatesTable({
             style={{ fontFamily }}
           />
         </div>
+        
+        {/* DynamoDB-style Pagination */}
+        {onPageChange && totalPages > 1 && (
+          <div className="flex items-center gap-2">
+            {/* Live Timer - shows during fetch, final time after */}
+            {(isLoadingPage || fetchTime !== null) && (
+              <span className="text-xs text-gray-500 mr-2 min-w-[45px]" style={{ fontFamily }}>
+                {isLoadingPage ? (
+                  <span className="text-blue-600">{liveTimer.toFixed(2)}s</span>
+                ) : fetchTime !== null && fetchTime > 0 ? (
+                  <span>{(fetchTime / 1000).toFixed(2)}s</span>
+                ) : null}
+              </span>
+            )}
+            
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onPageChange(currentPage - 1)}
+              disabled={!hasPrevPage || isLoadingPage}
+              className="h-8 w-8 p-0"
+              style={{ fontFamily }}
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            
+            <span className="text-sm text-gray-700 min-w-[60px] text-center" style={{ fontFamily }}>
+              {isLoadingPage ? (
+                <span className="text-gray-400">...</span>
+              ) : (
+                <>Page {currentPage}</>
+              )}
+            </span>
+            
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onPageChange(currentPage + 1)}
+              disabled={!hasNextPage || isLoadingPage}
+              className="h-8 w-8 p-0"
+              style={{ fontFamily }}
+            >
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* No search results state */}

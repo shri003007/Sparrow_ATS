@@ -13,7 +13,9 @@ import {
   ThumbsUp,
   ThumbsDown,
   Clock3,
-  Search
+  Search,
+  Download,
+  FileSpreadsheet
 } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import type { CandidateDisplay, CandidateUIStatus } from "@/lib/candidate-types"
@@ -47,7 +49,13 @@ interface ModernCandidatesTableProps {
   isLoading?: boolean
 }
 
-export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsStarted = false, onCandidateClick, isLoading = false }: ModernCandidatesTableProps) {
+export function ModernCandidatesTable({ 
+  candidates, 
+  onStatusChange, 
+  hasRoundsStarted = false, 
+  onCandidateClick, 
+  isLoading = false
+}: ModernCandidatesTableProps) {
   const fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
 
   const [sortOrder, setSortOrder] = useState<{[key: string]: 'asc' | 'desc'}>({
@@ -209,6 +217,69 @@ export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsSta
     onStatusChange(candidateId, status)
   }
 
+  const handleExport = (format: 'excel' | 'pdf') => {
+    console.log(`Exporting ${filteredCandidates.length} candidates as ${format}`)
+    
+    if (format === 'excel') {
+      // Excel export logic - only include columns visible in the table
+      const headers = ['Name', 'Email', 'Status']
+      
+      // Add score columns ONLY if rounds have started (matching table visibility)
+      if (hasRoundsStarted) {
+        headers.push('Overall Score')
+        // Add each round column (matching table visibility)
+        rounds.forEach(round => headers.push(round.round_name))
+      }
+      
+      // Add custom fields ONLY if rounds have started (matching table visibility)
+      if (hasRoundsStarted) {
+        customFields.forEach(field => headers.push(field.field_label))
+      }
+      
+      // Build CSV content - wrap all headers in quotes to handle special characters
+      let csvContent = headers.map(h => `"${h}"`).join(',') + '\n'
+      
+      filteredCandidates.forEach(candidate => {
+        const row = [
+          `"${candidate.name}"`,
+          `"${candidate.email}"`,
+          `"${STATUS_CONFIG[candidate.status].label}"`
+        ]
+        
+        // Add score data ONLY if rounds have started
+        if (hasRoundsStarted) {
+          // Overall score
+          row.push(candidate.overall_score !== null && candidate.overall_score !== undefined ? candidate.overall_score.toString() : '-')
+          
+          // Individual round scores
+          rounds.forEach(round => {
+            const score = getRoundScore(candidate, round.order)
+            row.push(score !== null && score !== undefined ? score.toString() : '-')
+          })
+          
+          // Custom field values
+          customFields.forEach(field => {
+            const value = getCustomFieldValue(candidate, field.field_name)
+            row.push(`"${value}"`)
+          })
+        }
+        
+        csvContent += row.join(',') + '\n'
+      })
+      
+      // Download CSV
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const link = document.createElement('a')
+      const url = URL.createObjectURL(blob)
+      link.setAttribute('href', url)
+      link.setAttribute('download', `candidates_export_${new Date().toISOString().split('T')[0]}.csv`)
+      link.style.visibility = 'hidden'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    }
+  }
+
   if (!isLoading && localCandidates.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center p-8 text-center">
@@ -236,9 +307,9 @@ export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsSta
         flexDirection: "column"
       }}
     >
-      {/* Search Bar */}
-      <div className="p-4 border-b border-gray-200">
-        <div className="relative max-w-md">
+      {/* Search Bar and Export */}
+      <div className="p-4 border-b border-gray-200 flex items-center justify-between gap-4">
+        <div className="relative max-w-md flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
           <Input
             type="text"
@@ -249,6 +320,35 @@ export function ModernCandidatesTable({ candidates, onStatusChange, hasRoundsSta
             style={{ fontFamily }}
           />
         </div>
+        
+        {/* Export Dropdown */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              className="flex items-center gap-2"
+              style={{
+                borderColor: "#E5E7EB",
+                color: "#374151",
+                fontFamily,
+              }}
+            >
+              <Download className="w-4 h-4" />
+              Export
+              <ChevronDown className="w-4 h-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem
+              onClick={() => handleExport('excel')}
+              className="flex items-center gap-2 cursor-pointer"
+              style={{ fontFamily }}
+            >
+              <FileSpreadsheet className="w-4 h-4 text-green-600" />
+              <span>Export as Excel</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* No search results state */}

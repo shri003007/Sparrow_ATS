@@ -14,6 +14,24 @@ import { useMultiJobContextSafe } from "@/components/all_views/multi-job-context
 
 type RoundStatus = 'selected' | 'rejected' | 'action_pending'
 
+// Module-level cache that persists across component mount/unmount cycles
+const projectRoundCache: Record<string, {
+  roundData: RoundCandidateResponse
+  localCandidates: RoundCandidate[]
+  originalStatus: Record<string, RoundStatus>
+  currentStatus: Record<string, RoundStatus>
+  hasMoreCandidates: boolean
+  currentPage: number
+  totalCandidatesCount: number
+  fetchTime: number | null
+  pageCache: Record<number, {
+    candidates: RoundCandidate[]
+    originalStatus: Record<string, RoundStatus>
+    currentStatus: Record<string, RoundStatus>
+    pagination: any
+  }>
+}> = {}
+
 const ROUND_STATUS_CONFIG = {
   selected: {
     label: 'Selected',
@@ -64,6 +82,18 @@ export function ProjectRoundContent({
   const [hasMoreCandidates, setHasMoreCandidates] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [totalCandidatesCount, setTotalCandidatesCount] = useState(0)
+  const [fetchTime, setFetchTime] = useState<number | null>(null)
+  
+  // Cache for storing fetched pages
+  const pageCacheRef = useRef<Record<number, {
+    candidates: RoundCandidate[]
+    originalStatus: Record<string, RoundStatus>
+    currentStatus: Record<string, RoundStatus>
+    pagination: any
+  }>>({})
+  
+  // Use module-level cache instead of component-level ref to persist across unmounts
+  // (fullPageCacheRef is replaced by projectRoundCache module variable)
 
   // Metrics modal state
   const [showMetricsModal, setShowMetricsModal] = useState(false)
@@ -77,11 +107,43 @@ export function ProjectRoundContent({
 
   // Ref for request cancellation
   const abortControllerRef = useRef<AbortController | null>(null)
+  
+  // Clear caches intelligently when round changes
+  useEffect(() => {
+    if (currentRound?.id) {
+      const cachedFullPage = projectRoundCache[currentRound.id]
+      if (!cachedFullPage) {
+        // New round, clear page cache
+        pageCacheRef.current = {}
+        setFetchTime(null)
+      }
+      // If cache exists, we'll restore pageCache from it
+    }
+  }, [currentRound?.id])
 
   // Fetch round data
   useEffect(() => {
     const fetchRoundData = async () => {
       if (!currentRound?.id) {
+        setIsLoading(false)
+        return
+      }
+
+      // Check if we have cached data for this round (module-level cache)
+      const cachedFullPage = projectRoundCache[currentRound.id]
+      if (cachedFullPage) {
+        console.log(`📦 Using module-level cache for round ${currentRound.id}`)
+        setRoundData(cachedFullPage.roundData)
+        setLocalCandidates(cachedFullPage.localCandidates)
+        setOriginalStatusById(cachedFullPage.originalStatus)
+        setCurrentStatusById(cachedFullPage.currentStatus)
+        setHasMoreCandidates(cachedFullPage.hasMoreCandidates)
+        setCurrentPage(cachedFullPage.currentPage)
+        setTotalCandidatesCount(cachedFullPage.totalCandidatesCount)
+        setFetchTime(cachedFullPage.fetchTime)
+        // Restore page cache as well
+        pageCacheRef.current = cachedFullPage.pageCache
+        console.log(`📦 Restored ${Object.keys(cachedFullPage.pageCache).length} cached pages`)
         setIsLoading(false)
         return
       }
@@ -134,6 +196,21 @@ export function ProjectRoundContent({
         }
         setOriginalStatusById(initialOriginal)
         setCurrentStatusById(initialCurrent)
+        
+        // Cache the full page data including page cache (module-level)
+        projectRoundCache[currentRound.id] = {
+          roundData: data,
+          localCandidates: data.candidates || [],
+          originalStatus: initialOriginal,
+          currentStatus: initialCurrent,
+          hasMoreCandidates: data.pagination?.has_next || false,
+          currentPage: data.pagination?.current_page || 1,
+          totalCandidatesCount: data.pagination?.total_count || data.candidate_count || data.candidates?.length || 0,
+          fetchTime: null,
+          pageCache: { ...pageCacheRef.current }
+        }
+        
+        console.log(`✅ Cached full page data for round ${currentRound.id}`)
       } catch (err: any) {
         // Don't show error for aborted requests (happens during navigation)
         if (err.name !== 'AbortError') {
@@ -158,49 +235,90 @@ export function ProjectRoundContent({
     }
   }, [currentRound?.id])
 
-  // Function to load more candidates (next page)
-  const handleLoadMoreCandidates = async () => {
-    if (!currentRound?.id || isLoadingMoreCandidates || !hasMoreCandidates || isMultiJobMode) {
+  // Function to handle page navigation
+  const handlePageChange = async (newPage: number) => {
+    if (!currentRound?.id || isLoadingMoreCandidates || isMultiJobMode) {
+      return
+    }
+
+    // Check if page is already cached
+    const cachedPage = pageCacheRef.current[newPage]
+    if (cachedPage) {
+      console.log(`📦 Using cached data for page ${newPage}`)
+      setLocalCandidates(cachedPage.candidates)
+      setOriginalStatusById(cachedPage.originalStatus)
+      setCurrentStatusById(cachedPage.currentStatus)
+      setHasMoreCandidates(cachedPage.pagination.has_next)
+      setCurrentPage(cachedPage.pagination.current_page)
+      setTotalCandidatesCount(cachedPage.pagination.total_count)
+      setFetchTime(0) // Instant from cache
       return
     }
 
     setIsLoadingMoreCandidates(true)
+    const startTime = performance.now()
     
     try {
-      const nextPage = currentPage + 1
-      const nextPageResponse = await RoundCandidatesApi.getCandidatesByRoundTemplate(
+      const pageResponse = await RoundCandidatesApi.getCandidatesByRoundTemplate(
         currentRound.id,
-        undefined, // no abort signal for load more
+        undefined, // no abort signal
         false, // don't force refresh
-        nextPage,
+        newPage,
         100
       )
 
-      if (nextPageResponse) {
-        // Append new candidates to existing ones
-        setLocalCandidates(prevCandidates => [...prevCandidates, ...nextPageResponse.candidates])
+      if (pageResponse) {
+        const endTime = performance.now()
+        const fetchTimeMs = Math.round(endTime - startTime)
+        setFetchTime(fetchTimeMs)
+        
+        // Replace candidates with new page data
+        setLocalCandidates(pageResponse.candidates || [])
         
         // Update pagination states
-        if (nextPageResponse.pagination) {
-          setHasMoreCandidates(nextPageResponse.pagination.has_next)
-          setCurrentPage(nextPageResponse.pagination.current_page)
+        if (pageResponse.pagination) {
+          setHasMoreCandidates(pageResponse.pagination.has_next)
+          setCurrentPage(pageResponse.pagination.current_page)
+          setTotalCandidatesCount(pageResponse.pagination.total_count)
         }
 
-        // Initialize status tracking for new candidates
+        // Initialize status tracking for new page candidates
         const newOriginalStatus: Record<string, RoundStatus> = {}
         const newCurrentStatus: Record<string, RoundStatus> = {}
         
-        nextPageResponse.candidates.forEach(candidate => {
+        pageResponse.candidates.forEach(candidate => {
           const status = (candidate.candidate_rounds?.[0]?.status || candidate.round_status || 'action_pending') as RoundStatus
           newOriginalStatus[candidate.id] = status
           newCurrentStatus[candidate.id] = status
         })
         
-        setOriginalStatusById(prev => ({ ...prev, ...newOriginalStatus }))
-        setCurrentStatusById(prev => ({ ...prev, ...newCurrentStatus }))
+        setOriginalStatusById(newOriginalStatus)
+        setCurrentStatusById(newCurrentStatus)
+        
+        // Cache the page data
+        pageCacheRef.current[newPage] = {
+          candidates: pageResponse.candidates || [],
+          originalStatus: newOriginalStatus,
+          currentStatus: newCurrentStatus,
+          pagination: {
+            has_next: pageResponse.pagination?.has_next || false,
+            total_count: pageResponse.pagination?.total_count || 0,
+            current_page: pageResponse.pagination?.current_page || newPage
+          }
+        }
+        
+        // Update module-level cache with new page cache
+        if (currentRound?.id && projectRoundCache[currentRound.id]) {
+          projectRoundCache[currentRound.id].pageCache = { ...pageCacheRef.current }
+          projectRoundCache[currentRound.id].currentPage = newPage
+          projectRoundCache[currentRound.id].fetchTime = fetchTimeMs
+        }
+        
+        console.log(`✅ Fetched and cached page ${newPage} in ${fetchTimeMs}ms`)
       }
     } catch (error: any) {
-      console.error('Error loading more candidates:', error)
+      console.error('Error changing page:', error)
+      setFetchTime(null)
       // Could add toast notification here if needed
     } finally {
       setIsLoadingMoreCandidates(false)
@@ -225,6 +343,14 @@ export function ProjectRoundContent({
       // Clear cache to ensure fresh data
       console.log('🔄 [REFRESH] Clearing cache before refresh')
       RoundCandidatesApi.clearCache()
+      
+      // Clear both page cache and module-level cache
+      pageCacheRef.current = {}
+      if (currentRound?.id) {
+        delete projectRoundCache[currentRound.id]
+      }
+      setFetchTime(null)
+      console.log('🔄 [REFRESH] Page cache and module-level cache cleared')
       
       // Clear previous data immediately to show loader
       setRoundData(null)
@@ -540,34 +666,15 @@ export function ProjectRoundContent({
               currentRoundName={currentRound?.round_name || 'Project Round'}
               candidateReEvaluationStates={candidateReEvaluationStates}
               onReEvaluationStateChange={handleReEvaluationStateChange}
+              currentPage={currentPage}
+              totalPages={Math.ceil(totalCandidatesCount / 100)}
+              hasNextPage={hasMoreCandidates}
+              hasPrevPage={currentPage > 1}
+              onPageChange={!isMultiJobMode ? handlePageChange : undefined}
+              isLoadingPage={isLoadingMoreCandidates}
+              fetchTime={fetchTime}
             />
           </div>
-          
-          {/* Load More Candidates Button */}
-          {hasMoreCandidates && !isMultiJobMode && (
-            <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 text-center">
-              <Button
-                onClick={handleLoadMoreCandidates}
-                disabled={isLoadingMoreCandidates}
-                variant="outline"
-                size="sm"
-                className="flex items-center gap-2 mx-auto"
-                style={{ fontFamily }}
-              >
-                {isLoadingMoreCandidates ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Loading...
-                  </>
-                ) : (
-                  <>
-                    <Users className="w-4 h-4" />
-                    Load {Math.min(100, totalCandidatesCount - localCandidates.length)} more
-                  </>
-                )}
-              </Button>
-            </div>
-          )}
         </div>
 
         {/* Competency Metrics Modal */}
