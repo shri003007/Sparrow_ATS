@@ -105,6 +105,7 @@ export interface JobRoundTemplateRequest {
   is_active?: boolean
   is_required?: boolean
   custom_evaluation_criteria?: string
+  custom_question_competency?: string
   custom_competencies?: JobRoundTemplateCompetency[]
 }
 

@@ -656,16 +656,36 @@ export function JobListingsApp({ onCreateJob, newlyCreatedJobId, onSettingsClick
               if (selectedJob?.id) {
                 console.log('🔄 [REFRESH] Refreshing candidates and custom field definitions')
                 
-                // Refresh candidates data
-                await fetchCandidates(selectedJob.id, undefined, forceRefresh)
+                // Set loading state immediately to show spinner
+                setIsLoadingCandidates(true)
                 
-                // Also refresh custom field definitions
                 try {
-                  console.log('🔄 [REFRESH] Fetching custom field definitions for job:', selectedJob.id)
-                  await CustomFieldsApi.getCustomFieldDefinitionsByJob(selectedJob.id, true)
-                  console.log('✅ [REFRESH] Custom field definitions refreshed successfully')
+                  // Calculate overall scores before fetching candidates (only on refresh)
+                  if (forceRefresh) {
+                    try {
+                      console.log('🔢 [REFRESH] Calculating overall scores for job:', selectedJob.id)
+                      // This method has internal error handling but we add extra safety here
+                      await CandidatesApi.calculateOverallScores(selectedJob.id)
+                    } catch (error) {
+                      // Extra safety catch - should never reach here as calculateOverallScores handles all errors
+                      console.warn('⚠️ [REFRESH] Unexpected error in calculateOverallScores, continuing:', error)
+                    }
+                  }
+                  
+                  // Refresh candidates data (this will be called even if score calculation fails)
+                  await fetchCandidates(selectedJob.id, undefined, forceRefresh)
+                  
+                  // Also refresh custom field definitions
+                  try {
+                    console.log('🔄 [REFRESH] Fetching custom field definitions for job:', selectedJob.id)
+                    await CustomFieldsApi.getCustomFieldDefinitionsByJob(selectedJob.id, true)
+                    console.log('✅ [REFRESH] Custom field definitions refreshed successfully')
+                  } catch (error) {
+                    console.error('❌ [REFRESH] Failed to refresh custom field definitions:', error)
+                  }
                 } catch (error) {
-                  console.error('❌ [REFRESH] Failed to refresh custom field definitions:', error)
+                  console.error('❌ [REFRESH] Error during refresh:', error)
+                  setIsLoadingCandidates(false)
                 }
               }
             }}

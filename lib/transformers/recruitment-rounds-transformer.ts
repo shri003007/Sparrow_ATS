@@ -18,11 +18,12 @@ export class RecruitmentRoundsTransformer {
     return {
       id: apiRound.id,
       name: apiRound.name,
-      type: "preset", // All API rounds are considered preset
+      type: apiRound.type, // Use actual round type from API (INTERVIEW, RAPID_FIRE, etc.)
       isSelected: apiRound.is_default, // Auto-select default rounds
       order: order,
       description: apiRound.description,
       evaluationCriteria: apiRound.evaluation_criteria || "",
+      questionLevelEvaluationCriteria: "", // Initialize as empty for template rounds
       competencies,
       // These fields don't exist in API but are needed for UI compatibility
       duration: undefined,

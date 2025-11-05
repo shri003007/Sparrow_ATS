@@ -74,6 +74,39 @@ export class CandidatesApi {
   }
 
   /**
+   * Calculate overall scores for all candidates in a job
+   * This should be called before fetching candidates to ensure scores are up-to-date
+   * Note: This method never throws errors - it always continues to allow candidate fetching
+   */
+  static async calculateOverallScores(jobOpeningId: string): Promise<void> {
+    console.log(`🔢 [API CALL] Calculating overall scores for job ${jobOpeningId}`)
+    try {
+      const url = `${API_CONFIG.CANDIDATE_EVALUATION_FUNCTION_URL}/job-opening/${jobOpeningId}/calculate-overall-scores`
+      const response = await authenticatedApiService.post(url, {})
+
+      if (!response.ok) {
+        const statusCode = response.status
+        if (statusCode === 504) {
+          console.warn(`⚠️ [API WARNING] Gateway timeout (504) while calculating overall scores - continuing with candidate fetch`)
+        } else {
+          console.warn(`⚠️ [API WARNING] Failed to calculate overall scores: ${statusCode} - continuing with candidate fetch`)
+        }
+        // Don't throw error - we'll continue to fetch candidates anyway
+        return
+      } else {
+        console.log(`✅ [API SUCCESS] Overall scores calculated successfully for job ${jobOpeningId}`)
+        return
+      }
+    } catch (error) {
+      // Catch all errors including network errors, timeouts, etc.
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      console.warn(`⚠️ [API WARNING] Error calculating overall scores: ${errorMessage} - continuing with candidate fetch`)
+      // Don't throw error - we'll continue to fetch candidates anyway
+      return
+    }
+  }
+
+  /**
    * Get all candidates for a specific job opening with caching
    */
   static async getCandidatesByJob(jobOpeningId: string, forceRefresh: boolean = false): Promise<CandidatesByJobResponse> {
@@ -131,7 +164,7 @@ export class CandidatesApi {
    */
   static async createCandidatesBulk(candidatesData: CandidateBulkCreateRequest): Promise<CandidateBulkCreateResponse> {
     try {
-      const url = `${this.baseUrl}${API_CONFIG.ENDPOINTS.CANDIDATES_BULK_CREATE}`
+      const url = `${API_CONFIG.CANDIDATE_EVALUATION_FUNCTION_URL}${API_CONFIG.ENDPOINTS.CANDIDATES_BULK_CREATE}`
       const response = await authenticatedApiService.post(url, candidatesData)
 
       // For bulk operations, we want to handle partial successes

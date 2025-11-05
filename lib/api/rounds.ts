@@ -173,7 +173,7 @@ export class CandidateRoundsApi {
    */
   static async bulkUpdateRoundStatus(request: BulkCandidateRoundStatusRequest): Promise<BulkCandidateRoundStatusResponse> {
     try {
-      const url = `${this.baseUrl}${API_CONFIG.ENDPOINTS.CANDIDATES_BULK_ROUND_STATUS_UPDATE}`
+      const url = `${API_CONFIG.CANDIDATE_EVALUATION_FUNCTION_URL}${API_CONFIG.ENDPOINTS.CANDIDATES_BULK_ROUND_STATUS_UPDATE}`
       const response = await authenticatedApiService.makeRequest(url, { method: 'PATCH', body: JSON.stringify(request) })
 
       // Handle partial success responses (like in bulk create)
@@ -202,7 +202,7 @@ export class CandidateRoundsApi {
    */
   static async bulkCreateCandidateRounds(request: BulkCandidateRoundsCreateRequest): Promise<BulkCandidateRoundsCreateResponse> {
     try {
-      const url = `${this.baseUrl}${API_CONFIG.ENDPOINTS.CANDIDATE_ROUNDS_BULK_CREATE}`
+      const url = `${API_CONFIG.CANDIDATE_EVALUATION_FUNCTION_URL}${API_CONFIG.ENDPOINTS.CANDIDATE_ROUNDS_BULK_CREATE}`
       const response = await authenticatedApiService.post(url, request)
 
       // Handle partial success responses
@@ -231,7 +231,7 @@ export class CandidateRoundsApi {
    */
   static async updateCandidateRoundStatus(request: UpdateCandidateRoundStatusRequest): Promise<UpdateCandidateRoundStatusResponse> {
     try {
-      const url = `${this.baseUrl}${API_CONFIG.ENDPOINTS.UPDATE_CANDIDATE_ROUND_STATUS}`
+      const url = `${API_CONFIG.CANDIDATE_EVALUATION_FUNCTION_URL}${API_CONFIG.ENDPOINTS.UPDATE_CANDIDATE_ROUND_STATUS}`
       const response = await authenticatedApiService.post(url, request)
 
       if (!response.ok) {

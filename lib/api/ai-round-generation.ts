@@ -21,6 +21,7 @@ export interface GenerateRoundCompetencyApiResponse {
     round_name: string
     competencies: RoundCompetencyApiResponse[]
     evaluation_criteria: string
+    custom_question_competency?: string
     created_by: string
     created_at: string
     updated_at: string

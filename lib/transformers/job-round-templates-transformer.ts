@@ -33,15 +33,26 @@ export class JobRoundTemplatesTransformer {
         rubric_scorecard: comp.rubricScorecard || this.questionsToRubricScorecard(comp.questions || [])
       }))
 
-      const result = {
+      // Determine round type
+      const roundType = originalTemplate?.type || 'INTERVIEW'
+      
+      // Check if this round type should include question level criteria
+      const shouldIncludeQuestionCriteria = this.shouldIncludeQuestionLevelCriteria(roundType)
+
+      const result: JobRoundTemplateRequest = {
         round_id: isUnchangedTemplate ? originalTemplate.id : null,
         round_name: round.name,
-        round_type: originalTemplate?.type || 'INTERVIEW', // Use template type or default to INTERVIEW
+        round_type: roundType,
         order_index: index + 1,
         is_active: false, // Set to false initially as requested
         is_required: true, // Set to true as requested
         custom_evaluation_criteria: round.evaluationCriteria || undefined,
         custom_competencies: customCompetencies.length > 0 ? customCompetencies : undefined
+      }
+
+      // Only add custom_question_competency for specific round types
+      if (shouldIncludeQuestionCriteria && round.questionLevelEvaluationCriteria) {
+        result.custom_question_competency = round.questionLevelEvaluationCriteria
       }
       
       console.log('Template result for round:', round.name, ':', {
@@ -49,13 +60,23 @@ export class JobRoundTemplatesTransformer {
         round_type: result.round_type,
         isUnchangedTemplate,
         originalTemplateId: originalTemplate?.id,
-        originalTemplateType: originalTemplate?.type
+        originalTemplateType: originalTemplate?.type,
+        hasQuestionCriteria: !!result.custom_question_competency
       })
       
       return result
     })
 
     return { templates }
+  }
+
+  /**
+   * Check if a round type should include question level criteria
+   */
+  private static shouldIncludeQuestionLevelCriteria(roundType: string): boolean {
+    const type = roundType?.toUpperCase() || 'INTERVIEW'
+    const typesWithQuestionCriteria = ['INTERVIEW', 'RAPID_FIRE', 'RAPID_FIRE_WITH_GROUNDING', 'TALK_ON_A_TOPIC', 'GAMES_ARENA']
+    return typesWithQuestionCriteria.includes(type)
   }
 
   /**

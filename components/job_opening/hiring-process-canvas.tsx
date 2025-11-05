@@ -37,6 +37,13 @@ export function HiringProcessCanvas({ rounds, onUpdateRounds, onPublish, onBack,
 
   const activeRound = rounds.find((round) => round.id === activeRoundId)
 
+  // Helper function to determine if question level criteria should be shown
+  const shouldShowQuestionLevelCriteria = (roundType: string): boolean => {
+    const type = roundType?.toUpperCase() || 'INTERVIEW'
+    const typesWithQuestionCriteria = ['INTERVIEW', 'RAPID_FIRE', 'RAPID_FIRE_WITH_GROUNDING', 'TALK_ON_A_TOPIC', 'GAMES_ARENA']
+    return typesWithQuestionCriteria.includes(type)
+  }
+
   // Validation functions
   const validateRounds = () => {
     const errors: string[] = []
@@ -141,6 +148,7 @@ export function HiringProcessCanvas({ rounds, onUpdateRounds, onPublish, onBack,
       duration: "N/A",
       difficulty: "Intermediate",
       evaluationCriteria: "Define the rubric for this custom round.",
+      questionLevelEvaluationCriteria: "", // Initialize for interview type rounds
     }
     addRound(newRound, index)
     
@@ -224,6 +232,7 @@ export function HiringProcessCanvas({ rounds, onUpdateRounds, onPublish, onBack,
         duration: "45 min",
         difficulty: "Intermediate",
         evaluationCriteria: round_details.evaluation_criteria,
+        questionLevelEvaluationCriteria: round_details.custom_question_competency || "", // Use AI-generated question level criteria
         competencies
       }
 
@@ -826,6 +835,39 @@ export function HiringProcessCanvas({ rounds, onUpdateRounds, onPublish, onBack,
                     style={{ borderColor: "#E5E7EB" }}
                   />
                 </div>
+
+                {/* Question Level Evaluation Criteria Section - Only for specific round types */}
+                {shouldShowQuestionLevelCriteria(activeRound.type) && (
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-lg font-semibold text-gray-800">Question Level Evaluation Criteria</h3>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info className="w-4 h-4 text-gray-400 hover:text-gray-600 cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="max-w-xs">
+                            <div className="space-y-2">
+                              <p className="font-medium">Question-level evaluation guidance</p>
+                              <div className="text-sm space-y-1">
+                                <p>Provide specific questions or competency details for this round.</p>
+                                <p className="text-gray-500 italic">Example: "1. Explain your experience with Python\n2. Describe a complex problem you solved\n3. How do you handle conflicts?"</p>
+                              </div>
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                    <textarea
+                      value={activeRound.questionLevelEvaluationCriteria || ""}
+                      onChange={(e) => handleUpdateRoundField(activeRound.id, "questionLevelEvaluationCriteria", e.target.value)}
+                      rows={6}
+                      className="w-full p-4 border rounded-lg text-sm text-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                      placeholder="Enter question-level evaluation criteria or specific questions for this round..."
+                      style={{ borderColor: "#E5E7EB" }}
+                    />
+                  </div>
+                )}
 
                 {/* Sparrow Assessment Integration */}
                 <div className="border-t pt-6">
