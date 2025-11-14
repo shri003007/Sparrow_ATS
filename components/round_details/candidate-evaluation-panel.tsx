@@ -202,7 +202,7 @@ export function CandidateEvaluationPanel({
       if (!candidate?.email) return
       
       // Check if this is a sparrow assessment round and we have an assessment ID
-      const eligibleRoundTypes = ['INTERVIEW', 'RAPID_FIRE', 'GAMES_ARENA', 'TALK_ON_A_TOPIC', 'RAPID_FIRE_WITH_GROUNDING']
+      const eligibleRoundTypes = ['INTERVIEW', 'RAPID_FIRE', 'GAMES_ARENA', 'TALK_ON_A_TOPIC', 'RAPID_FIRE_WITH_GROUNDING', 'AI_QA']
       
       // Fetch sparrow assessment data if we have an assessment ID for eligible round types
       // We'll try to fetch regardless of evaluation status since the data might be available
@@ -521,7 +521,7 @@ export function CandidateEvaluationPanel({
 
       const result = await evaluateSalesCandidate(
         request, 
-        roundType as 'RAPID_FIRE' | 'TALK_ON_A_TOPIC' | 'GAMES_ARENA' | 'RAPID_FIRE_WITH_GROUNDING'
+        roundType as 'RAPID_FIRE' | 'TALK_ON_A_TOPIC' | 'GAMES_ARENA' | 'RAPID_FIRE_WITH_GROUNDING' | 'AI_QA'
       )
       
       if (result.success) {
@@ -545,6 +545,7 @@ export function CandidateEvaluationPanel({
                 overall_percentage_score: result.overall_percentage_score || 0,
                 comprehensive_evaluation: result.comprehensive_evaluation || '',
                 rapid_fire_evaluation: result.rapid_fire_evaluation || '',
+                ai_qa_evaluation: result.ai_qa_evaluation || '',
                 transcript_text: result.transcript_text || '',
                 qa_pairs: result.qa_pairs || [],
                 grounding_results: result.grounding_results || []
@@ -713,7 +714,7 @@ export function CandidateEvaluationPanel({
                       Re-evaluate Interview
                     </DropdownMenuItem>
                   )}
-                  {(roundType === 'RAPID_FIRE' || roundType === 'TALK_ON_A_TOPIC' || roundType === 'GAMES_ARENA' || roundType === 'RAPID_FIRE_WITH_GROUNDING') && hasEvaluation && (
+                  {(roundType === 'RAPID_FIRE' || roundType === 'TALK_ON_A_TOPIC' || roundType === 'GAMES_ARENA' || roundType === 'RAPID_FIRE_WITH_GROUNDING' || roundType === 'AI_QA') && hasEvaluation && (
                     <DropdownMenuItem
                       onClick={() => setShowReEvaluationOptions(true)}
                       className="flex items-center gap-2"
@@ -868,7 +869,7 @@ export function CandidateEvaluationPanel({
                     </div>
                   </div>
                 </div>
-              ) : showReEvaluationOptions && (roundType === 'RAPID_FIRE' || roundType === 'TALK_ON_A_TOPIC' || roundType === 'GAMES_ARENA' || roundType === 'RAPID_FIRE_WITH_GROUNDING') ? (
+              ) : showReEvaluationOptions && (roundType === 'RAPID_FIRE' || roundType === 'TALK_ON_A_TOPIC' || roundType === 'GAMES_ARENA' || roundType === 'RAPID_FIRE_WITH_GROUNDING' || roundType === 'AI_QA') ? (
                 /* Re-evaluation Options for Sales rounds */
                 <div className="w-full max-w-2xl mx-auto space-y-6">
                   <div className="bg-white border border-gray-100 rounded-2xl p-8 text-center">
@@ -1178,12 +1179,17 @@ export function CandidateEvaluationPanel({
                   )}
 
                   {/* Comprehensive Evaluation - For Sales rounds */}
-                  {(roundType === 'RAPID_FIRE' || roundType === 'TALK_ON_A_TOPIC' || roundType === 'GAMES_ARENA' || roundType === 'RAPID_FIRE_WITH_GROUNDING') && (
+                  {(roundType === 'RAPID_FIRE' || roundType === 'TALK_ON_A_TOPIC' || roundType === 'GAMES_ARENA' || roundType === 'RAPID_FIRE_WITH_GROUNDING' || roundType === 'AI_QA') && (
                     (() => {
-                      // For RAPID_FIRE and RAPID_FIRE_WITH_GROUNDING, use rapid_fire_evaluation key, for others use comprehensive_evaluation
-                      const evaluationContent = (roundType === 'RAPID_FIRE' || roundType === 'RAPID_FIRE_WITH_GROUNDING')
-                        ? evaluation.rapid_fire_evaluation 
-                        : evaluation.comprehensive_evaluation;
+                      // Different round types use different evaluation keys
+                      let evaluationContent;
+                      if (roundType === 'RAPID_FIRE' || roundType === 'RAPID_FIRE_WITH_GROUNDING') {
+                        evaluationContent = evaluation.rapid_fire_evaluation;
+                      } else if (roundType === 'AI_QA') {
+                        evaluationContent = evaluation.ai_qa_evaluation;
+                      } else {
+                        evaluationContent = evaluation.comprehensive_evaluation;
+                      }
                       
                       if (!evaluationContent) return null;
                       
@@ -1209,7 +1215,7 @@ export function CandidateEvaluationPanel({
                   )}
 
                   {/* Sales Transcript - For Sales rounds and only if transcript_text exists */}
-                  {(roundType === 'RAPID_FIRE' || roundType === 'TALK_ON_A_TOPIC' || roundType === 'GAMES_ARENA' || roundType === 'RAPID_FIRE_WITH_GROUNDING') && evaluation.transcript_text && (
+                  {(roundType === 'RAPID_FIRE' || roundType === 'TALK_ON_A_TOPIC' || roundType === 'GAMES_ARENA' || roundType === 'RAPID_FIRE_WITH_GROUNDING' || roundType === 'AI_QA') && evaluation.transcript_text && (
                     <div className="w-full max-w-4xl mx-auto">
                       <div className="bg-white border border-gray-100 rounded-2xl">
                         <div className="p-6 border-b border-gray-100">
@@ -1416,7 +1422,7 @@ export function CandidateEvaluationPanel({
                     )}
 
                     {/* Evaluation Options for Sales rounds */}
-                    {(roundType === 'RAPID_FIRE' || roundType === 'TALK_ON_A_TOPIC' || roundType === 'GAMES_ARENA' || roundType === 'RAPID_FIRE_WITH_GROUNDING') && (
+                    {(roundType === 'RAPID_FIRE' || roundType === 'TALK_ON_A_TOPIC' || roundType === 'GAMES_ARENA' || roundType === 'RAPID_FIRE_WITH_GROUNDING' || roundType === 'AI_QA') && (
                       <div className="max-w-2xl mx-auto space-y-6">
                         {/* Warning banner when sparrowRoundId is not configured */}
                         {(!sparrowRoundId || sparrowRoundId.trim() === '') && (

@@ -168,6 +168,7 @@ export interface SalesEvaluationResponse {
   }>
   comprehensive_evaluation?: string
   rapid_fire_evaluation?: string
+  ai_qa_evaluation?: string
   competency_evaluation?: {
     competency_scores: Array<{
       competency_name: string
@@ -605,10 +606,56 @@ export async function evaluateGamesArenaSales(
   } as SalesEvaluationResponse
 }
 
+export async function evaluateAIQASales(
+  request: SalesEvaluationRequest
+): Promise<SalesEvaluationResponse> {
+  const apiUrl = getSalesEvaluationApiUrl()
+  
+  try {
+    const response = await fetch(`${apiUrl}/evaluate-ai-qa`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...request,
+        account_id: request.account_id || 'salesai',
+        brand_id: request.brand_id || 'surveysparrow'
+      }),
+    })
+    
+    const data = await response.json()
+    
+    // Check if the response indicates success in the data, not just HTTP status
+    if (!response.ok && !data?.success) {
+      // Handle specific case where assessment data is not found
+      if (response.status === 404 || (data?.error_message && data.error_message.includes('not found'))) {
+        throw new Error('Assessment data not available for this candidate. The candidate may not have completed the assessment yet.')
+      }
+      throw new Error(data?.error_message || `AI QA evaluation failed: ${response.status}`)
+    }
+    
+    return data as SalesEvaluationResponse
+  } catch (error) {
+    // Wrap fetch errors with more context
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      throw new Error('Network error: Unable to connect to evaluation service')
+    }
+    
+    // Re-throw with better context for assessment-related errors
+    if (error instanceof Error) {
+      if (error.message.includes('404')) {
+        throw new Error('Assessment retrieval failed: Assessment API request failed: 404')
+      }
+      throw new Error(`AI QA evaluation failed: ${error.message}`)
+    }
+    
+    throw error
+  }
+}
+
 // Generic sales evaluation function that routes to the correct endpoint based on round type
 export async function evaluateSalesCandidate(
   request: SalesEvaluationRequest,
-  roundType: 'RAPID_FIRE' | 'TALK_ON_A_TOPIC' | 'GAMES_ARENA' | 'RAPID_FIRE_WITH_GROUNDING'
+  roundType: 'RAPID_FIRE' | 'TALK_ON_A_TOPIC' | 'GAMES_ARENA' | 'RAPID_FIRE_WITH_GROUNDING' | 'AI_QA'
 ): Promise<SalesEvaluationResponse> {
   switch (roundType) {
     case 'RAPID_FIRE':
@@ -619,6 +666,8 @@ export async function evaluateSalesCandidate(
       return evaluateTripleStepSales(request)
     case 'GAMES_ARENA':
       return evaluateGamesArenaSales(request)
+    case 'AI_QA':
+      return evaluateAIQASales(request)
     default:
       throw new Error(`Unsupported sales round type: ${roundType}`)
   }

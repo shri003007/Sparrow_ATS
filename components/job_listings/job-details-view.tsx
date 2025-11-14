@@ -791,7 +791,7 @@ export function JobDetailsView({
                     brand_id: secondaryId || 'surveysparrow'
                   }
 
-                  result = await evaluateSalesCandidate(request, round.round_type as 'RAPID_FIRE' | 'TALK_ON_A_TOPIC' | 'GAMES_ARENA' | 'RAPID_FIRE_WITH_GROUNDING')
+                  result = await evaluateSalesCandidate(request, round.round_type as 'RAPID_FIRE' | 'TALK_ON_A_TOPIC' | 'GAMES_ARENA' | 'RAPID_FIRE_WITH_GROUNDING' | 'AI_QA')
                   evaluationSuccess = result.success
                   errorMessage = result.error_message || ''
                 }

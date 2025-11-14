@@ -16,8 +16,8 @@ import { useMultiJobContextSafe } from "@/components/all_views/multi-job-context
 import { useToast } from "@/hooks/use-toast"
 
 type RoundStatus = 'selected' | 'rejected' | 'action_pending'
-type RoundType = 'INTERVIEW' | 'RAPID_FIRE' | 'GAMES_ARENA' | 'TALK_ON_A_TOPIC' | 'RAPID_FIRE_WITH_GROUNDING'
-type SalesRoundType = 'RAPID_FIRE' | 'GAMES_ARENA' | 'TALK_ON_A_TOPIC' | 'RAPID_FIRE_WITH_GROUNDING'
+type RoundType = 'INTERVIEW' | 'RAPID_FIRE' | 'GAMES_ARENA' | 'TALK_ON_A_TOPIC' | 'RAPID_FIRE_WITH_GROUNDING' | 'AI_QA'
+type SalesRoundType = 'RAPID_FIRE' | 'GAMES_ARENA' | 'TALK_ON_A_TOPIC' | 'RAPID_FIRE_WITH_GROUNDING' | 'AI_QA'
 
 // Module-level cache that persists across component mount/unmount cycles
 const sparrowInterviewsRoundCache: Record<string, {
@@ -81,6 +81,13 @@ const ROUND_TYPE_CONFIG = {
   RAPID_FIRE_WITH_GROUNDING: {
     defaultName: 'Rapid Fire with Grounding Round',
     description: 'Rapid Fire with Grounding assessment for candidates',
+    iconBg: 'bg-blue-100',
+    iconColor: 'text-blue-600',
+    buttonBg: '#10B981'
+  },
+  AI_QA: {
+    defaultName: 'AI QA Round',
+    description: 'AI QA assessment for candidates',
     iconBg: 'bg-blue-100',
     iconColor: 'text-blue-600',
     buttonBg: '#10B981'

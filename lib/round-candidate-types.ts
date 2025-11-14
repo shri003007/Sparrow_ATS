@@ -115,6 +115,7 @@ export interface EvaluationResult {
   overall_percentage_score?: number
   comprehensive_evaluation?: string
   rapid_fire_evaluation?: string
+  ai_qa_evaluation?: string
   transcript_text?: string
   qa_pairs?: any
   grounding_results?: any[]
